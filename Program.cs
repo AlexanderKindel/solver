@@ -592,7 +592,7 @@ namespace ConsoleSolver
                 {
                     Fraction fraction = (Fraction)number;
                     if (fraction.Numerator != 0)
-                        terms.Add(new Term(new ComplexNumber(fraction, new Fraction(0, 1))));
+                        terms.Add(new Term(fraction));
                 }
                 else if (number is ComplexNumber)
                 {
