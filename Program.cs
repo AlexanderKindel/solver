@@ -945,9 +945,11 @@ namespace ConsoleSolver
                     }
                     else if (operations[i] == '-')
                     {
-                        numbers[i + 1] = numbers[i + 1].negative();
-                        numbers.RemoveAt(i);
-                        operations.RemoveAt(i);
+                        numbers[i] = new Math.Fraction(-1, 1);
+                        numbers.Insert(i + 1, null);
+                        operations[i] = ' ';
+                        operations.Insert(i + 1, '*');
+                        ++i;
                     }
                     else
                         ++i;
