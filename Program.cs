@@ -560,7 +560,7 @@ namespace ConsoleSolver
             {
                 m_terms = terms;
                 m_terms.Sort();
-                for (int i=0;i<m_terms.Count-1;)
+                for (int i = 0; i < m_terms.Count - 1;)
                 {
                     if (m_terms[i].Exponentiations.Count != m_terms[i + 1].Exponentiations.Count) 
                     {
@@ -683,6 +683,75 @@ namespace ConsoleSolver
                 StringBuilder output = new StringBuilder(m_terms[0].ToString());
                 for (int i = 1; i < m_terms.Count; ++i)
                     output.Append('+' + m_terms[i].ToString());
+                return output.ToString();
+            }
+        }
+        public class NumberList:Number
+        {
+            List<Number> Numbers { get; }
+            public NumberList(List<Number> numbers)
+            {
+                Numbers = numbers;
+                for (int i = 0; i < Numbers.Count; ++i)
+                    for (int j = i + 1; j < Numbers.Count; ++j)
+                        if (Numbers[i].Equals(Numbers[j]))
+                            Numbers.RemoveAt(j);
+            }
+            protected override Number add(Number number)
+            {
+                List<Number> output = new List<Number>();
+                if (number is NumberList)
+                {
+                    NumberList list = (NumberList)number;
+                    foreach (Number n in Numbers)
+                        foreach (Number m in list.Numbers)
+                            output.Add(n + m);
+                }
+                else
+                    foreach (Number n in Numbers)
+                        output.Add(n + number);
+                return new NumberList(output);
+            }
+            public override Number negative()
+            {
+                List<Number> output = new List<Number>();
+                foreach (Number n in Numbers)
+                    output.Add(n.negative());
+                return new NumberList(output);
+            }
+            protected override Number multiply(Number number)
+            {
+                List<Number> output = new List<Number>();
+                if (number is NumberList)
+                {
+                    NumberList list = (NumberList)number;
+                    foreach (Number n in Numbers)
+                        foreach (Number m in list.Numbers)
+                            output.Add(n * m);
+                }
+                else
+                    foreach (Number n in Numbers)
+                        output.Add(n * number);
+                return new NumberList(output);
+            }
+            public override Number reciprocal()
+            {
+                List<Number> output = new List<Number>();
+                foreach (Number n in Numbers)
+                    output.Add(n.reciprocal());
+                return new NumberList(output);
+            }
+            public override int CompareTo(object obj)
+            {
+                NumberList list = (NumberList)obj;
+                return Numbers.Count - list.Numbers.Count;
+            }
+            public override string ToString()
+            {
+                StringBuilder output = new StringBuilder('{' + Numbers[0].ToString());
+                for (int i = 1; i < Numbers.Count; ++i)
+                    output.Append(',' + Numbers[i].ToString());
+                output.Append('}');
                 return output.ToString();
             }
         }
