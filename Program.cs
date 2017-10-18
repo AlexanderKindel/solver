@@ -1088,7 +1088,7 @@ namespace ConsoleSolver
                 }
                 try
                 {
-                    Console.WriteLine(evaluateInput(operations, numbers));
+                    Console.WriteLine('=' + evaluateInput(operations, numbers).ToString());
                 }
                 catch (DivideByZeroException)
                 {
