@@ -74,7 +74,7 @@ namespace ConsoleSolver
             public override abstract Number reciprocal();
             public abstract bool isIntegral();
             public override abstract int CompareTo(Object obj);
-            public static Number operator +(Rational a, Number b)
+            public static Number operator +(Rational a, Term b)
             {
                 return a.add(b);
             }
@@ -396,11 +396,11 @@ namespace ConsoleSolver
         }
         public class Product : Term
         {
-            public Rational Scalar { get; }
+            public Rational Coefficient { get; }
             public List<Exponentiation> Exponentiations { get; }
             public Product(Rational rational, List<Exponentiation> exponentiations)
             {
-                Scalar = rational;
+                Coefficient = rational;
                 Exponentiations = exponentiations;
                 Exponentiations.Sort();
                 for (int i = 0; i < Exponentiations.Count - 1;)
@@ -417,65 +417,53 @@ namespace ConsoleSolver
             }
             public Product(Exponentiation exponentiation)
             {
-                Scalar = new Fraction(1, 1);
+                Coefficient = new Fraction(1, 1);
                 Exponentiations = new List<Exponentiation> { exponentiation };
             }
             public Product(Rational rational)
             {
-                Scalar = rational;
+                Coefficient = rational;
                 Exponentiations = new List<Exponentiation>();
             }
             protected override Number add(Number number)
             {
-                if (number is Fraction)
-                {
-                    Fraction fraction = (Fraction)number;
-                    return new Expression(new List<Term> { this, fraction });
-                }
-                if (number is ComplexNumber)
-                {
-                    ComplexNumber complexNumber = (ComplexNumber)number;
-                    return new Expression(new List<Term> { this, complexNumber });
-                }
-                if (number is Exponentiation)
-                {
-                    Exponentiation exponentiation = (Exponentiation)number;
-                    return new Expression(new List<Term> { this, exponentiation });
-                }
+                if (number is Expression)
+                    return number + this;
                 if (number is Product)
                 {
                     Product product = (Product)number;
+                    if (Exponentiations.Count == product.Exponentiations.Count)
+                    {
+                        for (int i = 0; i < Exponentiations.Count; ++i)
+                            if (Exponentiations[i].CompareTo(product.Exponentiations[i]) != 0)
+                                return new Expression(new List<Term> { this, product });
+                        return new Product((Rational)(Coefficient + product.Coefficient),
+                            Exponentiations);
+                    }
                     return new Expression(new List<Term> { this, product });
                 }
-                return number + this;
+                return new Expression(new List<Term> { this, (Term)number });
             }
             protected override Number multiply(Number number)
             {
-                if (number is Fraction)
-                {
-                    Fraction fraction = (Fraction)number;
-                    return new Product((Rational)(Scalar * fraction), Exponentiations);
-                }
-                if (number is ComplexNumber)
-                {
-                    ComplexNumber complexNumber = (ComplexNumber)number;
-                    return new Product((Rational)(Scalar * complexNumber), Exponentiations);
-                }
+                if (number is Rational)
+                    return new Product((Rational)(Coefficient * number), Exponentiations);
                 if (number is Exponentiation)
                 {
                     Exponentiation exponentiation = (Exponentiation)number;
-                    List<Exponentiation> exponentiations = Exponentiations;
+                    List<Exponentiation> exponentiations =
+                        new List<Exponentiation>(Exponentiations);
                     for (int i = 0; i < exponentiations.Count; ++i)
                     {
                         Number product = exponentiations[i] * exponentiation;
                         if (product is Exponentiation)
                         {
                             exponentiations[i] = (Exponentiation)product;
-                            return new Product(Scalar, exponentiations);
+                            return new Product(Coefficient, exponentiations);
                         }
                     }
                     exponentiations.Add(exponentiation);
-                    return new Product(Scalar, exponentiations);
+                    return new Product(Coefficient, exponentiations);
                 }
                 if (number is Product)
                 {
@@ -497,25 +485,25 @@ namespace ConsoleSolver
                         if (addExponentiation)
                             exponentiations.Add(product.Exponentiations[i]);
                     }
-                    return new Product((Rational)(Scalar * product.Scalar), exponentiations);
+                    return new Product((Rational)(Coefficient * product.Coefficient), exponentiations);
                 }
                 return number * this;
             }
             public override Number negative()
             {
-                return new Product((Rational)Scalar.negative(), Exponentiations);
+                return new Product((Rational)Coefficient.negative(), Exponentiations);
             }
             public override Number reciprocal()
             {
                 List<Exponentiation> exponentiations = new List<Exponentiation>();
                 foreach (Exponentiation exponentation in Exponentiations)
                     exponentiations.Add((Exponentiation)exponentation.reciprocal());
-                return new Product((Rational)Scalar.reciprocal(), exponentiations);
+                return new Product((Rational)Coefficient.reciprocal(), exponentiations);
             }
             public override int CompareTo(object obj)
             {
                 Product product = (Product)obj;
-                int comparison = Scalar.CompareTo(product.Scalar);
+                int comparison = Coefficient.CompareTo(product.Coefficient);
                 if (comparison != 0)
                     return comparison;
                 int countComparison = Exponentiations.Count - product.Exponentiations.Count;
@@ -540,9 +528,9 @@ namespace ConsoleSolver
                     output.Append(exponentiationString);
                 }
                 StringBuilder scalarString = new StringBuilder();
-                if (Scalar is Fraction)
+                if (Coefficient is Fraction)
                 {
-                    Fraction scalarFraction = (Fraction)Scalar;
+                    Fraction scalarFraction = (Fraction)Coefficient;
                     if (scalarFraction.Numerator != 1)
                     {
                         if (scalarFraction.Numerator == -1)
@@ -557,26 +545,26 @@ namespace ConsoleSolver
                 }
                 else
                 {
-                    ComplexNumber complexScalar = (ComplexNumber)Scalar;
-                    if (complexScalar.Real.Numerator == 0)
+                    ComplexNumber complexCoefficient = (ComplexNumber)Coefficient;
+                    if (complexCoefficient.Real.Numerator == 0)
                     {
-                        if (complexScalar.Imaginary.Numerator == 1)
+                        if (complexCoefficient.Imaginary.Numerator == 1)
                             scalarString.Append('i');
                         else
                         {
-                            if (complexScalar.Imaginary.Numerator == -1)
+                            if (complexCoefficient.Imaginary.Numerator == -1)
                                 scalarString.Append("-i");
                             else
                                 scalarString.Append(
-                                    complexScalar.Imaginary.Numerator.ToString() + 'i');
+                                    complexCoefficient.Imaginary.Numerator.ToString() + 'i');
                         }
                         if (output[0] != '(' && scalarString.Length > 0)
                             scalarString.Append('*');
-                        if (complexScalar.Imaginary.Denominator != 1)
-                            output.Append('/' + complexScalar.Imaginary.Denominator.ToString());
+                        if (complexCoefficient.Imaginary.Denominator != 1)
+                            output.Append('/' + complexCoefficient.Imaginary.Denominator.ToString());
                     }
                     else
-                        output.Insert(0, '(' + Scalar.ToString() + ')');
+                        output.Insert(0, '(' + Coefficient.ToString() + ')');
                 }
                 return output.Insert(0, scalarString).ToString();
             }
