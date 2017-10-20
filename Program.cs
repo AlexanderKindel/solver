@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -36,7 +36,37 @@ namespace ConsoleSolver
                 return CompareTo(obj) == 0;
             }
         }
-        public abstract class Rational : Number
+        public abstract class Term : Number
+        {
+            protected override abstract Number add(Number number);
+            protected override abstract Number multiply(Number number);
+            public override abstract Number negative();
+            public override abstract Number reciprocal();
+            public override abstract int CompareTo(Object obj);
+            public static Number operator +(Term a, Number b)
+            {
+                return a.add(b);
+            }
+            public static Number operator -(Term a, Number b)
+            {
+                return a.add(b.negative());
+            }
+            public static Number operator *(Term a, Number b)
+            {
+                return a.multiply(b);
+            }
+            public static Number operator /(Term a, Number b)
+            {
+                return a.multiply(b.reciprocal());
+            }
+            public override bool Equals(object obj)
+            {
+                if (obj.GetType() != GetType())
+                    return false;
+                return CompareTo(obj) == 0;
+            }
+        }
+        public abstract class Rational : Term
         {
             protected override abstract Number add(Number number);
             protected override abstract Number multiply(Number number);
@@ -48,15 +78,15 @@ namespace ConsoleSolver
             {
                 return a.add(b);
             }
-            public static Number operator -(Rational a, Number b)
+            public static Number operator -(Rational a, Term b)
             {
                 return a.add(b.negative());
             }
-            public static Number operator *(Rational a, Number b)
+            public static Number operator *(Rational a, Term b)
             {
                 return a.multiply(b);
             }
-            public static Number operator /(Rational a, Number b)
+            public static Number operator /(Rational a, Term b)
             {
                 return a.multiply(b.reciprocal());
             }
@@ -222,7 +252,7 @@ namespace ConsoleSolver
                 }
                 ComplexNumber complexNumber = (ComplexNumber)obj;
                 comparison = Real.CompareTo(complexNumber.Real);
-                if (comparison != 0) 
+                if (comparison != 0)
                     return comparison;
                 return Imaginary.CompareTo(complexNumber.Imaginary);
             }
@@ -233,7 +263,7 @@ namespace ConsoleSolver
             public override string ToString()
             {
                 StringBuilder output = new StringBuilder();
-                if (Real.Numerator != 0) 
+                if (Real.Numerator != 0)
                 {
                     output.Append(Real.ToString());
                     if (Imaginary.Numerator > 0)
@@ -250,7 +280,7 @@ namespace ConsoleSolver
                 return output.ToString();
             }
         }
-        public class Exponentiation : Number
+        public class Exponentiation : Term
         {
             public Number Base { get; }
             public Number Exponent { get; }
@@ -266,21 +296,19 @@ namespace ConsoleSolver
                     Fraction fraction = (Fraction)number;
                     if (fraction.Numerator == 0)
                         return this;
-                    return new Expression(new List<Term> { new Term(this), new Term(fraction) });
+                    return new Expression(new List<Term> { this, fraction });
                 }
                 if (number is ComplexNumber)
                 {
                     ComplexNumber complexNumber = (ComplexNumber)number;
-                    return new Expression(new List<Term> { new Term(this),
-                        new Term(complexNumber) });
+                    return new Expression(new List<Term> { this, complexNumber });
                 }
                 if (number is Exponentiation)
                 {
                     Exponentiation exponentiation = (Exponentiation)number;
-                    if (Exponent.CompareTo(exponentiation.Exponent) == 0) 
+                    if (Exponent.CompareTo(exponentiation.Exponent) == 0)
                         return new Exponentiation(Base + exponentiation.Base, Exponent);
-                    return new Expression(new List<Term> { new Term(this),
-                        new Term(exponentiation) });
+                    return new Expression(new List<Term> { this, exponentiation });
                 }
                 return number + this;
             }
@@ -291,21 +319,21 @@ namespace ConsoleSolver
                     Fraction fraction = (Fraction)number;
                     if (fraction.Numerator == fraction.Denominator)
                         return this;
-                    return new Term(fraction, new List<Exponentiation> { this });
+                    return new Product(fraction, new List<Exponentiation> { this });
                 }
                 if (number is ComplexNumber)
                 {
                     ComplexNumber complexNumber = (ComplexNumber)number;
-                    return new Term(complexNumber, new List<Exponentiation> { this });
+                    return new Product(complexNumber, new List<Exponentiation> { this });
                 }
                 if (number is Exponentiation)
                 {
                     Exponentiation exponentiation = (Exponentiation)number;
-                    if (Exponent.Equals(exponentiation.Exponent)) 
+                    if (Exponent.Equals(exponentiation.Exponent))
                         return new Exponentiation(Base * exponentiation.Base, Exponent);
-                    if (Base.Equals(exponentiation.Base)) 
+                    if (Base.Equals(exponentiation.Base))
                         return new Exponentiation(Base, Exponent + exponentiation.Exponent);
-                    return new Term(new Fraction(1, 1),
+                    return new Product(new Fraction(1, 1),
                         new List<Exponentiation> { this, exponentiation });
                 }
                 return number * this;
@@ -322,7 +350,7 @@ namespace ConsoleSolver
             {
                 Exponentiation exponentiation = (Exponentiation)obj;
                 int comparison = Base.CompareTo(exponentiation.Base);
-                if (comparison != 0) 
+                if (comparison != 0)
                     return comparison;
                 return Exponent.CompareTo(exponentiation.Exponent);
             }
@@ -332,7 +360,7 @@ namespace ConsoleSolver
                 if (Base is Fraction)
                 {
                     Fraction baseFraction = (Fraction)Base;
-                    if (baseFraction.Denominator == 1 && baseFraction.Numerator >= 0) 
+                    if (baseFraction.Denominator == 1 && baseFraction.Numerator >= 0)
                         output.Append(baseFraction.Numerator);
                     else
                         output.Append('(' + baseFraction.ToString() + ')');
@@ -341,7 +369,7 @@ namespace ConsoleSolver
                 {
                     ComplexNumber complexBase = (ComplexNumber)Base;
                     if (complexBase.Real.Numerator == 0 &&
-                        complexBase.Imaginary.Numerator == complexBase.Imaginary.Denominator) 
+                        complexBase.Imaginary.Numerator == complexBase.Imaginary.Denominator)
                         output.Append('i');
                     else
                         output.Append('(' + complexBase.ToString() + ')');
@@ -352,7 +380,7 @@ namespace ConsoleSolver
                 if (Exponent is Fraction)
                 {
                     Fraction exponentFraction = (Fraction)Exponent;
-                    if (exponentFraction.Denominator == 1 && exponentFraction.Numerator >= 0) 
+                    if (exponentFraction.Denominator == 1 && exponentFraction.Numerator >= 0)
                         return output.Append(exponentFraction.Numerator).ToString();
                 }
                 if (Exponent is ComplexNumber)
@@ -366,18 +394,18 @@ namespace ConsoleSolver
                 return output.Append('(' + Exponent.ToString() + ')').ToString();
             }
         }
-        public class Term : Number
+        public class Product : Term
         {
             public Rational Scalar { get; }
             public List<Exponentiation> Exponentiations { get; }
-            public Term(Rational rational, List<Exponentiation> exponentiations)
+            public Product(Rational rational, List<Exponentiation> exponentiations)
             {
                 Scalar = rational;
                 Exponentiations = exponentiations;
                 Exponentiations.Sort();
-                for (int i = 0; i < Exponentiations.Count - 1;) 
+                for (int i = 0; i < Exponentiations.Count - 1;)
                 {
-                    if (Exponentiations[i].Base.CompareTo(Exponentiations[i + 1].Base) == 0) 
+                    if (Exponentiations[i].Base.CompareTo(Exponentiations[i + 1].Base) == 0)
                     {
                         Exponentiations[i] = new Exponentiation(Exponentiations[i].Base,
                             Exponentiations[i].Exponent + Exponentiations[i + 1].Exponent);
@@ -387,12 +415,12 @@ namespace ConsoleSolver
                     ++i;
                 }
             }
-            public Term(Exponentiation exponentiation)
+            public Product(Exponentiation exponentiation)
             {
                 Scalar = new Fraction(1, 1);
                 Exponentiations = new List<Exponentiation> { exponentiation };
             }
-            public Term(Rational rational)
+            public Product(Rational rational)
             {
                 Scalar = rational;
                 Exponentiations = new List<Exponentiation>();
@@ -402,22 +430,22 @@ namespace ConsoleSolver
                 if (number is Fraction)
                 {
                     Fraction fraction = (Fraction)number;
-                    return new Expression(new List<Term> { this, new Term(fraction) });
+                    return new Expression(new List<Term> { this, fraction });
                 }
                 if (number is ComplexNumber)
                 {
                     ComplexNumber complexNumber = (ComplexNumber)number;
-                    return new Expression(new List<Term> { this, new Term(complexNumber) });
+                    return new Expression(new List<Term> { this, complexNumber });
                 }
                 if (number is Exponentiation)
                 {
                     Exponentiation exponentiation = (Exponentiation)number;
-                    return new Expression(new List<Term> { this, new Term(exponentiation) });
+                    return new Expression(new List<Term> { this, exponentiation });
                 }
-                if (number is Term)
+                if (number is Product)
                 {
-                    Term term = (Term)number;
-                    return new Expression(new List<Term> { this, term });
+                    Product product = (Product)number;
+                    return new Expression(new List<Term> { this, product });
                 }
                 return number + this;
             }
@@ -426,12 +454,12 @@ namespace ConsoleSolver
                 if (number is Fraction)
                 {
                     Fraction fraction = (Fraction)number;
-                    return new Term((Rational)(Scalar * fraction), Exponentiations);
+                    return new Product((Rational)(Scalar * fraction), Exponentiations);
                 }
                 if (number is ComplexNumber)
                 {
                     ComplexNumber complexNumber = (ComplexNumber)number;
-                    return new Term((Rational)(Scalar * complexNumber), Exponentiations);
+                    return new Product((Rational)(Scalar * complexNumber), Exponentiations);
                 }
                 if (number is Exponentiation)
                 {
@@ -443,59 +471,59 @@ namespace ConsoleSolver
                         if (product is Exponentiation)
                         {
                             exponentiations[i] = (Exponentiation)product;
-                            return new Term(Scalar, exponentiations);
+                            return new Product(Scalar, exponentiations);
                         }
                     }
                     exponentiations.Add(exponentiation);
-                    return new Term(Scalar, exponentiations);
+                    return new Product(Scalar, exponentiations);
                 }
-                if (number is Term)
+                if (number is Product)
                 {
-                    Term term = (Term)number;
+                    Product product = (Product)number;
                     List<Exponentiation> exponentiations = Exponentiations;
-                    for (int i = 0; i < term.Exponentiations.Count; ++i)
+                    for (int i = 0; i < product.Exponentiations.Count; ++i)
                     {
                         bool addExponentiation = true;
                         for (int j = 0; j < exponentiations.Count; ++j)
                         {
-                            Number product = term.Exponentiations[i] * exponentiations[j];
-                            if (product is Exponentiation)
+                            Number term = product.Exponentiations[i] * exponentiations[j];
+                            if (term is Exponentiation)
                             {
-                                exponentiations[i] = (Exponentiation)product;
+                                exponentiations[i] = (Exponentiation)term;
                                 addExponentiation = false;
                                 break;
                             }
                         }
                         if (addExponentiation)
-                            exponentiations.Add(term.Exponentiations[i]);
+                            exponentiations.Add(product.Exponentiations[i]);
                     }
-                    return new Term((Rational)(Scalar * term.Scalar), exponentiations);
+                    return new Product((Rational)(Scalar * product.Scalar), exponentiations);
                 }
                 return number * this;
             }
             public override Number negative()
             {
-                return new Term((Rational)Scalar.negative(), Exponentiations);
+                return new Product((Rational)Scalar.negative(), Exponentiations);
             }
             public override Number reciprocal()
             {
                 List<Exponentiation> exponentiations = new List<Exponentiation>();
                 foreach (Exponentiation exponentation in Exponentiations)
                     exponentiations.Add((Exponentiation)exponentation.reciprocal());
-                return new Term((Rational)Scalar.reciprocal(), exponentiations);
+                return new Product((Rational)Scalar.reciprocal(), exponentiations);
             }
             public override int CompareTo(object obj)
             {
-                Term term = (Term)obj;
-                int comparison = Scalar.CompareTo(term.Scalar);
+                Product product = (Product)obj;
+                int comparison = Scalar.CompareTo(product.Scalar);
                 if (comparison != 0)
                     return comparison;
-                int countComparison = Exponentiations.Count - term.Exponentiations.Count;
+                int countComparison = Exponentiations.Count - product.Exponentiations.Count;
                 if (countComparison != 0)
                     return countComparison;
                 for (int i = 0; i < Exponentiations.Count; ++i)
                 {
-                    comparison = Exponentiations[i].CompareTo(term.Exponentiations[i]);
+                    comparison = Exponentiations[i].CompareTo(product.Exponentiations[i]);
                     if (comparison != 0)
                         return comparison;
                 }
@@ -504,7 +532,7 @@ namespace ConsoleSolver
             public override string ToString()
             {
                 StringBuilder output = new StringBuilder(Exponentiations[0].ToString());
-                for (int i = 1; i < Exponentiations.Count; ++i) 
+                for (int i = 1; i < Exponentiations.Count; ++i)
                 {
                     String exponentiationString = Exponentiations[i].ToString();
                     if (output[output.Length - 1] != ')' && exponentiationString[0] != '(')
@@ -542,7 +570,7 @@ namespace ConsoleSolver
                                 scalarString.Append(
                                     complexScalar.Imaginary.Numerator.ToString() + 'i');
                         }
-                        if (output[0] != '(' && scalarString.Length > 0) 
+                        if (output[0] != '(' && scalarString.Length > 0)
                             scalarString.Append('*');
                         if (complexScalar.Imaginary.Denominator != 1)
                             output.Append('/' + complexScalar.Imaginary.Denominator.ToString());
@@ -560,97 +588,32 @@ namespace ConsoleSolver
             {
                 m_terms = terms;
                 m_terms.Sort();
-                for (int i = 0; i < m_terms.Count - 1;)
-                {
-                    if (m_terms[i].Exponentiations.Count != m_terms[i + 1].Exponentiations.Count) 
-                    {
-                        ++i;
-                        continue;
-                    }
-                    bool termsAreAddable = true;
-                    for (int j = 0; j < m_terms[i].Exponentiations.Count; ++j)
-                        if (m_terms[i].Exponentiations[j].CompareTo(
-                            m_terms[i + 1].Exponentiations[j]) != 0) 
-                        {
-                            termsAreAddable = false;
-                            break;
-                        }
-                    if (termsAreAddable)
-                    {
-                        m_terms[i] = new Term((ComplexNumber)(m_terms[i].Scalar +
-                            m_terms[i + 1].Scalar), m_terms[i].Exponentiations);
-                        m_terms.RemoveAt(i + 1);
-                        continue;
-                    }
-                    ++i;
-                }
             }
             protected override Number add(Number number)
             {
                 List<Term> terms = m_terms;
-                if (number is Fraction)
-                {
-                    Fraction fraction = (Fraction)number;
-                    if (fraction.Numerator != 0)
-                        terms.Add(new Term(fraction));
-                }
-                else if (number is ComplexNumber)
-                {
-                    ComplexNumber complexNumber = (ComplexNumber)number;
-                    if (complexNumber.Real.Numerator != 0)
-                        terms.Add(new Term(complexNumber));
-                }
-                else if (number is Exponentiation)
-                {
-                    Exponentiation exponentiation = (Exponentiation)number;
-                    terms.Add(new Term(exponentiation));
-                }
-                else if (number is Term)
-                {
-                    Term term = (Term)number;
-                    terms.Add(term);
-                }
-                else
+                if (number is Expression)
                 {
                     Expression expression = (Expression)number;
                     terms.AddRange(expression.m_terms);
                 }
+                else
+                    terms.Add((Term)number);
                 return new Expression(terms);
             }
             protected override Number multiply(Number number)
             {
                 List<Term> terms = new List<Term>();
-                if (number is Fraction)
-                {
-                    Fraction multiplier = (Fraction)number;
-                    foreach (Term term in m_terms)
-                        terms.Add((Term)(term * multiplier));
-                }
-                else if (number is ComplexNumber)
-                {
-                    ComplexNumber multiplier = (ComplexNumber)number;
-                    foreach (Term term in m_terms)
-                        terms.Add((Term)(term * multiplier));
-                }
-                else if (number is Exponentiation)
-                {
-                    Exponentiation multiplier = (Exponentiation)number;
-                    foreach (Term term in m_terms)
-                        terms.Add((Term)(term * multiplier));
-                }
-                else if (number is Term)
-                {
-                    Term multiplier = (Term)number;
-                    foreach (Term term in m_terms)
-                        terms.Add((Term)(term * multiplier));
-                }
-                else
+                if (number is Expression)
                 {
                     Expression multiplier = (Expression)number;
-                    foreach (Term multiplicandTerm in m_terms)
-                        foreach (Term multiplierTerm in multiplier.m_terms)
-                            terms.Add((Term)(multiplicandTerm * multiplierTerm));
+                    foreach (Term multiplicandProduct in m_terms)
+                        foreach (Term multiplierProduct in multiplier.m_terms)
+                            terms.Add((Term)(multiplicandProduct * multiplierProduct));
                 }
+                else
+                    foreach (Term term in m_terms)
+                        terms.Add((Term)(term * number));
                 return new Expression(terms);
             }
             public override Number negative()
@@ -686,7 +649,7 @@ namespace ConsoleSolver
                 return output.ToString();
             }
         }
-        public class NumberList:Number
+        public class NumberList : Number
         {
             List<Number> Numbers { get; }
             public NumberList(List<Number> numbers)
