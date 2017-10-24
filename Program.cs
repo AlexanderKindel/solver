@@ -929,35 +929,49 @@ namespace ConsoleSolver
                     }
                     Dictionary<int, int> radicandFactors =
                         getFactorization(baseFraction.Numerator * baseFraction.Denominator);
-                    int root = 1;
-                    int radicand = 1;
+                    int rationalizer = 1;
+                    for (int i = 0; i < exponentFraction.Numerator; ++i)
+                        rationalizer *= baseFraction.Denominator;
+                    List<int> exponentDivisors = new List<int>();
+                    int divisor = 1;
+                    while (divisor <= exponentFraction.Denominator / 2)
+                    {
+                        if (exponentFraction.Denominator % divisor == 0)
+                            exponentDivisors.Add(divisor);
+                        ++divisor;
+                    }
+                    exponentDivisors.Add(exponentFraction.Denominator);
+                    Dictionary<int, int> termComponents = new Dictionary<int, int>();
+                    if (!termComponents.ContainsKey(exponentFraction.Denominator))
+                        termComponents.Add(exponentFraction.Denominator, 1);
                     foreach (int factor in radicandFactors.Keys)
+                        for (int i = exponentDivisors.Count - 1; i >= 0; --i) 
+                            if (exponentDivisors[i] <= radicandFactors[factor])
+                            {
+                                int index = exponentFraction.Denominator / exponentDivisors[i];
+                                if (!termComponents.ContainsKey(index))
+                                    termComponents.Add(index, 1);
+                                for (int j = 0; j < radicandFactors[factor] / exponentDivisors[i]; ++j)
+                                    termComponents[index] *= factor;
+                                for (int j = 0; j < radicandFactors[factor] % exponentDivisors[i]; ++j) 
+                                    termComponents[exponentFraction.Denominator] *= factor;
+                                break;
+                            }
+                    Fraction coefficient;
+                    if (termComponents.ContainsKey(1))
                     {
-                        for (int i = 0; i < radicandFactors[factor] /
-                            exponentFraction.Denominator; ++i)
-                            root *= factor;
-                        for (int i = 0; i < radicandFactors[factor] %
-                            exponentFraction.Denominator; ++i)
-                            radicand *= factor;
+                        coefficient = new Fraction(termComponents[1], rationalizer);
+                        termComponents.Remove(1);
                     }
-                    Fraction rootToPower = new Fraction(1, 1);
-                    int radicandToPower = 1;
-                    for (int i = 0; i < exponentFraction.Numerator %
-                        exponentFraction.Denominator; ++i)
-                    {
-                        rootToPower = (Fraction)(rootToPower *
-                            new Fraction(root, baseFraction.Denominator));
-                        radicandToPower *= radicand;
-                    }
-                    for (int i = 0; i < exponentFraction.Numerator /
-                        exponentFraction.Denominator; ++i)
-                        rootToPower = (Fraction)(rootToPower * baseFraction);
-                    if (radicandToPower == 1)
-                        return rootToPower;
-                    if (radicandToPower == -1)
-                        return rootToPower * new ComplexNumber(0, -1);
-                    return new Exponentiation(new Fraction(radicandToPower, 1),
-                        new Fraction(1, exponentFraction.Denominator)) * rootToPower;
+                    else
+                        coefficient = new Fraction(1, rationalizer);
+                    if (termComponents.ContainsKey(exponentFraction.Denominator) &&
+                        termComponents[exponentFraction.Denominator] == 1)
+                        termComponents.Remove(exponentFraction.Denominator);
+                    List<Exponentiation> exponentiations = new List<Exponentiation>();
+                    foreach (int index in termComponents.Keys)
+                        exponentiations.Add(new Exponentiation(new Fraction(termComponents[index], 1), new Fraction(1, index)));
+                    return Term.createTerm(coefficient, exponentiations);
                 }
                 if (expBase is ComplexNumber)
                 {
@@ -1194,7 +1208,8 @@ namespace ConsoleSolver
                 }
                 try
                 {
-                    Console.WriteLine('=' + evaluateExpression(operations, numbers).ToString());
+                    Console.WriteLine("=\n" + evaluateExpression(operations, numbers).ToString() +
+                        '\n');
                 }
                 catch (DivideByZeroException)
                 {
