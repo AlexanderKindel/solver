@@ -782,32 +782,6 @@ namespace ConsoleSolver
                 return 5;
             return 6;
         }
-        static public Dictionary<int, int> getFactorization(int x)
-        {//The keys respresent the factors, and the values represent their multiplicities.
-            Dictionary<int, int> factors = new Dictionary<int, int>();
-            if (x < 0)
-            {
-                x *= -1;
-                factors.Add(-1, 1);
-            }
-            int factor = 2;
-            while (factor <= x / 2)
-                if (x % factor == 0)
-                {
-                    if (factors.ContainsKey(factor))
-                        factors[factor] += 1;
-                    else
-                        factors.Add(factor, 1);
-                    x /= factor;
-                }
-                else
-                    ++factor;
-            if (factors.ContainsKey(x))
-                factors[x] += 1;
-            else if (x != 1)
-                factors.Add(x, 1);
-            return factors;
-        }
         static public Dictionary<Rational, int> getFactorization(Rational gaussian)
         {
             Dictionary<Rational, int> factors = new Dictionary<Rational, int>();
@@ -858,7 +832,7 @@ namespace ConsoleSolver
                     }
                     if (imaginaryPart + i == 0)
                     {
-                        factor = new Fraction(realPart - i, 1);
+                        factor = new Fraction(realPart - i, 0);
                         if (testFactor())
                             continue;
                     }
@@ -919,19 +893,29 @@ namespace ConsoleSolver
                         output *= expBase;
                     return output;
                 }
-                if (expBase is Fraction)
+                if (expBase is Rational)
                 {
-                    Fraction baseFraction = (Fraction)expBase;
+                    Rational rationalBase = (Rational)expBase;
                     if (exponentFraction.Numerator < 0)
                     {
                         exponentFraction = (Fraction)(exponentFraction.negative());
-                        baseFraction = (Fraction)(baseFraction.reciprocal());
+                        rationalBase = (Rational)(rationalBase.reciprocal());
                     }
-                    Dictionary<int, int> radicandFactors =
-                        getFactorization(baseFraction.Numerator * baseFraction.Denominator);
-                    int rationalizer = 1;
-                    for (int i = 0; i < exponentFraction.Numerator; ++i)
-                        rationalizer *= baseFraction.Denominator;
+                    int rationalizer;
+                    if (rationalBase is Fraction)
+                    {
+                        Fraction baseFraction = (Fraction)rationalBase;
+                        rationalizer = baseFraction.Denominator;
+                    }
+                    else
+                    {
+                        ComplexNumber complexBase = (ComplexNumber)rationalBase;
+                        rationalizer = getLCM(complexBase.Real.Denominator,
+                            complexBase.Imaginary.Denominator);
+                    }
+                    for (int i = 0; i < exponentFraction.Denominator; ++i)
+                        rationalBase = (Rational)(rationalBase * new Fraction(rationalizer, 1));
+                    Dictionary<Rational, int> radicandFactors = getFactorization(rationalBase);
                     List<int> exponentDivisors = new List<int>();
                     int divisor = 1;
                     while (divisor <= exponentFraction.Denominator / 2)
@@ -941,85 +925,62 @@ namespace ConsoleSolver
                         ++divisor;
                     }
                     exponentDivisors.Add(exponentFraction.Denominator);
-                    Dictionary<int, int> termComponents = new Dictionary<int, int>();
-                    if (!termComponents.ContainsKey(exponentFraction.Denominator))
-                        termComponents.Add(exponentFraction.Denominator, 1);
-                    foreach (int factor in radicandFactors.Keys)
-                        for (int i = exponentDivisors.Count - 1; i >= 0; --i) 
+                    Dictionary<int, Rational> termComponents = new Dictionary<int, Rational>();
+                    termComponents.Add(1, new Fraction(1, rationalizer));
+                    termComponents.Add(exponentFraction.Denominator, new Fraction(1, 1));
+                    foreach (Rational factor in radicandFactors.Keys)
+                        for (int i = exponentDivisors.Count - 1; i >= 0; --i)
                             if (exponentDivisors[i] <= radicandFactors[factor])
                             {
                                 int index = exponentFraction.Denominator / exponentDivisors[i];
                                 if (!termComponents.ContainsKey(index))
-                                    termComponents.Add(index, 1);
-                                for (int j = 0; j < radicandFactors[factor] / exponentDivisors[i]; ++j)
-                                    termComponents[index] *= factor;
-                                for (int j = 0; j < radicandFactors[factor] % exponentDivisors[i]; ++j) 
-                                    termComponents[exponentFraction.Denominator] *= factor;
+                                    termComponents.Add(index, new Fraction(1, 1));
+                                for (int j = 0;
+                                    j < radicandFactors[factor] / exponentDivisors[i]; ++j)
+                                    termComponents[index] =
+                                        (Rational)(termComponents[index] * factor);
+                                for (int j = 0;
+                                    j < radicandFactors[factor] % exponentDivisors[i]; ++j)
+                                    termComponents[exponentFraction.Denominator] = (Rational)
+                                        (termComponents[exponentFraction.Denominator] * factor);
                                 break;
                             }
-                    Fraction coefficient;
-                    if (termComponents.ContainsKey(1))
-                    {
-                        coefficient = new Fraction(termComponents[1], rationalizer);
-                        termComponents.Remove(1);
-                    }
-                    else
-                        coefficient = new Fraction(1, rationalizer);
-                    if (termComponents.ContainsKey(exponentFraction.Denominator) &&
-                        termComponents[exponentFraction.Denominator] == 1)
-                        termComponents.Remove(exponentFraction.Denominator);
-                    List<Exponentiation> exponentiations = new List<Exponentiation>();
+                    Dictionary<int, Rational> termComponentstoPower =
+                        new Dictionary<int, Rational>();
                     foreach (int index in termComponents.Keys)
-                        exponentiations.Add(new Exponentiation(new Fraction(termComponents[index], 1), new Fraction(1, index)));
-                    return Term.createTerm(coefficient, exponentiations);
-                }
-                if (expBase is ComplexNumber)
-                {
-                    ComplexNumber baseComplexNumber = (ComplexNumber)expBase;
-                    if (exponentFraction.Numerator < 0)
                     {
-                        exponentFraction = (Fraction)(exponentFraction.negative());
-                        baseComplexNumber = (ComplexNumber)(baseComplexNumber.reciprocal());
+                        termComponentstoPower.Add(index, new Fraction(1, 1));
+                        for (int i = 0; i < exponentFraction.Numerator; ++i)
+                            termComponentstoPower[index] =
+                                (Rational)(termComponentstoPower[index] * termComponents[index]);
                     }
-                    int rationalizer = getLCM(baseComplexNumber.Real.Denominator,
-                        baseComplexNumber.Imaginary.Denominator);
-                    baseComplexNumber = (ComplexNumber)(baseComplexNumber *
-                        new Fraction(rationalizer, 1));
-                    Dictionary<Rational, int> radicandFactors = getFactorization(baseComplexNumber);
-                    Rational root = new Fraction(1, 1);
-                    Rational radicand = new Fraction(1, 1);
-                    foreach (Rational factor in radicandFactors.Keys)
+                    Rational coefficient = termComponentstoPower[1];
+                    termComponentstoPower.Remove(1);
+                    if (termComponentstoPower[exponentFraction.Denominator] is Fraction)
                     {
-                        for (int i = 0; i < radicandFactors[factor] /
-                            exponentFraction.Denominator; ++i)
-                            root = (Rational)(root * factor);
-                        for (int i = 0; i < radicandFactors[factor] %
-                            exponentFraction.Denominator; ++i)
-                            radicand = (Rational)(radicand * factor);
-                    }
-                    Rational rootToPower = new Fraction(1, 1);
-                    Rational radicandToPower = new Fraction(1, 1);
-                    for (int i = 0; i < exponentFraction.Numerator %
-                        exponentFraction.Denominator; ++i)
-                    {
-                        rootToPower = (Rational)(rootToPower * root *
-                            new Fraction(1, rationalizer));
-                        radicandToPower = (Rational)(radicandToPower * radicand);
-                    }
-                    for (int i = 0; i < exponentFraction.Numerator /
-                        exponentFraction.Denominator; ++i)
-                        rootToPower = (Rational)(rootToPower * baseComplexNumber *
-                            new Fraction(1, rationalizer));
-                    if (radicand is Fraction)
-                    {
-                        Fraction radicandFraction = (Fraction)radicand;
+                        Fraction radicandFraction =
+                            (Fraction)termComponentstoPower[exponentFraction.Denominator];
                         if (radicandFraction.Numerator == radicandFraction.Denominator)
-                            return rootToPower;
-                        if (radicandFraction.Numerator == -radicandFraction.Denominator)
-                            return rootToPower * new ComplexNumber(0, -1);
+                            termComponentstoPower.Remove(exponentFraction.Denominator);
+                        else if (radicandFraction.Numerator == -radicandFraction.Denominator)
+                        {
+                            if (exponentFraction.Denominator % 2 == 1)
+                            {
+                                coefficient = (Rational)coefficient.negative();
+                                termComponentstoPower.Remove(exponentFraction.Denominator);
+                            }
+                            else if ((exponentFraction.Denominator + 2) % 4 == 0)
+                            {
+                                coefficient = (Rational)(coefficient * new ComplexNumber(0, 1));
+                                termComponentstoPower.Remove(exponentFraction.Denominator);
+                            }
+                        }
                     }
-                    return new Exponentiation(radicandToPower,
-                        new Fraction(1, exponentFraction.Denominator)) * rootToPower;
+                    List<Exponentiation> exponentiations = new List<Exponentiation>();
+                    foreach (int index in termComponentstoPower.Keys)
+                        exponentiations.Add(new Exponentiation(termComponentstoPower[index],
+                            new Fraction(1, index)));
+                    return Term.createTerm(coefficient, exponentiations);
                 }
             }
             return new Exponentiation(expBase, exponent);
