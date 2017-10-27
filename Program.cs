@@ -876,17 +876,15 @@ namespace ConsoleSolver
         }
         static public Number exponentiate(Number expBase, Number exponent)
         {
-            if (expBase is Fraction)
-            {
-                Fraction baseFraction = (Fraction)expBase;
-                if (baseFraction.Numerator == baseFraction.Denominator ||
-                    baseFraction.Numerator == 0)
-                    return baseFraction;
-            }
             if (exponent is Fraction)
             {
                 Fraction exponentFraction = (Fraction)exponent;
-                if (exponentFraction.Denominator == 1)
+                if (exponentFraction.Numerator < 0)
+                {
+                    exponentFraction = (Fraction)(exponentFraction.negative());
+                    expBase = expBase.reciprocal();
+                }
+                if (exponentFraction.Denominator == 1) 
                 {
                     Number output = new Fraction(1, 1);
                     for (int i = 0; i < exponentFraction.Numerator; ++i)
@@ -896,11 +894,6 @@ namespace ConsoleSolver
                 if (expBase is Rational)
                 {
                     Rational rationalBase = (Rational)expBase;
-                    if (exponentFraction.Numerator < 0)
-                    {
-                        exponentFraction = (Fraction)(exponentFraction.negative());
-                        rationalBase = (Rational)(rationalBase.reciprocal());
-                    }
                     int rationalizer;
                     if (rationalBase is Fraction)
                     {
@@ -982,6 +975,27 @@ namespace ConsoleSolver
                             new Fraction(1, index)));
                     return Term.createTerm(coefficient, exponentiations);
                 }
+            }
+            if (expBase is Fraction)
+            {
+                Fraction baseFraction = (Fraction)expBase;
+                if (baseFraction.Numerator == baseFraction.Denominator ||
+                    baseFraction.Numerator == 0)
+                    return baseFraction;
+            }
+            if (expBase is Exponentiation)
+            {
+                Exponentiation baseExponentiation = (Exponentiation)expBase;
+                return exponentiate(baseExponentiation.Base,
+                    baseExponentiation.Exponent * exponent);
+            }
+            if (expBase is Product)
+            {
+                Product baseProduct = (Product)expBase;
+                Number output = baseProduct.Coefficient;
+                foreach (Exponentiation exponentiation in baseProduct.Exponentiations)
+                    output *= exponentiate(exponentiation, exponent);
+                return output;
             }
             return new Exponentiation(expBase, exponent);
         }
@@ -1169,8 +1183,8 @@ namespace ConsoleSolver
                 }
                 try
                 {
-                    Console.WriteLine("=\n" + evaluateExpression(operations, numbers).ToString() +
-                        '\n');
+                    Console.Write("=\n" +
+                        evaluateExpression(operations, numbers).ToString() + "\n\n");
                 }
                 catch (DivideByZeroException)
                 {
