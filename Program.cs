@@ -36,8 +36,7 @@ namespace ConsoleSolver
         }
         public abstract class Term : Number
         {
-            public static Term createTerm(Rational coefficient,
-                List<Factor> factors)
+            public static Term createTerm(Rational coefficient, List<Factor> factors)
             {//To be used instead of the Product constructor if it's unkown whether the given input
              //could be represented by a simpler type.
                 if (factors.Count == 0)
@@ -103,7 +102,7 @@ namespace ConsoleSolver
             protected override abstract Number multiply(Number number);
             public override abstract Number negative();
             public override abstract Number reciprocal();
-            public abstract bool isIntegral();
+            public abstract bool isGaussian();
             public override abstract int CompareTo(Object obj);
             public static Number operator +(Rational a, Factor b)
             {
@@ -174,7 +173,7 @@ namespace ConsoleSolver
             {
                 return new Fraction(Denominator, Numerator);
             }
-            public override bool isIntegral()
+            public override bool isGaussian()
             {
                 return Denominator == 1;
             }
@@ -270,7 +269,7 @@ namespace ConsoleSolver
                 return new ComplexNumber((Fraction)(Real / denominator),
                     (Fraction)(Imaginary.negative() / denominator));
             }
-            public override bool isIntegral()
+            public override bool isGaussian()
             {
                 return Real.Denominator == 1 && Imaginary.Denominator == 1;
             }
@@ -318,6 +317,126 @@ namespace ConsoleSolver
                 if (Imaginary.Denominator != 1)
                     output.Append('/' + Imaginary.Denominator.ToString());
                 return output.ToString();
+            }
+        }
+        public enum Constant
+        {
+            TAU
+        }
+        public class Transcendental : Factor
+        {
+            public Constant Value { get; }
+            public Transcendental(Constant value)
+            {
+                Value = value;
+            }
+            protected override Number add(Number number)
+            {
+                if (number is Transcendental)
+                {
+                    Transcendental transcendental = (Transcendental)number;
+                    if (transcendental.Value == Value)
+                        return new Product(new Fraction(2, 1), new List<Factor> { this });
+                }
+                return number + this;
+            }
+            public override Number negative()
+            {
+                return new Product(new Fraction(-1, 1), new List<Factor> { this });
+            }
+            protected override Number multiply(Number number)
+            {
+                if (number is Transcendental)
+                {
+                    Transcendental transcendental = (Transcendental)number;
+                    if (transcendental.Value == Value)
+                        return new Exponentiation(this, new Fraction(2, 1));
+                }
+                if (number is Rational)
+                    return new Product((Rational)number, new List<Factor> { this });
+                if (number is Factor)
+                    return new Product(new Fraction(1, 1),
+                        new List<Factor> { (Factor)number, this });
+                return number * this;
+            }
+            public override Number reciprocal()
+            {
+                return new Exponentiation(this, new Fraction(-1, 1));
+            }
+            public override int CompareTo(object obj)
+            {
+                if (obj is Transcendental)
+                {
+                    Transcendental transcendental = (Transcendental)obj;
+                    return Value - transcendental.Value;
+                }
+                return getTypeIndex(this) - getTypeIndex((Number)obj);
+            }
+            public override string ToString()
+            {
+                return "tau";
+            }
+        }
+        public class Sine : Factor
+        {
+            public Number Argument { get; }
+            public Sine(Number argument)
+            {
+                Argument = argument;
+            }
+            protected override Number add(Number number)
+            {
+                if (number is Fraction)
+                {
+                    Fraction fraction = (Fraction)number;
+                    if (fraction.Numerator == 0)
+                        return this;
+                }
+                if (number is Sine)
+                {
+                    Sine sine = (Sine)number;
+                    if (sine.Argument == Argument)
+                        return new Product(new Fraction(2, 1), new List<Factor> { this });
+                }
+                if (number is Term)
+                    return new Sum(new List<Term> { this, (Term)number });
+                return number + this;
+            }
+            public override Number negative()
+            {
+                return new Sine(Argument.negative());
+            }
+            protected override Number multiply(Number number)
+            {
+                if (number is Fraction)
+                {
+                    Fraction fraction = (Fraction)number;
+                    if (fraction.Numerator == fraction.Denominator)
+                        return this;
+                }
+                if (number is Rational)
+                    return new Product((Rational)number, new List<Factor> { this });
+                if (number is Factor)
+                    return new Product(new Fraction(1, 1),
+                        new List<Factor> { (Factor)number, this });
+                return number * this;
+            }
+            public override Number reciprocal()
+            {
+                return new Exponentiation(this, new Fraction(-1, 1));
+            }
+            public override int CompareTo(object obj)
+            {
+                if (obj is Sine)
+                {
+                    Sine sine = (Sine)obj;
+                    return Argument.CompareTo(sine.Argument);
+                }
+                return getTypeIndex(this) - getTypeIndex((Number)obj);
+            }
+            public override string ToString()
+            {
+                return "sin(" + Argument.ToString() + ')';
             }
         }
         public class Exponentiation : Factor
@@ -372,9 +491,9 @@ namespace ConsoleSolver
                 {
                     Exponentiation exponentiation = (Exponentiation)number;
                     if (Exponent.Equals(exponentiation.Exponent))
-                        return exponentiate(Base * exponentiation.Base, Exponent);
+                        return exponentiate(Base * exponentiation.Base, Exponent, true);
                     if (Base.Equals(exponentiation.Base))
-                        return exponentiate(Base, Exponent + exponentiation.Exponent);
+                        return exponentiate(Base, Exponent + exponentiation.Exponent, true);
                     return new Product(new Fraction(1, 1),
                         new List<Factor> { this, exponentiation });
                 }
@@ -437,65 +556,6 @@ namespace ConsoleSolver
                         return output.Append('i').ToString();
                 }
                 return output.Append('(' + Exponent.ToString() + ')').ToString();
-            }
-        }
-        public enum Constant
-        {
-            PI,
-            E
-        }
-        public class Transcendental : Factor
-        {
-            Constant Value { get; }
-            public Transcendental(Constant value)
-            {
-                Value = value;
-            }
-            protected override Number add(Number number)
-            {
-                if (number is Transcendental)
-                {
-                    Transcendental transcendental = (Transcendental)number;
-                    if (transcendental.Value == Value)
-                        return new Product(new Fraction(2, 1), new List<Factor> { this });
-                }
-                return number + this;
-            }
-            public override Number negative()
-            {
-                return new Product(new Fraction(-1, 1), new List<Factor> { this });
-            }
-            protected override Number multiply(Number number)
-            {
-                if (number is Transcendental)
-                {
-                    Transcendental transcendental = (Transcendental)number;
-                    if (transcendental.Value == Value)
-                        return new Exponentiation(this, new Fraction(2, 1));
-                }
-                if (number is Factor)
-                    return new Product(new Fraction(1, 1),
-                        new List<Factor> { (Factor)number, this });
-                return number * this;
-            }
-            public override Number reciprocal()
-            {
-                return new Exponentiation(this, new Fraction(-1, 1));
-            }
-            public override int CompareTo(object obj)
-            {
-                if (obj is Transcendental)
-                {
-                    Transcendental transcendental = (Transcendental)obj;
-                    return Value - transcendental.Value;
-                }
-                return getTypeIndex(this) - getTypeIndex((Number)obj);
-            }
-            public override string ToString()
-            {
-                if (Value == Constant.PI)
-                    return "PI";
-                return "e";
             }
         }
         public class Product : Term
@@ -726,9 +786,9 @@ namespace ConsoleSolver
                 return output.ToString();
             }
         }
-        public class NumberList : Number
+        public class NumberList : Term
         {
-            List<Number> Numbers { get; }
+            public List<Number> Numbers { get; }
             public NumberList(List<Number> numbers)
             {
                 Numbers = numbers;
@@ -745,7 +805,7 @@ namespace ConsoleSolver
                         {
                             Number sum = n + m;
                             bool addSum = true;
-                            for (int i = 0; 0 < outputList.Count; ++i)
+                            for (int i = 0; i < outputList.Count; ++i)
                                 if (sum.Equals(outputList[i]))
                                 {
                                     addSum = false;
@@ -760,7 +820,7 @@ namespace ConsoleSolver
                     {
                         Number sum = n + number;
                         bool addSum = true;
-                        for (int i = 0; 0 < outputList.Count; ++i)
+                        for (int i = 0; i < outputList.Count; ++i)
                             if (sum.Equals(outputList[i]))
                             {
                                 addSum = false;
@@ -791,7 +851,7 @@ namespace ConsoleSolver
                         {
                             Number product = n * m;
                             bool addProduct = true;
-                            for (int i = 0; 0 < outputList.Count; ++i)
+                            for (int i = 0; i < outputList.Count; ++i)
                                 if (product.Equals(outputList[i]))
                                 {
                                     addProduct = false;
@@ -806,7 +866,7 @@ namespace ConsoleSolver
                     {
                         Number product = n * number;
                         bool addProduct = true;
-                        for (int i = 0; 0 < outputList.Count; ++i)
+                        for (int i = 0; i < outputList.Count; ++i)
                             if (product.Equals(outputList[i]))
                             {
                                 addProduct = false;
@@ -865,6 +925,29 @@ namespace ConsoleSolver
                 return 6;
             return 7;
         }
+        static public Dictionary<int, int> getFactorization(int x)
+        {//The keys respresent the factors, and the values represent their multiplicities.
+            Dictionary<int, int> factors = new Dictionary<int, int>();
+            if (x < 0)
+                x *= -1;
+            int factor = 2;
+            while (factor <= x / 2)
+                if (x % factor == 0)
+                {
+                    if (factors.ContainsKey(factor))
+                        factors[factor] += 1;
+                    else
+                        factors.Add(factor, 1);
+                    x /= factor;
+                }
+                else
+                    ++factor;
+            if (factors.ContainsKey(x))
+                factors[x] += 1;
+            else if (x != 1)
+                factors.Add(x, 1);
+            return factors;
+        }
         static public Dictionary<Rational, int> getFactorization(Rational gaussian)
         {
             Dictionary<Rational, int> factors = new Dictionary<Rational, int>();
@@ -876,22 +959,26 @@ namespace ConsoleSolver
                 for (int i = 0; realPart - i >= 0;)
                 {
                     int gaussianMagnitudeSquared;
+                    Fraction fractionGaussian = null;
+                    ComplexNumber complexGaussian = null;
                     if (gaussian is Fraction)
                     {
-                        Fraction fractionGaussian = (Fraction)gaussian;
+                        fractionGaussian = (Fraction)gaussian;
                         gaussianMagnitudeSquared = fractionGaussian.Numerator *
                             fractionGaussian.Numerator;
                     }
                     else
                     {
-                        ComplexNumber complexGaussian = (ComplexNumber)gaussian;
+                        complexGaussian = (ComplexNumber)gaussian;
                         gaussianMagnitudeSquared = complexGaussian.Real.Numerator *
                             complexGaussian.Real.Numerator + complexGaussian.Imaginary.Numerator *
                             complexGaussian.Imaginary.Numerator;
                     }
                     if ((realPart - i) * (realPart - i) + (imaginaryPart + i) *
-                    (imaginaryPart + i) > gaussianMagnitudeSquared)
+                        (imaginaryPart + i) > gaussianMagnitudeSquared)
                     {
+                        if (gaussian is Fraction && fractionGaussian.Numerator == fractionGaussian.Denominator)
+                            return factors;
                         if (factors.ContainsKey(gaussian))
                             factors[gaussian] += 1;
                         else
@@ -902,7 +989,7 @@ namespace ConsoleSolver
                     bool testFactor()
                     {
                         Rational quotient = (Rational)(gaussian / factor);
-                        if (quotient.isIntegral())
+                        if (quotient.isGaussian())
                         {
                             if (factors.ContainsKey(factor))
                                 factors[factor] += 1;
@@ -957,12 +1044,84 @@ namespace ConsoleSolver
         {
             return x / getGCD(x, y) * y;
         }
-        static public Number exponentiate(Number expBase, Number exponent)
+        static public Number sin(Number argument)
         {
+            if (argument is Fraction)
+            {
+                Fraction fraction = (Fraction)argument;
+                if (fraction.Numerator == 0)
+                    return fraction;
+            }
+            else if (argument is Transcendental)
+            {
+                Transcendental transcendental = (Transcendental)argument;
+                if (transcendental.Value == Constant.TAU)
+                    return new Fraction(0, 1);
+            }
+            else if (argument is Product)
+            {
+                Product product = (Product)argument;
+                if (product.Factors.Count == 1 && product.Coefficient is Fraction &&
+                    product.Factors[0] is Transcendental)
+                {
+                    Transcendental transcendental = (Transcendental)product.Factors[0];
+                    if (transcendental.Value == Constant.TAU)
+                    {
+                        Fraction fraction = (Fraction)product.Coefficient;
+                        Number sine;
+                        switch(fraction.Denominator)
+                        {
+                            case 1:
+                            case 2:
+                                sine = new Fraction(0, 1);
+                                break;
+                            case 3:
+                                sine = new Product(new Fraction(1, 2), new List<Factor> {
+                                    new Exponentiation(new Fraction(3, 1), new Fraction(1, 2)) });
+                                break;
+                            case 4:
+                                sine = new Fraction(1, 1);
+                                break;
+                            default:
+                                return new Sine(argument);
+                        }
+                        Number angleMultipleSine = sine;
+                        Number cosine = exponentiate(new Fraction(1, 1) - sine * sine,
+                            new Fraction(1, 2), false);
+                        if (fraction.Denominator < fraction.Numerator % fraction.Denominator &&
+                            fraction.Numerator % fraction.Denominator < fraction.Denominator + 2)
+                            cosine = cosine.negative();
+                        Number angleMultipleCosine;
+                        for (int i = 1; i < fraction.Numerator; ++i)
+                        {
+                            angleMultipleCosine = exponentiate(new Fraction(1, 1) -
+                                angleMultipleSine * angleMultipleSine, new Fraction(1, 2), false);
+                            if (fraction.Denominator < fraction.Numerator + i %
+                                fraction.Denominator && fraction.Numerator + i %
+                                fraction.Denominator < fraction.Denominator + 2)
+                                angleMultipleCosine = angleMultipleCosine.negative();
+                            angleMultipleSine = sine * angleMultipleCosine +
+                                angleMultipleSine * cosine;
+                        }
+                        return angleMultipleSine;
+                    }
+                }
+            }
+            return new Sine(argument);
+        }
+        static public Number exponentiate(Number expBase, Number exponent, bool returnAllRoots)
+        {
+            if (expBase is Fraction)
+            {
+                Fraction baseFraction = (Fraction)expBase;
+                if (baseFraction.Numerator == baseFraction.Denominator ||
+                    baseFraction.Numerator == 0)
+                    return baseFraction;
+            }
             if (exponent is Fraction)
             {
                 Fraction exponentFraction = (Fraction)exponent;
-                if (exponentFraction.Denominator == 1) 
+                if (exponentFraction.Denominator == 1)
                 {
                     Number output = new Fraction(1, 1);
                     if (exponentFraction.Numerator < 1)
@@ -1051,46 +1210,81 @@ namespace ConsoleSolver
                                 coefficient = (Rational)coefficient.negative();
                                 termComponentstoPower.Remove(exponentFraction.Denominator);
                             }
-                            else if ((exponentFraction.Denominator + 2) % 4 == 0)
+                            else if (exponentFraction.Denominator % 4 == 0)
+                            {
+                                if (termComponentstoPower.ContainsKey(2))
+                                    termComponentstoPower[2] = (Rational)(termComponentstoPower[2] *
+                                        new ComplexNumber(0, 1));
+                                else
+                                    termComponentstoPower.Add(2, new ComplexNumber(0, 1));
+                                termComponentstoPower.Remove(exponentFraction.Denominator);
+                            }
+                            else if (exponentFraction.Denominator % 2 == 0)
                             {
                                 coefficient = (Rational)(coefficient * new ComplexNumber(0, 1));
                                 termComponentstoPower.Remove(exponentFraction.Denominator);
                             }
                         }
                     }
+                    else if (termComponentstoPower[exponentFraction.Denominator] is ComplexNumber)
+                    {
+                        ComplexNumber complexRadicand =
+                            (ComplexNumber)termComponentstoPower[exponentFraction.Denominator];
+                        if (complexRadicand.Real.Numerator == 0)
+                            if (complexRadicand.Imaginary.Numerator ==
+                                complexRadicand.Imaginary.Denominator)
+                            {
+                                if (exponentFraction.Denominator % 4 == 3)
+                                {
+                                    coefficient =
+                                        (Rational)(coefficient * new ComplexNumber(0, -1));
+                                    termComponentstoPower.Remove(exponentFraction.Denominator);
+                                }
+                                else if (exponentFraction.Denominator % 4 == 1)
+                                {
+                                    coefficient = (Rational)(coefficient * new ComplexNumber(0, 1));
+                                    termComponentstoPower.Remove(exponentFraction.Denominator);
+                                }
+                            }
+                    }
                     List<Factor> factors = new List<Factor>();
+                    int largestIndex = 1;
                     foreach (int index in termComponentstoPower.Keys)
+                    {
                         factors.Add(new Exponentiation(termComponentstoPower[index],
                             new Fraction(1, index)));
-                    Number rootOfUnity = new Exponentiation(new Transcendental(Constant.E),
-                        new Product(new ComplexNumber(new Fraction(0, 1),
-                        new Fraction(2, exponentFraction.Denominator)),
-                        new List<Factor> { new Transcendental(Constant.PI) }));
-                    List<Number> roots = new List<Number> { Term.createTerm(coefficient, factors) };
-                    for (int i = 1; i < exponentFraction.Denominator; ++i)
-                        roots.Add(roots[i - 1] * rootOfUnity);
-                    return new NumberList(roots);
+                        if (index > largestIndex)
+                            largestIndex = index;
+                    }
+                    if (returnAllRoots && largestIndex < exponentFraction.Denominator) 
+                    {
+                        Number rootOfUnity = sin(new Transcendental(Constant.TAU) *
+                            new Fraction(4 + exponentFraction.Denominator,
+                            4 * exponentFraction.Denominator)) +
+                            sin(new Transcendental(Constant.TAU) *
+                            new Fraction(1, exponentFraction.Denominator)) *
+                            new ComplexNumber(0, 1);
+                        List<Number> roots =
+                            new List<Number> { Term.createTerm(coefficient, factors) };
+                        for (int i = 1; i < exponentFraction.Denominator / largestIndex; ++i)
+                            roots.Add(roots[i - 1] * rootOfUnity);
+                        return new NumberList(roots);
+                    }
+                    return Term.createTerm(coefficient, factors);
                 }
-            }
-            if (expBase is Fraction)
-            {
-                Fraction baseFraction = (Fraction)expBase;
-                if (baseFraction.Numerator == baseFraction.Denominator ||
-                    baseFraction.Numerator == 0)
-                    return baseFraction;
             }
             if (expBase is Exponentiation)
             {
                 Exponentiation baseExponentiation = (Exponentiation)expBase;
                 return exponentiate(baseExponentiation.Base,
-                    baseExponentiation.Exponent * exponent);
+                    baseExponentiation.Exponent * exponent, true);
             }
             if (expBase is Product)
             {
                 Product baseProduct = (Product)expBase;
                 Number output = baseProduct.Coefficient;
                 foreach (Factor factor in baseProduct.Factors)
-                    output *= exponentiate(factor, exponent);
+                    output *= exponentiate(factor, exponent, true);
                 return output;
             }
             return new Exponentiation(expBase, exponent);
@@ -1152,7 +1346,7 @@ namespace ConsoleSolver
             {
                 if (operations[i] == '^')
                 {
-                    numbers[i - 1] = Math.exponentiate(numbers[i - 1], numbers[i + 1]);
+                    numbers[i - 1] = Math.exponentiate(numbers[i - 1], numbers[i + 1], true);
                     numbers.RemoveRange(i, 2);
                     operations.RemoveRange(i, 2);
                 }
