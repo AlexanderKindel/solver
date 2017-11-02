@@ -670,21 +670,23 @@ namespace ConsoleSolver
                         output.Append('*');
                     output.Append(exponentiationString);
                 }
-                StringBuilder scalarString = new StringBuilder();
+                StringBuilder coefficientString = new StringBuilder();
                 if (Coefficient is Fraction)
                 {
-                    Fraction scalarFraction = (Fraction)Coefficient;
-                    if (scalarFraction.Numerator != 1)
+                    Fraction coefficientFraction = (Fraction)Coefficient;
+                    if (coefficientFraction.Numerator != 1)
                     {
-                        if (scalarFraction.Numerator == -1)
-                            scalarString.Append('-');
+                        if (coefficientFraction.Numerator == -1)
+                            coefficientString.Append('-');
                         else
-                            scalarString.Append(scalarFraction.Numerator);
+                        {
+                            coefficientString.Append(coefficientFraction.Numerator);
+                            if (output[0] != '(')
+                                coefficientString.Append('*');
+                        }
                     }
-                    if (output[0] != '(' && scalarString.Length > 0)
-                        scalarString.Append('*');
-                    if (scalarFraction.Denominator != 1)
-                        output.Append('/' + scalarFraction.Denominator.ToString());
+                    if (coefficientFraction.Denominator != 1)
+                        output.Append('/' + coefficientFraction.Denominator.ToString());
                 }
                 else
                 {
@@ -692,24 +694,24 @@ namespace ConsoleSolver
                     if (complexCoefficient.Real.Numerator == 0)
                     {
                         if (complexCoefficient.Imaginary.Numerator == 1)
-                            scalarString.Append('i');
+                            coefficientString.Append('i');
                         else
                         {
                             if (complexCoefficient.Imaginary.Numerator == -1)
-                                scalarString.Append("-i");
+                                coefficientString.Append("-i");
                             else
-                                scalarString.Append(
+                                coefficientString.Append(
                                     complexCoefficient.Imaginary.Numerator.ToString() + 'i');
                         }
-                        if (output[0] != '(' && scalarString.Length > 0)
-                            scalarString.Append('*');
+                        if (output[0] != '(' && coefficientString.Length > 0)
+                            coefficientString.Append('*');
                         if (complexCoefficient.Imaginary.Denominator != 1)
                             output.Append('/' + complexCoefficient.Imaginary.Denominator.ToString());
                     }
                     else
                         output.Insert(0, '(' + Coefficient.ToString() + ')');
                 }
-                return output.Insert(0, scalarString).ToString();
+                return output.Insert(0, coefficientString).ToString();
             }
         }
         public class Sum : Number
@@ -795,7 +797,12 @@ namespace ConsoleSolver
             {
                 StringBuilder output = new StringBuilder(Terms[0].ToString());
                 for (int i = 1; i < Terms.Count; ++i)
-                    output.Append('+' + Terms[i].ToString());
+                {
+                    String termString = Terms[i].ToString();
+                    if (termString[0] != '-')
+                        output.Append('+');
+                    output.Append(termString);
+                }
                 return output.ToString();
             }
         }
