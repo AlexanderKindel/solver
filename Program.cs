@@ -1066,69 +1066,48 @@ namespace ConsoleSolver
             return x / getGCD(x, y) * y;
         }
         static public Number sin(Number argument)
-        {
+        {//The argument is expressed in fractions of a turn; 90 degrees is represented as 1/4.
             if (argument is Fraction)
             {
                 Fraction fraction = (Fraction)argument;
-                if (fraction.Numerator == 0)
-                    return fraction;
-            }
-            else if (argument is Transcendental)
-            {
-                Transcendental transcendental = (Transcendental)argument;
-                if (transcendental.Value == Constant.TAU)
-                    return new Fraction(0, 1);
-            }
-            else if (argument is Product)
-            {
-                Product product = (Product)argument;
-                if (product.Factors.Count == 1 && product.Coefficient is Fraction &&
-                    product.Factors[0] is Transcendental)
+                Number sine;
+                switch(fraction.Denominator)
                 {
-                    Transcendental transcendental = (Transcendental)product.Factors[0];
-                    if (transcendental.Value == Constant.TAU)
-                    {
-                        Fraction fraction = (Fraction)product.Coefficient;
-                        Number sine;
-                        switch(fraction.Denominator)
-                        {
-                            case 1:
-                            case 2:
-                                sine = new Fraction(0, 1);
-                                break;
-                            case 3:
-                                sine = new Product(new Fraction(1, 2), new List<Factor> {
-                                    new Exponentiation(new Fraction(3, 1), new Fraction(1, 2)) });
-                                break;
-                            case 4:
-                                sine = new Fraction(1, 1);
-                                break;
-                            default:
-                                return new Sine(argument);
-                        }
-                        Number angleMultipleSine = sine;
-                        Number cosine = exponentiate(new Fraction(1, 1) - sine * sine,
-                            new Fraction(1, 2));
-                        if (fraction.Denominator < fraction.Numerator % fraction.Denominator &&
-                            fraction.Numerator % fraction.Denominator < fraction.Denominator + 2)
-                            cosine = cosine.negative();
-                        Number angleMultipleCosine;
-                        for (int i = 1; i < fraction.Numerator; ++i)
-                        {
-                            angleMultipleCosine = exponentiate(new Fraction(1, 1) -
-                                angleMultipleSine * angleMultipleSine, new Fraction(1, 2));
-                            if (fraction.Denominator < fraction.Numerator + i %
-                                fraction.Denominator && fraction.Numerator + i %
-                                fraction.Denominator < fraction.Denominator + 2)
-                                angleMultipleCosine = angleMultipleCosine.negative();
-                            angleMultipleSine = sine * angleMultipleCosine +
-                                angleMultipleSine * cosine;
-                        }
-                        return angleMultipleSine;
-                    }
+                    case 1:
+                    case 2:
+                        sine = new Fraction(0, 1);
+                        break;
+                    case 3:
+                        sine = new Product(new Fraction(1, 2), new List<Factor> {
+                            new Exponentiation(new Fraction(3, 1), new Fraction(1, 2)) });
+                        break;
+                    case 4:
+                        sine = new Fraction(1, 1);
+                        break;
+                    default:
+                        return new Sine(argument * new Transcendental(Constant.TAU));
                 }
+                Number angleMultipleSine = sine;
+                Number cosine = exponentiate(new Fraction(1, 1) - sine * sine,
+                    new Fraction(1, 2));
+                if (fraction.Denominator < fraction.Numerator % fraction.Denominator &&
+                    fraction.Numerator % fraction.Denominator < fraction.Denominator + 2)
+                    cosine = cosine.negative();
+                Number angleMultipleCosine;
+                for (int i = 1; i < fraction.Numerator; ++i)
+                {
+                    angleMultipleCosine = exponentiate(new Fraction(1, 1) -
+                        angleMultipleSine * angleMultipleSine, new Fraction(1, 2));
+                    if (fraction.Denominator < fraction.Numerator + i %
+                        fraction.Denominator && fraction.Numerator + i %
+                        fraction.Denominator < fraction.Denominator + 2)
+                        angleMultipleCosine = angleMultipleCosine.negative();
+                    angleMultipleSine = sine * angleMultipleCosine +
+                        angleMultipleSine * cosine;
+                }
+                return angleMultipleSine;
             }
-            return new Sine(argument);
+            return new Sine(argument * new Transcendental(Constant.TAU));
         }
         static protected bool returnAllRoots = true;
         static public Number exponentiate(Number expBase, Number exponent)
@@ -1281,11 +1260,9 @@ namespace ConsoleSolver
                     if (returnAllRoots && largestIndex < exponentFraction.Denominator) 
                     {
                         returnAllRoots = false;
-                        Number rootOfUnity = sin(new Transcendental(Constant.TAU) *
-                            new Fraction(4 + exponentFraction.Denominator,
+                        Number rootOfUnity = sin(new Fraction(4 + exponentFraction.Denominator,
                             4 * exponentFraction.Denominator)) +
-                            sin(new Transcendental(Constant.TAU) *
-                            new Fraction(1, exponentFraction.Denominator)) *
+                            sin(new Fraction(1, exponentFraction.Denominator)) *
                             new ComplexNumber(0, 1);
                         List<Number> roots =
                             new List<Number> { Term.createTerm(coefficient, factors) };
