@@ -377,10 +377,10 @@ namespace ConsoleSolver
                 return "tau";
             }
         }
-        public class Sine : Factor
+        public class Cosine : Factor
         {
             public Number Argument { get; }
-            public Sine(Number argument)
+            public Cosine(Number argument)
             {
                 Argument = argument;
             }
@@ -392,10 +392,10 @@ namespace ConsoleSolver
                     if (fraction.Numerator == 0)
                         return this;
                 }
-                if (number is Sine)
+                if (number is Cosine)
                 {
-                    Sine sine = (Sine)number;
-                    if (sine.Argument == Argument)
+                    Cosine cosine = (Cosine)number;
+                    if (cosine.Argument == Argument)
                         return new Product(new Fraction(2, 1), new List<Factor> { this });
                 }
                 if (number is Term)
@@ -418,18 +418,18 @@ namespace ConsoleSolver
                 if (number is Transcendental)
                     return new Product(new Fraction(1, 1),
                         new List<Factor> { (Transcendental)number, this });
-                if (number is Sine)
+                if (number is Cosine)
                 {
-                    Sine sine = (Sine)number;
-                    if (sine.Argument.Equals(Argument))
+                    Cosine cosine = (Cosine)number;
+                    if (cosine.Argument.Equals(Argument))
                         return new Exponentiation(this, new Fraction(2, 1));
-                    return new Product(new Fraction(1, 1), new List<Factor> { this, sine });
+                    return new Product(new Fraction(1, 1), new List<Factor> { this, cosine });
                 }
                 return number * this;
             }
             public override Number negative()
             {
-                return new Sine(Argument.negative());
+                return new Product(new Fraction(-1, 1), new List<Factor> { this });
             }
             public override Number reciprocal()
             {
@@ -437,16 +437,16 @@ namespace ConsoleSolver
             }
             public override int CompareTo(object obj)
             {
-                if (obj is Sine)
+                if (obj is Cosine)
                 {
-                    Sine sine = (Sine)obj;
-                    return Argument.CompareTo(sine.Argument);
+                    Cosine cosine = (Cosine)obj;
+                    return Argument.CompareTo(cosine.Argument);
                 }
                 return getTypeIndex(this) - getTypeIndex((Number)obj);
             }
             public override string ToString()
             {
-                return "sin(" + Argument.ToString() + ')';
+                return "cos(" + Argument.ToString() + ')';
             }
         }
         public class Exponentiation : Factor
@@ -623,8 +623,8 @@ namespace ConsoleSolver
                     Product product = (Product)number;
                     Term output = new Product(Coefficient, Factors);
                     output = (Term)(output * product.Coefficient);
-                    foreach (Exponentiation exponentiation in product.Factors)
-                        output = (Term)(output * exponentiation);
+                    foreach (Factor factor in product.Factors)
+                        output = (Term)(output * factor);
                     return output;
                 }
                 return number * this;
@@ -937,7 +937,7 @@ namespace ConsoleSolver
                 return 2;
             if (number is Transcendental)
                 return 3;
-            if (number is Sine)
+            if (number is Cosine)
                 return 4;
             if (number is Exponentiation)
                 return 5;
@@ -1065,49 +1065,41 @@ namespace ConsoleSolver
         {
             return x / getGCD(x, y) * y;
         }
-        static public Number sin(Number argument)
+        static public Number cos(Number argument)
         {//The argument is expressed in fractions of a turn; 90 degrees is represented as 1/4.
             if (argument is Fraction)
             {
                 Fraction fraction = (Fraction)argument;
-                Number sine;
+                Number cosine;
                 switch(fraction.Denominator)
                 {
                     case 1:
+                        cosine = new Fraction(1, 1);
+                        break;
                     case 2:
-                        sine = new Fraction(0, 1);
+                        cosine = new Fraction(-1, 1);
                         break;
                     case 3:
-                        sine = new Product(new Fraction(1, 2), new List<Factor> {
-                            new Exponentiation(new Fraction(3, 1), new Fraction(1, 2)) });
+                        cosine = new Fraction(-1, 2);
                         break;
                     case 4:
-                        sine = new Fraction(1, 1);
+                        cosine = new Fraction(0, 1);
                         break;
                     default:
-                        return new Sine(argument * new Transcendental(Constant.TAU));
+                        return new Cosine(argument * new Transcendental(Constant.TAU));
                 }
-                Number angleMultipleSine = sine;
-                Number cosine = exponentiate(new Fraction(1, 1) - sine * sine,
-                    new Fraction(1, 2));
-                if (fraction.Denominator < fraction.Numerator % fraction.Denominator &&
-                    fraction.Numerator % fraction.Denominator < fraction.Denominator + 2)
-                    cosine = cosine.negative();
-                Number angleMultipleCosine;
+                Number s = new Fraction(1, 1);
+                Number t = cosine;
+                Number angleMultipleCosine = cosine;
                 for (int i = 1; i < fraction.Numerator; ++i)
                 {
-                    angleMultipleCosine = exponentiate(new Fraction(1, 1) -
-                        angleMultipleSine * angleMultipleSine, new Fraction(1, 2));
-                    if (fraction.Denominator < fraction.Numerator + i %
-                        fraction.Denominator && fraction.Numerator + i %
-                        fraction.Denominator < fraction.Denominator + 2)
-                        angleMultipleCosine = angleMultipleCosine.negative();
-                    angleMultipleSine = sine * angleMultipleCosine +
-                        angleMultipleSine * cosine;
+                    angleMultipleCosine = new Fraction(2, 1) * cosine * t - s;
+                    s = t;
+                    t = angleMultipleCosine;
                 }
-                return angleMultipleSine;
+                return angleMultipleCosine;
             }
-            return new Sine(argument * new Transcendental(Constant.TAU));
+            return new Cosine(argument * new Transcendental(Constant.TAU));
         }
         static protected bool returnAllRoots = true;
         static public Number exponentiate(Number expBase, Number exponent)
@@ -1260,10 +1252,9 @@ namespace ConsoleSolver
                     if (returnAllRoots && largestIndex < exponentFraction.Denominator) 
                     {
                         returnAllRoots = false;
-                        Number rootOfUnity = sin(new Fraction(4 + exponentFraction.Denominator,
-                            4 * exponentFraction.Denominator)) +
-                            sin(new Fraction(1, exponentFraction.Denominator)) *
-                            new ComplexNumber(0, 1);
+                        Number rootOfUnity = cos(new Fraction(1, exponentFraction.Denominator)) +
+                            cos(new Fraction(4 + exponentFraction.Denominator,
+                            4 * exponentFraction.Denominator)) * new ComplexNumber(0, 1);
                         List<Number> roots =
                             new List<Number> { Term.createTerm(coefficient, factors) };
                         for (int i = 1; i < exponentFraction.Denominator / largestIndex; ++i)
