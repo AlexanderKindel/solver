@@ -495,7 +495,16 @@ namespace ConsoleSolver
                 {
                     Exponentiation exponentiation = (Exponentiation)number;
                     if (Exponent.Equals(exponentiation.Exponent))
+                    {
+                        Number outputBase = Base * exponentiation.Base;
+                        if (outputBase is Exponentiation)
+                        {
+                            Exponentiation outputExponentiation = (Exponentiation)outputBase;
+                            return new Exponentiation(outputExponentiation.Base,
+                                outputExponentiation.Exponent * Exponent);
+                        }
                         return exponentiate(Base * exponentiation.Base, Exponent);
+                    }
                     if (Base.Equals(exponentiation.Base))
                         return exponentiate(Base, Exponent + exponentiation.Exponent);
                     return new Product(new Fraction(1, 1),
@@ -945,31 +954,8 @@ namespace ConsoleSolver
                 return 6;
             return 7;
         }
-        static public Dictionary<int, int> getFactorization(int x)
-        {//The keys respresent the factors, and the values represent their multiplicities.
-            Dictionary<int, int> factors = new Dictionary<int, int>();
-            if (x < 0)
-                x *= -1;
-            int factor = 2;
-            while (factor <= x / 2)
-                if (x % factor == 0)
-                {
-                    if (factors.ContainsKey(factor))
-                        factors[factor] += 1;
-                    else
-                        factors.Add(factor, 1);
-                    x /= factor;
-                }
-                else
-                    ++factor;
-            if (factors.ContainsKey(x))
-                factors[x] += 1;
-            else if (x != 1)
-                factors.Add(x, 1);
-            return factors;
-        }
         static public Dictionary<Rational, int> getFactorization(Rational gaussian)
-        {
+        {//The keys represent the factors and the values, their multiplicities.
             Dictionary<Rational, int> factors = new Dictionary<Rational, int>();
             int sumOfRealAndImaginary = 2;
             while (true)
@@ -1032,7 +1018,7 @@ namespace ConsoleSolver
                         factor = new ComplexNumber(realPart + i, imaginaryPart - i);
                         if (testFactor())
                             continue;
-                        factor = new ComplexNumber(-realPart - i, -imaginaryPart - i);
+                        factor = new ComplexNumber(-realPart - i, imaginaryPart - i);
                         if (testFactor())
                             continue;
                     }
@@ -1066,32 +1052,70 @@ namespace ConsoleSolver
             return x / getGCD(x, y) * y;
         }
         static public Number cos(Number argument)
-        {//The argument is expressed in fractions of a turn; 90 degrees is represented as 1/4.
+        {//The argument is expressed in turns; 90 degrees is represented as 1/4.
             if (argument is Fraction)
             {
                 Fraction fraction = (Fraction)argument;
+                int denominator = fraction.Denominator;
+                int numerator = fraction.Numerator % denominator;
+                int multiplicityOfTwo = 0;
+                while (denominator % 2 == 0)
+                {
+                    denominator /= 2;
+                    ++multiplicityOfTwo;
+                }
                 Number cosine;
-                switch(fraction.Denominator)
+                switch (denominator)
                 {
                     case 1:
                         cosine = new Fraction(1, 1);
                         break;
-                    case 2:
-                        cosine = new Fraction(-1, 1);
-                        break;
                     case 3:
                         cosine = new Fraction(-1, 2);
                         break;
-                    case 4:
-                        cosine = new Fraction(0, 1);
+                    case 5:
+                        cosine = new Exponentiation(new Fraction(5, 1), new Fraction(1, 2)) *
+                            new Fraction(1, 4) - new Fraction(1, 4);
+                        break;
+                    case 15:
+                        cosine = new Sum(new List<Term> { new Fraction(1, 8), new Product(
+                            new Fraction(1, 8), new List<Factor> { new Exponentiation(
+                            new Fraction(5, 1), new Fraction(1, 2)) }), new Product(
+                            new Fraction(1, 8), new List<Factor> { new Exponentiation(
+                            new Fraction(30, 1) - new Exponentiation(new Fraction(5, 1),
+                            new Fraction(1, 2)) * new Fraction(6, 1), new Fraction(1, 2)) }) });
+                        break;
+                    case 17:
+                        cosine = (new Fraction(-1, 1) + new Exponentiation(new Fraction(17, 1),
+                            new Fraction(1, 2)) + new Exponentiation(new Fraction(34, 1) -
+                            new Exponentiation(new Fraction(17, 1), new Fraction(1, 2)) *
+                            new Fraction(2, 1), new Fraction(1, 2)) + new Exponentiation(
+                            new Fraction(17, 1) + new Exponentiation(new Fraction(17, 1),
+                            new Fraction(1, 2)) * new Fraction(3, 1) - new Exponentiation(
+                            new Fraction(34, 1) - new Exponentiation(new Fraction(17, 1),
+                            new Fraction(1, 2)) * new Fraction(2, 1), new Fraction(1, 2)) -
+                            new Exponentiation(new Fraction(34, 1) + new Exponentiation(
+                            new Fraction(17, 1), new Fraction(1, 2)) * new Fraction(2, 1),
+                            new Fraction(1, 2)) * new Fraction(2, 1), new Fraction(1, 2)) *
+                            new Fraction(2, 1)) * new Fraction(1, 16);
                         break;
                     default:
                         return new Cosine(argument * new Transcendental(Constant.TAU));
                 }
+                for (int i = 0; i < multiplicityOfTwo; ++i)
+                {
+                    denominator *= 2;
+                    if (4 < 3 * denominator && denominator < 4)
+                        cosine = exponentiate(cosine * new Fraction(1, 2) + new Fraction(1, 2),
+                        new Fraction(1, 2)).negative();
+                    else
+                        cosine = exponentiate(cosine * new Fraction(1, 2) + new Fraction(1, 2),
+                        new Fraction(1, 2));
+                }
                 Number s = new Fraction(1, 1);
                 Number t = cosine;
                 Number angleMultipleCosine = cosine;
-                for (int i = 1; i < fraction.Numerator; ++i)
+                for (int i = 1; i < numerator; ++i)
                 {
                     angleMultipleCosine = new Fraction(2, 1) * cosine * t - s;
                     s = t;
@@ -1219,11 +1243,12 @@ namespace ConsoleSolver
                             }
                         }
                     }
-                    else if (termComponentstoPower[exponentFraction.Denominator] is ComplexNumber)
+                    else
                     {
                         ComplexNumber complexRadicand =
                             (ComplexNumber)termComponentstoPower[exponentFraction.Denominator];
                         if (complexRadicand.Real.Numerator == 0)
+                        {
                             if (complexRadicand.Imaginary.Numerator ==
                                 complexRadicand.Imaginary.Denominator)
                             {
@@ -1239,6 +1264,22 @@ namespace ConsoleSolver
                                     termComponentstoPower.Remove(exponentFraction.Denominator);
                                 }
                             }
+                            else if (complexRadicand.Imaginary.Numerator ==
+                                -complexRadicand.Imaginary.Denominator)
+                            {
+                                if (exponentFraction.Denominator % 4 == 3)
+                                {
+                                    coefficient = (Rational)(coefficient * new ComplexNumber(0, 1));
+                                    termComponentstoPower.Remove(exponentFraction.Denominator);
+                                }
+                                else if (exponentFraction.Denominator % 4 == 1)
+                                {
+                                    coefficient =
+                                        (Rational)(coefficient * new ComplexNumber(0, -1));
+                                    termComponentstoPower.Remove(exponentFraction.Denominator);
+                                }
+                            }
+                        }
                     }
                     List<Factor> factors = new List<Factor>();
                     int largestIndex = 1;
@@ -1254,7 +1295,7 @@ namespace ConsoleSolver
                         returnAllRoots = false;
                         Number rootOfUnity = cos(new Fraction(1, exponentFraction.Denominator)) +
                             cos(new Fraction(4 + exponentFraction.Denominator,
-                            4 * exponentFraction.Denominator)) * new ComplexNumber(0, 1);
+                            4 * exponentFraction.Denominator)) * new ComplexNumber(0, -1);
                         List<Number> roots =
                             new List<Number> { Term.createTerm(coefficient, factors) };
                         for (int i = 1; i < exponentFraction.Denominator / largestIndex; ++i)
