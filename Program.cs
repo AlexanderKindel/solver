@@ -6,7 +6,7 @@ namespace ConsoleSolver
 {
     class Math
     {
-        public abstract class Number : IComparable
+        public abstract class Number : IComparable, IEquatable<Number>
         {
             protected abstract Number add(Number number);
             protected abstract Number multiply(Number number);
@@ -33,6 +33,11 @@ namespace ConsoleSolver
             {
                 return CompareTo(obj) == 0;
             }
+            public bool Equals(Number number)
+            {
+                return CompareTo(number) == 0;
+            }
+            public abstract override int GetHashCode();
         }
         public abstract class Term : Number
         {
@@ -189,7 +194,13 @@ namespace ConsoleSolver
             }
             public override int GetHashCode()
             {
-                return Numerator | Denominator;
+                if (Numerator == 0)
+                    return 0;
+                if (Numerator > 0)
+                    return (Numerator - 2 + Denominator) * (Numerator - 1 + Denominator) / 2 +
+                        Numerator;
+                return (Numerator + 2 - Denominator) * (Numerator + 1 - Denominator) / 2 +
+                    Numerator;
             }
             public override string ToString()
             {
@@ -282,7 +293,7 @@ namespace ConsoleSolver
             }
             public override int GetHashCode()
             {
-                return Real.GetHashCode() | Imaginary.GetHashCode();
+                return Real.GetHashCode() ^ Imaginary.GetHashCode();
             }
             public override string ToString()
             {
@@ -372,6 +383,10 @@ namespace ConsoleSolver
                 }
                 return getTypeIndex(this) - getTypeIndex((Number)obj);
             }
+            public override int GetHashCode()
+            {
+                return (int)Value;
+            }
             public override string ToString()
             {
                 return "tau";
@@ -444,6 +459,10 @@ namespace ConsoleSolver
                 }
                 return getTypeIndex(this) - getTypeIndex((Number)obj);
             }
+            public override int GetHashCode()
+            {
+                return Argument.GetHashCode();
+            }
             public override string ToString()
             {
                 return "cos(" + Argument.ToString() + ')';
@@ -494,6 +513,8 @@ namespace ConsoleSolver
                 if (number is Exponentiation)
                 {
                     Exponentiation exponentiation = (Exponentiation)number;
+                    if (Base.Equals(exponentiation.Base))
+                        return exponentiate(Base, Exponent + exponentiation.Exponent);
                     if (Exponent.Equals(exponentiation.Exponent))
                     {
                         Number outputBase = Base * exponentiation.Base;
@@ -501,12 +522,10 @@ namespace ConsoleSolver
                         {
                             Exponentiation outputExponentiation = (Exponentiation)outputBase;
                             return new Exponentiation(outputExponentiation.Base,
-                                outputExponentiation.Exponent * Exponent);
+                                Exponent * Exponent);
                         }
                         return exponentiate(Base * exponentiation.Base, Exponent);
                     }
-                    if (Base.Equals(exponentiation.Base))
-                        return exponentiate(Base, Exponent + exponentiation.Exponent);
                     return new Product(new Fraction(1, 1),
                         new List<Factor> { this, exponentiation });
                 }
@@ -533,6 +552,10 @@ namespace ConsoleSolver
                 if (comparison != 0)
                     return comparison;
                 return Exponent.CompareTo(exponentiation.Exponent);
+            }
+            public override int GetHashCode()
+            {
+                return Base.GetHashCode() ^ Exponent.GetHashCode();
             }
             public override string ToString()
             {
@@ -615,13 +638,15 @@ namespace ConsoleSolver
                 if (number is Factor)
                 {
                     List<Factor> factors = new List<Factor>(Factors);
+                    List<Factor> productFactors = new List<Factor>(Factors);
                     for (int i = 0; i < factors.Count; ++i)
                     {
-                        Term term = (Term)(number * factors[i]);
-                        if (!(term is Product))
+                        Number product = number * factors[i];
+                        productFactors.Add((Factor)number);
+                        if (product != new Product(Coefficient, productFactors)) 
                         {
                             factors.RemoveAt(i);
-                            return createTerm(Coefficient, factors) * term;
+                            return createTerm(Coefficient, factors) * product;
                         }
                     }
                     factors.Add((Factor)number);
@@ -630,10 +655,10 @@ namespace ConsoleSolver
                 if (number is Product)
                 {
                     Product product = (Product)number;
-                    Term output = new Product(Coefficient, Factors);
-                    output = (Term)(output * product.Coefficient);
-                    foreach (Factor factor in product.Factors)
-                        output = (Term)(output * factor);
+                    Number output = new Product(Coefficient, Factors);
+                    output = output * product.Coefficient;
+                    for (int i = 0; i < product.Factors.Count; ++i) 
+                        output = output * product.Factors[i];
                     return output;
                 }
                 return number * this;
@@ -668,6 +693,13 @@ namespace ConsoleSolver
                         return comparison;
                 }
                 return 0;
+            }
+            public override int GetHashCode()
+            {
+                int output = Coefficient.GetHashCode();
+                foreach (Factor factor in Factors)
+                    output = output | factor.GetHashCode();
+                return output;
             }
             public override string ToString()
             {
@@ -802,6 +834,13 @@ namespace ConsoleSolver
                 }
                 return 0;
             }
+            public override int GetHashCode()
+            {
+                int output = 0;
+                foreach (Term term in Terms)
+                    output = output ^ term.GetHashCode();
+                return output;
+            }
             public override String ToString()
             {
                 StringBuilder output = new StringBuilder(Terms[0].ToString());
@@ -833,41 +872,14 @@ namespace ConsoleSolver
                         foreach (Number m in list.Numbers)
                         {
                             Number sum = n + m;
-                            bool addSum = true;
-                            for (int i = 0; i < outputList.Count; ++i)
-                                if (sum.Equals(outputList[i]))
-                                {
-                                    addSum = false;
-                                    break;
-                                }
-                            if (addSum)
+                            if (!outputList.Contains(sum))
                                 outputList.Add(sum);
                         }
                 }
                 else
                     foreach (Number n in Numbers)
-                    {
-                        Number sum = n + number;
-                        bool addSum = true;
-                        for (int i = 0; i < outputList.Count; ++i)
-                            if (sum.Equals(outputList[i]))
-                            {
-                                addSum = false;
-                                break;
-                            }
-                        if (addSum)
-                            outputList.Add(sum);
-                    }
-                if (outputList.Count == 1)
-                    return outputList[0];
+                        outputList.Add(n + number);
                 return new NumberList(outputList);
-            }
-            public override Number negative()
-            {
-                List<Number> output = new List<Number>();
-                foreach (Number n in Numbers)
-                    output.Add(n.negative());
-                return new NumberList(output);
             }
             protected override Number multiply(Number number)
             {
@@ -879,34 +891,33 @@ namespace ConsoleSolver
                         foreach (Number m in list.Numbers)
                         {
                             Number product = n * m;
-                            bool addProduct = true;
-                            for (int i = 0; i < outputList.Count; ++i)
-                                if (product.Equals(outputList[i]))
-                                {
-                                    addProduct = false;
-                                    break;
-                                }
-                            if (addProduct)
+                            if (!outputList.Contains(product)) 
                                 outputList.Add(product);
                         }
                 }
                 else
+                {
+                    if (number is Fraction)
+                    {
+                        Fraction fraction = (Fraction)number;
+                        if (fraction.Numerator == 0)
+                            return new Fraction(0, 1);
+                    }
                     foreach (Number n in Numbers)
                     {
                         Number product = n * number;
-                        bool addProduct = true;
-                        for (int i = 0; i < outputList.Count; ++i)
-                            if (product.Equals(outputList[i]))
-                            {
-                                addProduct = false;
-                                break;
-                            }
-                        if (addProduct)
+                        if (outputList.Contains(product))
                             outputList.Add(product);
                     }
-                if (outputList.Count == 1)
-                    return outputList[0];
+                }
                 return new NumberList(outputList);
+            }
+            public override Number negative()
+            {
+                List<Number> output = new List<Number>();
+                foreach (Number n in Numbers)
+                    output.Add(n.negative());
+                return new NumberList(output);
             }
             public override Number reciprocal()
             {
@@ -928,6 +939,13 @@ namespace ConsoleSolver
                         return comparison;
                 }
                 return 0;
+            }
+            public override int GetHashCode()
+            {
+                int output = 0;
+                foreach (Number number in Numbers)
+                    output = output ^ number.GetHashCode();
+                return output;
             }
             public override string ToString()
             {
@@ -1293,9 +1311,9 @@ namespace ConsoleSolver
                     if (returnAllRoots && largestIndex < exponentFraction.Denominator) 
                     {
                         returnAllRoots = false;
-                        Number rootOfUnity = cos(new Fraction(1, exponentFraction.Denominator)) +
-                            cos(new Fraction(4 + exponentFraction.Denominator,
-                            4 * exponentFraction.Denominator)) * new ComplexNumber(0, -1);
+                        Number cosine = cos(new Fraction(1, exponentFraction.Denominator));
+                        Number rootOfUnity = cosine + exponentiate(new Fraction(1, 1) -
+                            cosine * cosine, new Fraction(1, 2)) * new ComplexNumber(0, -1);
                         List<Number> roots =
                             new List<Number> { Term.createTerm(coefficient, factors) };
                         for (int i = 1; i < exponentFraction.Denominator / largestIndex; ++i)
@@ -1507,7 +1525,7 @@ namespace ConsoleSolver
                 try
                 {
                     Console.Write("=\n" +
-                        evaluateExpression(operations, numbers).ToString() + "\n\n");
+                        checked(evaluateExpression(operations, numbers).ToString() + "\n\n"));
                 }
                 catch (DivideByZeroException)
                 {
