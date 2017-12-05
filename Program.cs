@@ -1179,8 +1179,14 @@ namespace Calculator
         }
         public static Number create(Number real, Number imaginary)
         {
-            if (real is Integer && imaginary is Integer)
-                return GaussianInteger.create(((Integer)real).Value, ((Integer)imaginary).Value);
+            if (imaginary is Integer)
+            {
+                int imaginaryInt = ((Integer)imaginary).Value;
+                if (imaginaryInt == 0)
+                    return real;
+                if (real is Integer)
+                    return new GaussianInteger(((Integer)real).Value, imaginaryInt);
+            }
             return new ComplexNumber(real, imaginary);
         }
         protected override Number add(Number number)
