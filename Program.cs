@@ -1264,7 +1264,9 @@ namespace Calculator
         }
         public override string insertString(string str)
         {
-            throw new NotImplementedException("ComplexNumber.insertString should never be called.");
+            if (Real is Integer && ((Integer)Real).Value == 0) 
+                return Imaginary.insertString("i*" + str);
+            return '(' + ToString() + ')' + str;
         }
         public override string ToString()
         { 
