@@ -1368,6 +1368,13 @@ namespace Calculator
                 output.Add(n.reciprocal());
             return new NumberList(output);
         }
+        public override Number exponentiate(Number exponent)
+        {
+            List<Number> output = new List<Number>();
+            foreach (Number n in Numbers)
+                output.Add(n.exponentiate(exponent));
+            return new NumberList(output);
+        }
         public override int CompareTo(object obj)
         {
             int comparison = base.CompareTo(obj);
