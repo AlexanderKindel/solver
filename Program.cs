@@ -713,7 +713,16 @@ namespace Calculator
         public Number Exponent { get; }
         ComplexExponential(Number exponent)
         {
-            Exponent = exponent * new GaussianInteger(0, 1);
+            if (exponent is Fraction)
+            {
+                Fraction exponentFraction = (Fraction)exponent;
+                Exponent = exponentFraction -
+                    new Integer(exponentFraction.Numerator / exponentFraction.Denominator);
+                if (exponentFraction.Numerator < 0)
+                    Exponent += new Integer(1);
+            }
+            else
+                Exponent = exponent;
         }
         public static Number create(Number exponent)
         {
@@ -837,7 +846,7 @@ namespace Calculator
         }
         public override Number reciprocal()
         {
-            return new ComplexExponential(Exponent.negative());
+            return create(Exponent.negative());
         }
         public override Number exponentiate(Number exponent)
         {
@@ -860,7 +869,8 @@ namespace Calculator
         }
         public override string ToString()
         {
-            return "e^(" + Exponent.insertString("tau") + ')';
+            Number exponentWith_i = Exponent * new GaussianInteger(0, 1);
+            return "e^(" + exponentWith_i.insertString("tau") + ')';
         }
     }
     class Product : Term
@@ -1293,6 +1303,7 @@ namespace Calculator
         public NumberList(List<Number> numbers)
         {
             Numbers = numbers;
+            Numbers.Sort();
         }
         protected override Number add(Number number)
         {
