@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 
 namespace Calculator
-{ 
+{
     abstract class Number : IComparable, IEquatable<Number>
     {
         protected abstract Number add(Number number);
@@ -35,9 +35,11 @@ namespace Calculator
                 Fraction exponentFraction = (Fraction)exponent;
                 Integer denominatorLCM = new Integer(getDenominatorLCM());
                 if (denominatorLCM.Value != 1)
-                    return (this * denominatorLCM.exponentiate(new Integer(
-                        exponentFraction.Denominator - 1))).exponentiate(exponentFraction) /
-                        denominatorLCM.exponentiate(new Integer(exponentFraction.Numerator));
+                    return (this * denominatorLCM).exponentiate(exponent) * 
+                        denominatorLCM.exponentiate(Fraction.create(exponentFraction.Denominator -
+                        exponentFraction.Numerator % exponentFraction.Denominator,
+                        exponentFraction.Denominator)) / denominatorLCM.exponentiate(new Integer(
+                        exponentFraction.Numerator / exponentFraction.Denominator + 1));
             }
             if (exponent is NumberList)
             {
@@ -48,6 +50,57 @@ namespace Calculator
                 return new NumberList(output);
             }
             return new Exponentiation(this, exponent);
+        }
+        public Number squareRoot()
+        {//Number.exponentiate() calls ComplexExponential.create() as a consequence of both
+         //factoring over the Gaussians and returning all roots. This function exists to provide
+         //the square root functionality ComplexExponential.create() itself needs while omitting the
+         //Number.exponentiate() features described above in order to avoid circularity.
+            Integer denominatorLCM = new Integer(getDenominatorLCM());
+            if (denominatorLCM.Value != 1)
+                return (this * denominatorLCM).squareRoot() * denominatorLCM.squareRoot() /
+                    denominatorLCM;
+            int radicand;
+            if (this is Integer)
+                radicand = ((Integer)this).Value;
+            else
+                return new Exponentiation(this, Fraction.create(1, 2));
+            if (radicand == 0) 
+                return this;
+            Dictionary<int, int> radicandFactors = new Dictionary<int, int> { };
+            if (radicand < 0)
+            {
+                radicand *= -1;
+                radicandFactors.Add(-1, 1);
+            }
+            for (int i = 2; i < radicand / 2;)
+                if (radicand % i == 0)
+                {
+                    if (radicandFactors.ContainsKey(i))
+                        radicandFactors[i] += 1;
+                    else
+                        radicandFactors.Add(i, 1);
+                    radicand /= i;
+                }
+                else
+                    ++i;
+            if (radicandFactors.ContainsKey(radicand))
+                radicandFactors[radicand] += 1;
+            else
+                radicandFactors.Add(radicand, 1);
+            int coefficient = 1;
+            radicand = 1;
+            foreach (int factor in radicandFactors.Keys)
+            {
+                for (int i = 0; i < radicandFactors[factor] / 2; ++i)
+                    coefficient *= factor;
+                if (radicandFactors[factor] % 2 == 1)
+                    radicand *= factor;
+            }
+            if (radicand != 1)
+                return new Exponentiation(new Integer(radicand), Fraction.create(1, 2)) *
+                    new Integer(coefficient);
+            return new Integer(coefficient);
         }
         public static Number operator +(Number a, Number b)
         {
@@ -113,7 +166,7 @@ namespace Calculator
     abstract class WholeNumber : Rational
     {
         public abstract int getNormSquared();
-        public Dictionary<WholeNumber, int>getFactorization()
+        public Dictionary<WholeNumber, int> getFactorization()
         {//The keys represent the factors, and the values, their multiplicities.
             WholeNumber number = this;
             Dictionary<WholeNumber, int> factors = new Dictionary<WholeNumber, int>();
@@ -126,7 +179,7 @@ namespace Calculator
                 {
                     int normSquared = number.getNormSquared();
                     if ((realPart + i) * (realPart + i) + (imaginaryPart - i) *
-                        (imaginaryPart - i) / 2 > normSquared) 
+                        (imaginaryPart - i) / 2 > normSquared)
                     {
                         if (factors.ContainsKey(number))
                             factors[number] += 1;
@@ -165,7 +218,6 @@ namespace Calculator
                 ++sumOfRealAndImaginary;
             }
         }
-        static protected bool returnAllRoots = true;
         public Number exponentiateWholeNumber(Number exponent)
         {
             if (exponent is Fraction)
@@ -227,22 +279,11 @@ namespace Calculator
                             termComponentsToPower.Remove(index);
                         else if (radicandInteger.Value < 0)
                         {
-                            if (index % 2 == 1)
-                                coefficient = coefficient.negative();
-                            else if (index % 4 == 0)
-                            {
-                                if (termComponentsToPower.ContainsKey(2))
-                                    termComponentsToPower[2] = (WholeNumber)(
-                                        termComponentsToPower[2] * new Integer(2));
-                                else
-                                    termComponentsToPower.Add(2, new Integer(2));
-                                coefficient *= ComplexNumber.create(
-                                    Fraction.create(1, 2), Fraction.create(1, 2));
-                            }
-                            else
-                                coefficient *= new GaussianInteger(0, 1);
+                            coefficient *= ComplexExponential.create(Fraction.create(1, index * 2));
                             if (radicandInteger.Value == -1)
                                 termComponentsToPower.Remove(index);
+                            else
+                                termComponentsToPower[index] = new Integer(-radicandInteger.Value);
                         }
                     }
                     else
@@ -250,37 +291,26 @@ namespace Calculator
                         GaussianInteger gaussianRadicand =
                             (GaussianInteger)termComponentsToPower[index];
                         if (gaussianRadicand.Real == 0)
-                        {
-                            Integer sign;
-                            if (gaussianRadicand.Imaginary < 0)
-                                sign = new Integer(-1);
-                            else
-                                sign = new Integer(1);
-                            if (gaussianRadicand.Imaginary == sign.Value)
-                                termComponentsToPower.Remove(index);
-                            if (index % 4 == 0)
+                            if (gaussianRadicand.Imaginary > 0)
                             {
-                                Integer a = new Integer(2);
-                                Rational b = Fraction.create(1, 2);
-                                Exponentiation c = new Exponentiation(a, b);
-                                coefficient *= ComplexNumber.create(new Exponentiation(a + c, b) /
-                                    a, new Exponentiation(a - c, b) * sign / a);
-                            }
-                            else if (index % 4 == 1)
-                                coefficient *= new GaussianInteger(0, 1) * sign;
-                            else if (index % 4 == 2)
-                            {
-                                if (termComponentsToPower.ContainsKey(2))
-                                    termComponentsToPower[2] = (WholeNumber)(
-                                        termComponentsToPower[2] * new Integer(2));
+                                if (gaussianRadicand.Imaginary == 1)
+                                    termComponentsToPower.Remove(index);
                                 else
-                                    termComponentsToPower.Add(2, new Integer(2));
-                                coefficient *= ComplexNumber.create(Fraction.create(1, 2),
-                                    Fraction.create(1, 2) * sign);
+                                    termComponentsToPower[index] =
+                                        new Integer(gaussianRadicand.Imaginary);
+                                coefficient *=
+                                        ComplexExponential.create(Fraction.create(1, index * 4));
                             }
                             else
-                                coefficient *= new GaussianInteger(0, -1) * sign;
-                        }
+                            { 
+                                if (gaussianRadicand.Imaginary == -1)
+                                    termComponentsToPower.Remove(index);
+                                else
+                                    termComponentsToPower[index] =
+                                        new Integer(-gaussianRadicand.Imaginary);
+                                coefficient *=
+                                    ComplexExponential.create(Fraction.create(3, index * 4));
+                            }                       
                     }
                 }
                 List<Factor> factors = new List<Factor>();
@@ -292,16 +322,14 @@ namespace Calculator
                     if (index > largestIndex)
                         largestIndex = index;
                 }
-                if (returnAllRoots && largestIndex < exponentFraction.Denominator)
+                if (largestIndex < exponentFraction.Denominator)
                 {
-                    returnAllRoots = false;
                     Number rootOfUnity =
                         ComplexExponential.create(Fraction.create(1, exponentFraction.Denominator));
                     List<Number> roots =
                         new List<Number> { Product.create(new Integer(1), factors) * coefficient };
                     for (int i = 1; i < exponentFraction.Denominator / largestIndex; ++i)
                         roots.Add(roots[i - 1] * rootOfUnity);
-                    returnAllRoots = true;
                     return new NumberList(roots);
                 }
                 return Product.create(new Integer(1), factors) * coefficient;
@@ -638,7 +666,7 @@ namespace Calculator
             if (number is Exponentiation)
             {
                 Exponentiation exponentiation = (Exponentiation)number;
-                if (Base.CompareTo(exponentiation.Base) == 0) 
+                if (Base.CompareTo(exponentiation.Base) == 0)
                     return Base.exponentiate(Exponent + exponentiation.Exponent);
                 if (Exponent.CompareTo(exponentiation.Exponent) == 0)
                 {
@@ -777,10 +805,9 @@ namespace Calculator
                 for (int i = 0; i < multiplicityOfTwo; ++i)
                 {
                     denominator *= 2;
+                    cosine = (cosine * a + a).squareRoot();
                     if (4 < 3 * denominator && denominator < 4)
-                        cosine = (cosine * a + a).exponentiate(a).negative();
-                    else
-                        cosine = (cosine * a + a).exponentiate(a);
+                        cosine = cosine.negative();
                 }
                 Number s = new Integer(1);
                 Number t = cosine;
@@ -791,8 +818,12 @@ namespace Calculator
                     s = t;
                     t = angleMultipleCosine;
                 }
-                return ComplexNumber.create(angleMultipleCosine, (new Integer(1) -
-                    angleMultipleCosine * angleMultipleCosine).exponentiate(a).negative());
+                Number output = ComplexNumber.create(angleMultipleCosine, (new Integer(1) -
+                    angleMultipleCosine * angleMultipleCosine).squareRoot());
+                if (denominator < 4 * numerator && 4 * numerator < 2 * denominator ||
+                    3 * denominator < 4 * numerator && 4 * numerator < 4 * denominator) 
+                    return output.negative();
+                return output;
             }
             return new ComplexExponential(exponent);
         }
@@ -808,10 +839,10 @@ namespace Calculator
             if (number is GaussianInteger)
             {
                 GaussianInteger gaussianInteger = (GaussianInteger)number;
-                return new ComplexNumber(this + new Integer(gaussianInteger.Real),
+                return ComplexNumber.create(this + new Integer(gaussianInteger.Real),
                     new Integer(gaussianInteger.Imaginary));
             }
-            if (number is Fraction || number is Exponentiation) 
+            if (number is Fraction || number is Exponentiation)
                 return new Sum(new List<Term> { this, (Term)number });
             if (number is ComplexExponential)
             {
@@ -909,10 +940,10 @@ namespace Calculator
             if (number is GaussianInteger)
             {
                 GaussianInteger gaussianInteger = (GaussianInteger)number;
-                return new ComplexNumber(this + new Integer(gaussianInteger.Real),
+                return ComplexNumber.create(this + new Integer(gaussianInteger.Real),
                     new Integer(gaussianInteger.Imaginary));
             }
-            if (number is Factor) 
+            if (number is Factor)
                 return new Sum(new List<Term> { this, (Term)number });
             if (number is Product)
             {
@@ -922,7 +953,7 @@ namespace Calculator
                     for (int i = 0; i < Factors.Count; ++i)
                         if (Factors[i].CompareTo(product.Factors[i]) != 0)
                             return new Sum(new List<Term> { this, product });
-                    return new Product((Rational)(Coefficient + product.Coefficient), Factors);
+                    return create((Rational)(Coefficient + product.Coefficient), Factors);
                 }
                 return new Sum(new List<Term> { this, product });
             }
@@ -930,19 +961,19 @@ namespace Calculator
         }
         public override Number negative()
         {
-            return new Product((Rational)Coefficient.negative(), Factors);
+            return create((Rational)Coefficient.negative(), Factors);
         }
         protected override Number multiply(Number number)
         {
-            if (number is Rational)
-                return create((Rational)(Coefficient * number), Factors);
             if (number is GaussianInteger)
             {
                 GaussianInteger gaussianInteger = (GaussianInteger)number;
-                return ComplexNumber.create(new Product((Rational)(Coefficient *
-                    new Integer(gaussianInteger.Real)), Factors), new Product((Rational)(
+                return ComplexNumber.create(create((Rational)(Coefficient *
+                    new Integer(gaussianInteger.Real)), Factors), create((Rational)(
                     Coefficient * new Integer(gaussianInteger.Imaginary)), Factors));
             }
+            if (number is Rational)
+                return create((Rational)(Coefficient * number), Factors);
             if (number is Factor)
             {
                 List<Factor> factors = new List<Factor>(Factors);
@@ -1182,7 +1213,7 @@ namespace Calculator
     {
         public Number Real { get; }
         public Number Imaginary { get; }
-        public ComplexNumber(Number real, Number imaginary)
+        ComplexNumber(Number real, Number imaginary)
         {
             Real = real;
             Imaginary = imaginary;
@@ -1213,12 +1244,12 @@ namespace Calculator
                 return create(Real + complexNumber.Real, Imaginary + complexNumber.Imaginary);
             }
             if (!(number is NumberList))
-                return new ComplexNumber(Real + number, Imaginary);
+                return create(Real + number, Imaginary);
             return number + this;
         }
         public override Number negative()
         {
-            return new ComplexNumber(Real.negative(), Imaginary.negative());
+            return create(Real.negative(), Imaginary.negative());
         }
         protected override Number multiply(Number number)
         {
@@ -1250,19 +1281,6 @@ namespace Calculator
             return Integer.getLCM(Real.getDenominatorLCM(),
                 Imaginary.getDenominatorLCM());
         }
-        public override Number exponentiate(Number exponent)
-        {
-            if (exponent is Fraction)
-            {
-                Fraction exponentFraction = (Fraction)exponent;
-                Integer LCM = new Integer(getDenominatorLCM());
-                if (LCM.Value != 1)
-                    return (this * LCM.exponentiate(new Integer(
-                        exponentFraction.Denominator - 1))).exponentiate(exponentFraction) /
-                        LCM.exponentiate(new Integer(exponentFraction.Numerator));
-            }
-            return base.exponentiate(exponent);
-        }
         public override int CompareTo(object obj)
         {
             int comparison = base.CompareTo(obj);
@@ -1280,15 +1298,15 @@ namespace Calculator
         }
         public override string insertString(string str)
         {
-            if (Real is Integer && ((Integer)Real).Value == 0) 
+            if (Real is Integer && ((Integer)Real).Value == 0)
                 return Imaginary.insertString("i*" + str);
             return '(' + ToString() + ')' + str;
         }
         public override string ToString()
-        { 
+        {
             StringBuilder output =
                 new StringBuilder(Imaginary.insertString("i").ToString());
-            if (!(Real is Integer && ((Integer)Real).Value == 0)) 
+            if (!(Real is Integer && ((Integer)Real).Value == 0))
             {
                 if (output[0] != '-')
                     output.Insert(0, '+');
