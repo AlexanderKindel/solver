@@ -14,6 +14,10 @@ namespace Calculator
         {
             return 1;
         }
+        public virtual int getNumeratorGCD()
+        {
+            return 1;
+        }
         public virtual Number exponentiate(Number exponent)
         {
             if (exponent is Integer)
@@ -30,24 +34,31 @@ namespace Calculator
                     output = this * output;
                 return output;
             }
-            if (exponent is Fraction)
-            {
-                Fraction exponentFraction = (Fraction)exponent;
-                Integer denominatorLCM = new Integer(getDenominatorLCM());
-                if (denominatorLCM.Value != 1)
-                    return (this * denominatorLCM).exponentiate(exponent) * 
-                        denominatorLCM.exponentiate(Fraction.create(exponentFraction.Denominator -
-                        exponentFraction.Numerator % exponentFraction.Denominator,
-                        exponentFraction.Denominator)) / denominatorLCM.exponentiate(new Integer(
-                        exponentFraction.Numerator / exponentFraction.Denominator + 1));
-            }
             if (exponent is NumberList)
             {
                 List<Number> output = new List<Number>();
                 List<Number> list = ((NumberList)exponent).Numbers;
                 foreach (Number number in list)
                     output.Add(exponentiate(number));
-                return new NumberList(output);
+                return NumberList.create(output);
+            }
+            if (exponent is Fraction)
+            {
+                Fraction exponentFraction = (Fraction)exponent;
+                Integer denominatorLCM = new Integer(getDenominatorLCM());
+                if (denominatorLCM.Value != 1)
+                    return (this * denominatorLCM).exponentiate(exponent) *
+                        denominatorLCM.exponentiate(Fraction.create(exponentFraction.Denominator -
+                        exponentFraction.Numerator % exponentFraction.Denominator,
+                        exponentFraction.Denominator)) / denominatorLCM.exponentiate(new Integer(
+                        exponentFraction.Numerator / exponentFraction.Denominator + 1));
+                Integer numeratorGCD = new Integer(getNumeratorGCD());
+                if (numeratorGCD.Value != 1)
+                {
+                    Number factor = numeratorGCD.exponentiate(exponent);
+                    if (!(factor is Exponentiation))
+                        return (this / numeratorGCD).exponentiate(exponent) * factor;
+                }
             }
             return new Exponentiation(this, exponent);
         }
@@ -73,7 +84,7 @@ namespace Calculator
                 radicand *= -1;
                 radicandFactors.Add(-1, 1);
             }
-            for (int i = 2; i < radicand / 2;)
+            for (int i = 2; i <= radicand / 2;)
                 if (radicand % i == 0)
                 {
                     if (radicandFactors.ContainsKey(i))
@@ -218,6 +229,7 @@ namespace Calculator
                 ++sumOfRealAndImaginary;
             }
         }
+        static bool returnAllRoots = true;
         public Number exponentiateWholeNumber(Number exponent)
         {
             if (exponent is Fraction)
@@ -255,21 +267,18 @@ namespace Calculator
                         }
                 Dictionary<int, WholeNumber> termComponentsToPower =
                     new Dictionary<int, WholeNumber>();
+                List<int> indices = new List<int>();
                 foreach (int index in termComponents.Keys)
                 {
+                    indices.Add(index);
                     termComponentsToPower.Add(index, new Integer(1));
                     for (int i = 0; i < exponentFraction.Numerator; ++i)
                         termComponentsToPower[index] =
                             (WholeNumber)(termComponentsToPower[index] * termComponents[index]);
                 }
                 Number coefficient = termComponentsToPower[1];
+                indices.Remove(1);
                 termComponentsToPower.Remove(1);
-                if (termComponentsToPower[exponentFraction.Denominator] is Integer &&
-                    ((Integer)termComponentsToPower[exponentFraction.Denominator]).Value == 1)
-                    termComponentsToPower.Remove(exponentFraction.Denominator);
-                List<int> indices = new List<int>();
-                foreach (int index in termComponentsToPower.Keys)
-                    indices.Add(index);
                 foreach (int index in indices)
                 {
                     if (termComponentsToPower[index] is Integer)
@@ -314,7 +323,11 @@ namespace Calculator
                     }
                 }
                 List<Factor> factors = new List<Factor>();
-                int largestIndex = 1;
+                int largestIndex;
+                if (!(coefficient is WholeNumber))
+                    largestIndex = 2;
+                else
+                    largestIndex = 1;
                 foreach (int index in termComponentsToPower.Keys)
                 {
                     factors.Add(new Exponentiation(termComponentsToPower[index],
@@ -322,17 +335,28 @@ namespace Calculator
                     if (index > largestIndex)
                         largestIndex = index;
                 }
-                if (largestIndex < exponentFraction.Denominator)
+                Number output = null;
+                if (coefficient is Exponentiation && factors.Count == 1)
                 {
+                    Exponentiation a = (Exponentiation)coefficient;
+                    Exponentiation b = (Exponentiation)factors[0];
+                    if (a.Exponent.Equals(b.Exponent))
+                        output = new Exponentiation(a.Base * b.Base, a.Exponent);
+                }
+                else
+                    output = Product.create(new Integer(1), factors) * coefficient;
+                if (returnAllRoots) 
+                {
+                    returnAllRoots = false;
                     Number rootOfUnity =
                         ComplexExponential.create(Fraction.create(1, exponentFraction.Denominator));
-                    List<Number> roots =
-                        new List<Number> { Product.create(new Integer(1), factors) * coefficient };
+                    List<Number> roots = new List<Number> { output };
                     for (int i = 1; i < exponentFraction.Denominator / largestIndex; ++i)
                         roots.Add(roots[i - 1] * rootOfUnity);
-                    return new NumberList(roots);
+                    returnAllRoots = true;
+                    return NumberList.create(roots);
                 }
-                return Product.create(new Integer(1), factors) * coefficient;
+                return output;
             }
             return base.exponentiate(exponent);
         }
@@ -351,9 +375,7 @@ namespace Calculator
         protected override Number add(Number number)
         {
             if (number is Integer)
-            {
                 return new Integer(Value + ((Integer)number).Value);
-            }
             return number + this;
         }
         public override Number negative()
@@ -375,6 +397,10 @@ namespace Calculator
             if (Value == 0)
                 return new Integer(0);
             return exponentiateWholeNumber(exponent);
+        }
+        public override int getNumeratorGCD()
+        {
+            return Value;
         }
         public override int CompareTo(object obj)
         {
@@ -584,6 +610,10 @@ namespace Calculator
         public override int getDenominatorLCM()
         {
             return Denominator;
+        }
+        public override int getNumeratorGCD()
+        {
+            return Numerator;
         }
         public override int CompareTo(object obj)
         {
@@ -944,7 +974,11 @@ namespace Calculator
                     new Integer(gaussianInteger.Imaginary));
             }
             if (number is Factor)
+            {
+                if (Factors.Count == 1 && number.Equals(Factors[0]))
+                    return create((Rational)(Coefficient + new Integer(1)), Factors);
                 return new Sum(new List<Term> { this, (Term)number });
+            }
             if (number is Product)
             {
                 Product product = (Product)number;
@@ -1011,6 +1045,10 @@ namespace Calculator
         public override int getDenominatorLCM()
         {
             return Coefficient.getDenominatorLCM();
+        }
+        public override int getNumeratorGCD()
+        {
+            return Coefficient.getNumeratorGCD();
         }
         public override Number exponentiate(Number exponent)
         {
@@ -1168,6 +1206,13 @@ namespace Calculator
                 LCM = Integer.getLCM(LCM, term.getDenominatorLCM());
             return LCM;
         }
+        public override int getNumeratorGCD()
+        {
+            int GCD = Terms[0].getNumeratorGCD();
+            for (int i = 1; i < Terms.Count; ++i)
+                GCD = Integer.getGCD(GCD, Terms[i].getNumeratorGCD());
+            return GCD;
+        }
         public override int CompareTo(object obj)
         {
             int comparison = base.CompareTo(obj);
@@ -1278,8 +1323,11 @@ namespace Calculator
         }
         public override int getDenominatorLCM()
         {
-            return Integer.getLCM(Real.getDenominatorLCM(),
-                Imaginary.getDenominatorLCM());
+            return Integer.getLCM(Real.getDenominatorLCM(), Imaginary.getDenominatorLCM());
+        }
+        public override int getNumeratorGCD()
+        {
+            return Integer.getGCD(Real.getNumeratorGCD(), Imaginary.getNumeratorGCD());
         }
         public override int CompareTo(object obj)
         {
@@ -1318,10 +1366,16 @@ namespace Calculator
     class NumberList : Number
     {
         public List<Number> Numbers { get; }
-        public NumberList(List<Number> numbers)
+        NumberList(List<Number> numbers)
         {
             Numbers = numbers;
             Numbers.Sort();
+        }
+        public static Number create(List<Number> numbers)
+        {
+            if (numbers.Count == 1)
+                return numbers[0];
+            return new NumberList(numbers);
         }
         protected override Number add(Number number)
         {
@@ -1340,14 +1394,14 @@ namespace Calculator
             else
                 foreach (Number n in Numbers)
                     outputList.Add(n + number);
-            return new NumberList(outputList);
+            return create(outputList);
         }
         public override Number negative()
         {
             List<Number> output = new List<Number>();
             foreach (Number n in Numbers)
                 output.Add(n.negative());
-            return new NumberList(output);
+            return create(output);
         }
         protected override Number multiply(Number number)
         {
@@ -1377,21 +1431,21 @@ namespace Calculator
                         outputList.Add(product);
                 }
             }
-            return new NumberList(outputList);
+            return create(outputList);
         }
         public override Number reciprocal()
         {
             List<Number> output = new List<Number>();
             foreach (Number n in Numbers)
                 output.Add(n.reciprocal());
-            return new NumberList(output);
+            return create(output);
         }
         public override Number exponentiate(Number exponent)
         {
             List<Number> output = new List<Number>();
             foreach (Number n in Numbers)
                 output.Add(n.exponentiate(exponent));
-            return new NumberList(output);
+            return create(output);
         }
         public override int CompareTo(object obj)
         {
