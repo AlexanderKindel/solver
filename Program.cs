@@ -1484,6 +1484,31 @@ namespace Calculator
             return output.ToString();
         }
     }
+    class Polynomial
+    {
+        List<Number> Coefficients { get; }
+        public Polynomial(List<Number> coefficients)
+        {
+            Integer zero = new Integer(0);
+            while (coefficients.Count != 0 && coefficients[coefficients.Count - 1].Equals(zero))
+                coefficients.RemoveAt(coefficients.Count - 1);
+            Coefficients = coefficients;
+        }
+        public Polynomial modulo(Polynomial divisor)
+        {
+            List<Number> remainder = Coefficients;
+            while (remainder.Count >= divisor.Coefficients.Count)
+            {
+                Number multiplier = remainder[remainder.Count - 1] /
+                    divisor.Coefficients[divisor.Coefficients.Count - 1];
+                remainder.RemoveAt(remainder.Count - 1);
+                for (int i = 1; i < divisor.Coefficients.Count - 1; ++i)
+                    remainder[remainder.Count - i] -=
+                        multiplier * divisor.Coefficients[divisor.Coefficients.Count - 1 - i];
+            }
+            return new Polynomial(remainder);
+        }
+    }
     class Program
     {
         static Number evaluateExpression(List<char> operations, List<Number> numbers)
