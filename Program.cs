@@ -1486,6 +1486,7 @@ namespace Calculator
     }
     class Polynomial
     {
+        //The index of the coefficient represents the degree of its term.
         List<Number> Coefficients { get; }
         public Polynomial(List<Number> coefficients)
         {
@@ -1493,6 +1494,17 @@ namespace Calculator
             while (coefficients.Count != 0 && coefficients[coefficients.Count - 1].Equals(zero))
                 coefficients.RemoveAt(coefficients.Count - 1);
             Coefficients = coefficients;
+        }
+        public static Polynomial operator *(Polynomial a, Polynomial b)
+        {
+            List<Number> output = new List<Number>();
+            Integer zero = new Integer(0);
+            for (int i = 0; i < a.Coefficients.Count + b.Coefficients.Count - 1; ++i)
+                output.Add(zero);
+            for (int i = 0; i < a.Coefficients.Count; ++i)
+                for (int j = 0; j < b.Coefficients.Count; ++j)
+                    output[i + j] += a.Coefficients[i] * b.Coefficients[j];
+            return new Polynomial(output);
         }
         public Polynomial modulo(Polynomial divisor)
         {
@@ -1515,6 +1527,8 @@ namespace Calculator
         {
             for (int i = 0; i < operations.Count;)
             {
+                if (operations[i] == ')')
+                    throw new InvalidUserInput("Unmatched parentheses.");
                 if (operations[i] == '(')
                 {
                     int numOfUnmatchedParens = 1;
@@ -1522,10 +1536,17 @@ namespace Calculator
                     while (numOfUnmatchedParens > 0)
                     {
                         matchingParenIndex += 1;
-                        if (operations[matchingParenIndex] == '(')
-                            numOfUnmatchedParens += 1;
-                        else if (operations[matchingParenIndex] == ')')
-                            numOfUnmatchedParens -= 1;
+                        try
+                        {
+                            if (operations[matchingParenIndex] == '(')
+                                numOfUnmatchedParens += 1;
+                            else if (operations[matchingParenIndex] == ')')
+                                numOfUnmatchedParens -= 1;
+                        }
+                        catch (ArgumentOutOfRangeException)
+                        {
+                            throw new InvalidUserInput("Unmatched parentheses.");
+                        }
                     }
                     numbers[i] = evaluateExpression(operations.GetRange(i + 1, matchingParenIndex -
                         i - 1), numbers.GetRange(i + 1, matchingParenIndex - i - 1));
@@ -1538,12 +1559,14 @@ namespace Calculator
             }
             for (int i = 0; i < operations.Count;)
             {
-                if (i - 1 < 0 || numbers[i - 1] == null)
+                if (i == 0 || numbers[i - 1] == null)
                 {
                     if (operations[i] == '+')
                     {
-                        numbers.RemoveAt(i);
-                        operations.RemoveAt(i);
+                        numbers[i] = new Integer(1);
+                        numbers.Insert(i + 1, null);
+                        operations[i] = ' ';
+                        operations.Insert(i + 1, '*');
                     }
                     else if (operations[i] == '-')
                     {
@@ -1551,147 +1574,168 @@ namespace Calculator
                         numbers.Insert(i + 1, null);
                         operations[i] = ' ';
                         operations.Insert(i + 1, '*');
-                        ++i;
+                    }
+                    ++i;
+                }
+                else
+                    ++i;
+            }
+            try
+            {
+                for (int i = 0; i < operations.Count;)
+                {
+                    if (operations[i] == '^')
+                    {
+                        numbers[i - 1] = numbers[i - 1].exponentiate(numbers[i + 1]);
+                        numbers.RemoveRange(i, 2);
+                        operations.RemoveRange(i, 2);
                     }
                     else
                         ++i;
                 }
-                else
-                    ++i;
+                for (int i = 0; i < operations.Count;)
+                {
+                    if (operations[i] == '*')
+                    {
+                        numbers[i - 1] *= numbers[i + 1];
+                        numbers.RemoveRange(i, 2);
+                        operations.RemoveRange(i, 2);
+                    }
+                    else if (operations[i] == '/')
+                    {
+                        numbers[i - 1] /= numbers[i + 1];
+                        numbers.RemoveRange(i, 2);
+                        operations.RemoveRange(i, 2);
+                    }
+                    else
+                        ++i;
+                }
+                for (int i = 0; i < operations.Count;)
+                {
+                    if (operations[i] == '+')
+                    {
+                        numbers[i - 1] += numbers[i + 1];
+                        numbers.RemoveRange(i, 2);
+                        operations.RemoveRange(i, 2);
+                    }
+                    else if (operations[i] == '-')
+                    {
+                        numbers[i - 1] -= numbers[i + 1];
+                        numbers.RemoveRange(i, 2);
+                        operations.RemoveRange(i, 2);
+                    }
+                    else
+                        ++i;
+                }
             }
-            for (int i = 0; i < operations.Count;)
+            catch(ArgumentOutOfRangeException)
             {
-                if (operations[i] == '^')
-                {
-                    numbers[i - 1] = numbers[i - 1].exponentiate(numbers[i + 1]);
-                    numbers.RemoveRange(i, 2);
-                    operations.RemoveRange(i, 2);
-                }
-                else
-                    ++i;
+                throw new InvalidUserInput("Operator missing operand.");
             }
-            for (int i = 0; i < operations.Count;)
-            {
-                if (operations[i] == '*')
-                {
-                    numbers[i - 1] *= numbers[i + 1];
-                    numbers.RemoveRange(i, 2);
-                    operations.RemoveRange(i, 2);
-                }
-                else if (operations[i] == '/')
-                {
-                    numbers[i - 1] /= numbers[i + 1];
-                    numbers.RemoveRange(i, 2);
-                    operations.RemoveRange(i, 2);
-                }
-                else
-                    ++i;
-            }
-            for (int i = 0; i < operations.Count;)
-            {
-                if (operations[i] == '+')
-                {
-                    numbers[i - 1] += numbers[i + 1];
-                    numbers.RemoveRange(i, 2);
-                    operations.RemoveRange(i, 2);
-                }
-                else if (operations[i] == '-')
-                {
-                    numbers[i - 1] -= numbers[i + 1];
-                    numbers.RemoveRange(i, 2);
-                    operations.RemoveRange(i, 2);
-                }
-                else
-                    ++i;
-            }
+            if (numbers.Count == 0)
+                return null;
             return numbers[0];
+        }
+        public class InvalidUserInput : Exception
+        {
+            public InvalidUserInput(string message) : base(message)
+            {}
         }
         static void Main(string[] args)
         {
             while (true)
             {
-                string input = Console.ReadLine();
-                if (input[0] == 'q')
-                    return;
-                List<char> operations = new List<char>();
-                List<Number> numbers = new List<Number>();
-                StringBuilder numberCollector = new StringBuilder();
-                bool lastCharWasDigit = false;
-                foreach (char c in input)
+                try
                 {
-                    if (lastCharWasDigit)
+                    string input = Console.ReadLine();
+                    if (input[0] == 'q')
+                        return;
+                    List<char> operations = new List<char>();
+                    List<Number> numbers = new List<Number>();
+                    StringBuilder numberCollector = new StringBuilder();
+                    bool lastCharWasDigit = false;
+                    foreach (char c in input)
                     {
-                        if (char.IsDigit(c))
-                            numberCollector.Append(c);
-                        else
+                        if (lastCharWasDigit)
                         {
-                            if (c == 'i')
+                            if (char.IsDigit(c))
+                                numberCollector.Append(c);
+                            else 
                             {
-                                int number = int.Parse(numberCollector.ToString());
-                                numbers.Add(GaussianInteger.create(0, number));
-                                operations.Add(' ');
+                                if (c == 'i')
+                                {
+                                    int number = int.Parse(numberCollector.ToString());
+                                    numbers.Add(GaussianInteger.create(0, number));
+                                    operations.Add(' ');
+                                }
+                                else if (!"()+-*/^".Contains(c.ToString()))
+                                    throw new InvalidUserInput(c + " is an invalid character.");
+                                else
+                                {
+                                    numbers.Add(new Integer(int.Parse(numberCollector.ToString())));
+                                    operations.Add(' ');
+                                    operations.Add(c);
+                                    numbers.Add(null);
+                                }
+                                lastCharWasDigit = false;
                             }
-                            else
-                            {
-                                numbers.Add(new Integer(int.Parse(numberCollector.ToString())));
-                                operations.Add(' ');
-                                operations.Add(c);
-                                numbers.Add(null);
-                            }
-                            lastCharWasDigit = false;
                         }
-                    }
-                    else if (char.IsDigit(c))
-                    {
-                        numberCollector = new StringBuilder(c.ToString());
-                        lastCharWasDigit = true;
-                    }
-                    else
-                    {
-                        if (c == 'i')
+                        else if (char.IsDigit(c))
+                        {
+                            numberCollector = new StringBuilder(c.ToString());
+                            lastCharWasDigit = true;
+                        }
+                        else if (c == 'i')
                         {
                             numbers.Add(new GaussianInteger(0, 1));
                             operations.Add(' ');
                         }
+                        else if (!"()+-*/^".Contains(c.ToString()))
+                            throw new InvalidUserInput(c + " is an invalid character.");
                         else
                         {
                             operations.Add(c);
                             numbers.Add(null);
                         }
                     }
-                }
-                if (lastCharWasDigit)
-                {
-                    operations.Add(' ');
-                    numbers.Add(new Integer(int.Parse(numberCollector.ToString())));
-                }
-                for (int i = 0; i < operations.Count;)
-                {
-                    if (operations[i] == '(' && i > 0 && numbers[i - 1] != null)
+                    if (lastCharWasDigit)
                     {
-                        operations.Insert(i, '*');
-                        numbers.Insert(i, null);
-                        i += 2;
+                        operations.Add(' ');
+                        numbers.Add(new Integer(int.Parse(numberCollector.ToString())));
                     }
-                    else if ((operations[i] == ')' || numbers[i] is GaussianInteger) &&
-                        i + 1 < operations.Count && (numbers[i + 1] != null ||
-                        operations[i + 1] == '('))
+                    for (int i = 0; i < operations.Count;)
                     {
-                        operations.Insert(i + 1, '*');
-                        numbers.Insert(i + 1, null);
-                        i += 2;
+                        if (operations[i] == '(' && i > 0 && numbers[i - 1] != null)
+                        {
+                            operations.Insert(i, '*');
+                            numbers.Insert(i, null);
+                            i += 2;
+                        }
+                        else if ((operations[i] == ')' || numbers[i] is GaussianInteger) &&
+                            i + 1 < operations.Count && (numbers[i + 1] != null ||
+                            operations[i + 1] == '('))
+                        {
+                            operations.Insert(i + 1, '*');
+                            numbers.Insert(i + 1, null);
+                            i += 2;
+                        }
+                        else
+                            ++i;
                     }
+                    Number expression = evaluateExpression(operations, numbers);
+                    if (expression == null)
+                        Console.WriteLine("=\n");
                     else
-                        ++i;
+                        Console.Write(
+                            "=\n" + evaluateExpression(operations, numbers).ToString() + "\n\n");
                 }
-                try
+                catch (InvalidUserInput e)
                 {
-                    Console.Write("=\n" +
-                        checked(evaluateExpression(operations, numbers).ToString() + "\n\n"));
+                    Console.WriteLine(e.Message);
                 }
-                catch (DivideByZeroException)
+                catch (DivideByZeroException e)
                 {
-                    Console.WriteLine("Division by 0 error.");
+                    Console.WriteLine(e.Message);
                 }
             }
         }
