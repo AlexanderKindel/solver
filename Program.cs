@@ -18,7 +18,7 @@ namespace Calculator
         {
             return 1;
         }
-        static bool returnAllRoots = true;
+        public static bool singleRoot = false;
         public virtual Number exponentiate(Number exponent)
         {
             if (exponent is Integer)
@@ -46,185 +46,6 @@ namespace Calculator
             if (exponent is Fraction)
             {
                 Fraction exponentFraction = (Fraction)exponent;
-                if (this is WholeNumber)
-                {
-                    Dictionary<Number, int> radicandFactors = new Dictionary<Number, int>();
-                    Dictionary<Number, int> getFactorization()
-                    {//The keys represent the factors, and the values, their multiplicities.
-                        Number number = this;
-                        int sumOfRealAndImaginary = 2;
-                        while (true)
-                        {
-                            int imaginaryPart = sumOfRealAndImaginary / 2;
-                            int realPart = sumOfRealAndImaginary - imaginaryPart;
-                            for (int i = 0; imaginaryPart - i >= 0;)
-                            {
-                                int normSquared = ((WholeNumber)number).getNormSquared();
-                                if ((realPart + i) * (realPart + i) + (imaginaryPart - i) *
-                                    (imaginaryPart - i) / 2 > normSquared)
-                                {
-                                    if (radicandFactors.ContainsKey(number))
-                                        radicandFactors[number] += 1;
-                                    else
-                                        radicandFactors.Add(number, 1);
-                                    return radicandFactors;
-                                }
-                                bool testFactor(Number factor)
-                                {
-                                    Number quotient = number / factor;
-                                    if (quotient is WholeNumber)
-                                    {
-                                        if (radicandFactors.ContainsKey(factor))
-                                            radicandFactors[factor] += 1;
-                                        else
-                                            radicandFactors.Add(factor, 1);
-                                        number = quotient;
-                                        return true;
-                                    }
-                                    return false;
-                                }
-                                if (imaginaryPart - i == 0)
-                                {
-                                    if (testFactor(new Integer(realPart + i)))
-                                        continue;
-                                }
-                                else
-                                {
-                                    if (testFactor(new GaussianInteger(new Integer(realPart + i),
-                                        new Integer(imaginaryPart - i))))
-                                        continue;
-                                    if (testFactor(new GaussianInteger(new Integer(-realPart - i),
-                                        new Integer(imaginaryPart - i))))
-                                        continue;
-                                }
-                                ++i;
-                            }
-                            ++sumOfRealAndImaginary;
-                        }
-                    }
-                    getFactorization();
-                    List<int> exponentDivisors = new List<int>();
-                    int divisor = 1;
-                    while (divisor <= exponentFraction.Denominator / 2)
-                    {
-                        if (exponentFraction.Denominator % divisor == 0)
-                            exponentDivisors.Add(divisor);
-                        ++divisor;
-                    }
-                    exponentDivisors.Add(exponentFraction.Denominator);
-                    Dictionary<int, Number> termComponents = new Dictionary<int, Number>();
-                    termComponents.Add(1, new Integer(1));
-                    termComponents.Add(exponentFraction.Denominator, new Integer(1));
-                    foreach (Number factor in radicandFactors.Keys)
-                        for (int i = exponentDivisors.Count - 1; i >= 0; --i)
-                            if (exponentDivisors[i] <= radicandFactors[factor])
-                            {
-                                int index = exponentFraction.Denominator / exponentDivisors[i];
-                                if (!termComponents.ContainsKey(index))
-                                    termComponents.Add(index, new Integer(1));
-                                for (int j = 0;
-                                    j < radicandFactors[factor] / exponentDivisors[i]; ++j)
-                                    termComponents[index] = termComponents[index] * factor;
-                                for (int j = 0;
-                                    j < radicandFactors[factor] % exponentDivisors[i]; ++j)
-                                    termComponents[exponentFraction.Denominator] =
-                                        termComponents[exponentFraction.Denominator] * factor;
-                                break;
-                            }
-                    Dictionary<int, Number> termComponentsToPower = new Dictionary<int, Number>();
-                    List<int> indices = new List<int>();
-                    foreach (int index in termComponents.Keys)
-                    {
-                        indices.Add(index);
-                        termComponentsToPower.Add(index, new Integer(1));
-                        for (int i = 0; i < exponentFraction.Numerator; ++i)
-                            termComponentsToPower[index] =
-                                termComponentsToPower[index] * termComponents[index];
-                    }
-                    Number coefficient = termComponentsToPower[1];
-                    indices.Remove(1);
-                    termComponentsToPower.Remove(1);
-                    foreach (int index in indices)
-                    {
-                        if (termComponentsToPower[index] is Integer)
-                        {
-                            Integer radicandInteger = (Integer)termComponentsToPower[index];
-                            if (radicandInteger.Value == 1)
-                                termComponentsToPower.Remove(index);
-                            else if (radicandInteger.Value < 0)
-                            {
-                                coefficient *=
-                                    ComplexExponential.create(Fraction.create(1, index * 2));
-                                if (radicandInteger.Value == -1)
-                                    termComponentsToPower.Remove(index);
-                                else
-                                    termComponentsToPower[index] =
-                                        new Integer(-radicandInteger.Value);
-                            }
-                        }
-                        else
-                        {
-                            GaussianInteger gaussianRadicand =
-                                (GaussianInteger)termComponentsToPower[index];
-                            Integer real = (Integer)gaussianRadicand.Real;
-                            Integer imaginary = (Integer)gaussianRadicand.Imaginary;
-                            if (real.Value == 0)
-                                if (imaginary.Value > 0)
-                                {
-                                    if (imaginary.Value == 1)
-                                        termComponentsToPower.Remove(index);
-                                    else
-                                        termComponentsToPower[index] = imaginary;
-                                    coefficient *=  ComplexExponential.create(
-                                        Fraction.create(1, index * 4));
-                                }
-                                else
-                                {
-                                    if (imaginary.Value == -1)
-                                        termComponentsToPower.Remove(index);
-                                    else
-                                        termComponentsToPower[index] = imaginary.negative();
-                                    coefficient *=
-                                        ComplexExponential.create(Fraction.create(3, index * 4));
-                                }
-                        }
-                    }
-                    List<Factor> factors = new List<Factor>();
-                    int largestIndex;
-                    if (!(coefficient is WholeNumber))
-                        largestIndex = 2;
-                    else
-                        largestIndex = 1;
-                    foreach (int index in termComponentsToPower.Keys)
-                    {
-                        factors.Add(new Exponentiation(termComponentsToPower[index],
-                            Fraction.create(1, index)));
-                        if (index > largestIndex)
-                            largestIndex = index;
-                    }
-                    Number output = null;
-                    if (coefficient is Exponentiation && factors.Count == 1)
-                    {
-                        Exponentiation a = (Exponentiation)coefficient;
-                        Exponentiation b = (Exponentiation)factors[0];
-                        if (a.Exponent.Equals(b.Exponent))
-                            output = new Exponentiation(a.Base * b.Base, a.Exponent);
-                    }
-                    else
-                        output = Product.create(new Integer(1), factors) * coefficient;
-                    if (returnAllRoots)
-                    {
-                        returnAllRoots = false;
-                        Number rootOfUnity = ComplexExponential.create(
-                            Fraction.create(1, exponentFraction.Denominator));
-                        List<Number> roots = new List<Number> { output };
-                        for (int i = 1; i < exponentFraction.Denominator / largestIndex; ++i)
-                            roots.Add(roots[i - 1] * rootOfUnity);
-                        returnAllRoots = true;
-                        return NumberList.create(roots);
-                    }
-                    return output;
-                }
                 Integer denominatorLCM = new Integer(getDenominatorLCM());
                 if (denominatorLCM.Value != 1)
                     return (this * denominatorLCM).exponentiate(exponent) *
@@ -240,58 +61,7 @@ namespace Calculator
                         return (this / numeratorGCD).exponentiate(exponent) * factor;
                 }
             }
-            return new Exponentiation(this, exponent);
-        }
-        public Number squareRoot()
-        {//Number.exponentiate() calls ComplexExponential.create() as a consequence of both
-         //factoring over the Gaussians and returning all roots. This function exists to provide
-         //the square root functionality ComplexExponential.create() itself needs while omitting the
-         //Number.exponentiate() features described above in order to avoid circularity.
-            Integer denominatorLCM = new Integer(getDenominatorLCM());
-            if (denominatorLCM.Value != 1)
-                return (this * denominatorLCM).squareRoot() * denominatorLCM.squareRoot() /
-                    denominatorLCM;
-            int radicand;
-            if (this is Integer)
-                radicand = ((Integer)this).Value;
-            else
-                return new Exponentiation(this, Fraction.create(1, 2));
-            if (radicand == 0) 
-                return this;
-            Dictionary<int, int> radicandFactors = new Dictionary<int, int> { };
-            if (radicand < 0)
-            {
-                radicand *= -1;
-                radicandFactors.Add(-1, 1);
-            }
-            for (int i = 2; i <= radicand / 2;)
-                if (radicand % i == 0)
-                {
-                    if (radicandFactors.ContainsKey(i))
-                        radicandFactors[i] += 1;
-                    else
-                        radicandFactors.Add(i, 1);
-                    radicand /= i;
-                }
-                else
-                    ++i;
-            if (radicandFactors.ContainsKey(radicand))
-                radicandFactors[radicand] += 1;
-            else
-                radicandFactors.Add(radicand, 1);
-            int coefficient = 1;
-            radicand = 1;
-            foreach (int factor in radicandFactors.Keys)
-            {
-                for (int i = 0; i < radicandFactors[factor] / 2; ++i)
-                    coefficient *= factor;
-                if (radicandFactors[factor] % 2 == 1)
-                    radicand *= factor;
-            }
-            if (radicand != 1)
-                return new Exponentiation(new Integer(radicand), Fraction.create(1, 2)) *
-                    new Integer(coefficient);
-            return new Integer(coefficient);
+            return Exponentiation.create(this, exponent);
         }
         public static Number operator +(Number a, Number b)
         {
@@ -348,17 +118,13 @@ namespace Calculator
         public abstract String insertString(String str);
         public abstract override String ToString();
     }
-    interface WholeNumber
-    {
-        int getNormSquared();
-    }
     abstract class Term : Number
     { }
     abstract class Factor : Term
     { }
     abstract class Rational : Factor
     { }
-    class Integer : Rational, WholeNumber
+    class Integer : Rational
     {
         public int Value { get; }
         public Integer(int value)
@@ -393,6 +159,96 @@ namespace Calculator
         {
             if (Value == 0)
                 return new Integer(0);
+            if (exponent is Fraction)
+            {
+                Fraction exponentFraction = (Fraction)exponent;
+                int radicand = Value;
+                Dictionary<Integer, int> radicandFactors = new Dictionary<Integer, int> { };
+                if (radicand < 0)
+                {
+                    radicand *= -1;
+                    radicandFactors.Add(new Integer(-1), 1);
+                }
+                Integer factor;
+                for (int i = 2; i <= radicand / 2;)                
+                    if (radicand % i == 0) 
+                    {
+                        factor = new Integer(i);
+                        if (radicandFactors.ContainsKey(factor))
+                            radicandFactors[factor] += 1;
+                        else
+                            radicandFactors.Add(factor, 1);
+                        radicand /= i;
+                    }
+                    else
+                        ++i;
+                factor = new Integer(radicand);
+                if (radicandFactors.ContainsKey(factor))
+                    radicandFactors[factor] += 1;
+                else
+                    radicandFactors.Add(factor, 1);
+                List<int> exponentDivisors = new List<int>();
+                int divisor = 1;
+                while (divisor <= exponentFraction.Denominator / 2)
+                {
+                    if (exponentFraction.Denominator % divisor == 0)
+                        exponentDivisors.Add(divisor);
+                    ++divisor;
+                }
+                exponentDivisors.Add(exponentFraction.Denominator);
+                Dictionary<int, Number> termComponents = new Dictionary<int, Number>();
+                termComponents.Add(1, new Integer(1));
+                termComponents.Add(exponentFraction.Denominator, new Integer(1));
+                foreach (Integer n in radicandFactors.Keys)
+                    for (int i = exponentDivisors.Count - 1; i >= 0; --i)
+                        if (exponentDivisors[i] <= radicandFactors[n])
+                        {
+                            int index = exponentFraction.Denominator / exponentDivisors[i];
+                            if (!termComponents.ContainsKey(index))
+                                termComponents.Add(index, new Integer(1));
+                            for (int j = 0;
+                                j < radicandFactors[n] / exponentDivisors[i]; ++j)
+                                termComponents[index] = termComponents[index] * n;
+                            for (int j = 0;
+                                j < radicandFactors[n] % exponentDivisors[i]; ++j)
+                                termComponents[exponentFraction.Denominator] =
+                                    termComponents[exponentFraction.Denominator] * n;
+                            break;
+                        }
+                if (((Integer)termComponents[exponentFraction.Denominator]).Value == 1)
+                    termComponents.Remove(exponentFraction.Denominator);
+                Dictionary<int, Number> termComponentsToPower = new Dictionary<int, Number>();
+                foreach (int index in termComponents.Keys)
+                {
+                    termComponentsToPower.Add(index, new Integer(1));
+                    for (int i = 0; i < exponentFraction.Numerator; ++i)
+                        termComponentsToPower[index] =
+                            termComponentsToPower[index] * termComponents[index];
+                }
+                Integer coefficient = (Integer)termComponentsToPower[1];
+                termComponentsToPower.Remove(1);
+                List<Factor> factors = new List<Factor>();
+                int largestIndex = 1;
+                foreach (int index in termComponentsToPower.Keys)
+                {
+                    factors.Add(new Surd(termComponentsToPower[index], index));
+                    if (index > largestIndex)
+                        largestIndex = index;
+                }
+                Number output = Product.create(coefficient, factors);
+                if (!singleRoot)
+                {
+                    singleRoot = true;
+                    Number rootOfUnity = ComplexExponential.create(
+                        Fraction.create(1, exponentFraction.Denominator));
+                    List<Number> roots = new List<Number> { output };
+                    for (int i = 1; i < exponentFraction.Denominator / largestIndex; ++i)
+                        roots.Add(roots[i - 1] * rootOfUnity);
+                    singleRoot = false;
+                    return NumberList.create(roots);
+                }
+                return output;                
+            }
             return base.exponentiate(exponent);
         }
         public override int getNumeratorGCD()
@@ -532,14 +388,24 @@ namespace Calculator
             return Numerator + "/" + Denominator;
         }
     }
-    class Exponentiation : Factor
+    abstract class Exponentiation : Factor
     {
         public Number Base { get; }
         public Number Exponent { get; }
-        public Exponentiation(Number expBase, Number exponent)
+        protected Exponentiation(Number expBase, Number exponent)
         {
             Base = expBase;
             Exponent = exponent;
+        }
+        public static Factor create(Number expBase, Number exponent)
+        {
+            if (exponent is Fraction)
+            {
+                Fraction exponentFraction = (Fraction)exponent;
+                if (exponentFraction.Numerator == 1)
+                    return new Surd(expBase, exponentFraction.Denominator);
+            }
+            return new Transcendental(expBase, exponent);
         }
         protected override Number add(Number number)
         {
@@ -569,38 +435,23 @@ namespace Calculator
         }
         protected override Number multiply(Number number)
         {
-            if (number is Integer)
-                return Product.create((Integer)number, new List<Factor> { this });
-            if (number is Fraction)
-                return Product.create((Fraction)number, new List<Factor> { this });
+            if (number is Rational)
+                return Product.create((Rational)number, new List<Factor> { this });
             if (number is Exponentiation)
             {
                 Exponentiation exponentiation = (Exponentiation)number;
-                if (Base.CompareTo(exponentiation.Base) == 0)
+                if (Base.Equals(exponentiation.Base))
                     return Base.exponentiate(Exponent + exponentiation.Exponent);
-                if (Exponent.CompareTo(exponentiation.Exponent) == 0)
+                if (Exponent.Equals(exponentiation.Exponent))
                 {
                     Number outputBase = Base * exponentiation.Base;
                     if (outputBase is Exponentiation)
-                        return new Exponentiation(((Exponentiation)outputBase).Base,
-                            Exponent * Exponent);
+                        return create(((Exponentiation)outputBase).Base, Exponent * Exponent);
                     return (outputBase).exponentiate(Exponent);
                 }
                 return Product.create(new Integer(1), new List<Factor> { this, exponentiation });
             }
             return number * this;
-        }
-        public override Number reciprocal()
-        {
-            if (Exponent is Fraction)
-            {
-                Fraction exponentFraction = (Fraction)Exponent;
-                return exponentiate(Fraction.create(exponentFraction.Denominator -
-                    exponentFraction.Numerator % exponentFraction.Denominator,
-                    exponentFraction.Denominator)) * exponentiate(new Integer(
-                    exponentFraction.Numerator / exponentFraction.Denominator + 1)).reciprocal();
-            }
-            return new Exponentiation(Base, Exponent.negative());
         }
         public override Number exponentiate(Number exponent)
         {
@@ -647,8 +498,40 @@ namespace Calculator
             return encloseNumber(Base) + '^' + encloseNumber(Exponent);
         }
     }
+    class Surd : Exponentiation
+    {
+        public int Index { get; }
+        public Surd(Number radicand, int index) : base(radicand, Fraction.create(1, index))
+        {
+            Index = index;
+        }
+        protected override Number multiply(Number number)
+        {
+            if (number is Surd)
+            {
+                Surd surd = (Surd)number;
+                int indexLCM = Integer.getLCM(Index, surd.Index);
+                return (Base.exponentiate(new Integer(indexLCM / Index)) * surd.Base.exponentiate(
+                    new Integer(indexLCM / surd.Index))).exponentiate(Fraction.create(1, indexLCM));
+            }
+            return base.multiply(number);
+        }
+        public override Number reciprocal()
+        {
+            return exponentiate(Fraction.create(Index - 1, Index)) / this;
+        }
+    }
+    class Transcendental : Exponentiation
+    {
+        public Transcendental(Number expBase, Number exponent) : base(expBase, exponent)
+        { }
+        public override Number reciprocal()
+        {
+            return Exponentiation.create(Base, Exponent.negative());
+        }
+    }
     class ComplexExponential : Factor
-    {//Respresents e^(tau*i*Exponent).
+    {//Represents e^(tau*i*Exponent).
         public Number Exponent { get; }
         ComplexExponential(Number exponent)
         {
@@ -679,7 +562,6 @@ namespace Calculator
                     ++multiplicityOfTwo;
                 }
                 Number cosine;
-                Rational a = Fraction.create(1, 2);
                 switch (denominator)
                 {
                     case 1:
@@ -689,34 +571,35 @@ namespace Calculator
                         cosine = Fraction.create(-1, 2);
                         break;
                     case 5:
-                        cosine = (new Exponentiation(new Integer(5), a) - new Integer(1)) /
+                        cosine = (new Surd(new Integer(5), 2) - new Integer(1)) /
                             new Integer(4);
                         break;
                     case 15:
                         {
-                            Exponentiation b = new Exponentiation(new Integer(5), a);
-                            cosine = (new Integer(1) + b + new Exponentiation(new Integer(30) -
-                                new Integer(6) * b, a)) / new Integer(8);
+                            Surd a = new Surd(new Integer(5), 2);
+                            cosine = (new Integer(1) + a + new Surd(new Integer(30) -
+                                new Integer(6) * a, 2)) / new Integer(8);
                             break;
                         }
                     case 17:
                         {
-                            Integer b = new Integer(17);
-                            Exponentiation c = new Exponentiation(b, a);
-                            Integer d = new Integer(2);
-                            Exponentiation e = new Exponentiation(b * d - c * new Integer(2), a);
-                            cosine = (new Integer(-1) + c + e + new Exponentiation(b + c *
-                                new Integer(3) - e - new Exponentiation((b + c) * d, a) * d, a) *
-                                d) * Fraction.create(1, 16);
+                            Integer a = new Integer(17);
+                            Surd b = new Surd(a, 2);
+                            Integer c = new Integer(2);
+                            Surd d = new Surd(a * c - b * new Integer(2), 2);
+                            cosine = (new Integer(-1) + b + d + new Surd(a + b * new Integer(3) -
+                                d - new Surd((a + b) * c, 2) * c, 2) * c) * Fraction.create(1, 16);
                             break;
                         }
                     default:
                         return new ComplexExponential(exponent);
                 }
+                singleRoot = true;
+                Rational e = Fraction.create(1, 2);
                 for (int i = 0; i < multiplicityOfTwo; ++i)
                 {
                     denominator *= 2;
-                    cosine = (cosine * a + a).squareRoot();
+                    cosine = (cosine * e + e).exponentiate(e);
                     if (4 < 3 * denominator && denominator < 4)
                         cosine = cosine.negative();
                 }
@@ -730,9 +613,10 @@ namespace Calculator
                     t = angleMultipleCosine;
                 }
                 Number output = ComplexNumber.create(angleMultipleCosine, (new Integer(1) -
-                    angleMultipleCosine * angleMultipleCosine).squareRoot());
+                    angleMultipleCosine * angleMultipleCosine).exponentiate(e));
+                singleRoot = false;
                 if (denominator < 4 * numerator && 4 * numerator < 2 * denominator ||
-                    3 * denominator < 4 * numerator && 4 * numerator < 4 * denominator) 
+                    3 * denominator < 4 * numerator && 4 * numerator < 4 * denominator)
                     return output.negative();
                 return output;
             }
@@ -1052,7 +936,7 @@ namespace Calculator
         }
         public override Number reciprocal()
         {//Placeholder.
-            return new Exponentiation(this, new Integer(-1));
+            return new Transcendental(this, new Integer(-1));
         }
         public override int getDenominatorLCM()
         {
@@ -1204,7 +1088,7 @@ namespace Calculator
             return output.ToString();
         }
     }
-    class GaussianInteger : ComplexNumber, WholeNumber
+    class GaussianInteger : ComplexNumber
     {
         public GaussianInteger(Integer real, Integer imaginary) : base(real, imaginary)
         { }
@@ -1480,7 +1364,7 @@ namespace Calculator
                         ++i;
                 }
             }
-            catch(ArgumentOutOfRangeException)
+            catch (ArgumentOutOfRangeException)
             {
                 throw new InvalidUserInput("Operator missing operand.");
             }
@@ -1512,7 +1396,7 @@ namespace Calculator
                         {
                             if (char.IsDigit(c))
                                 numberCollector.Append(c);
-                            else 
+                            else
                             {
                                 if (c == 'i')
                                 {
