@@ -10,6 +10,10 @@ namespace Calculator
         public abstract Number negative();
         protected abstract Number multiply(Number number);
         public abstract Number reciprocal();
+        public virtual bool isAlgebraic()
+        {
+            return true;
+        }
         public virtual int getDenominatorLCM()
         {
             return 1;
@@ -23,7 +27,7 @@ namespace Calculator
             if (exponent is Integer)
             {
                 int intExponent = ((Integer)exponent).Value;
-                Number output = new Integer(1);
+                Number output = Integer.One;
                 if (intExponent < 0)
                 {
                     for (int i = 0; i > intExponent; --i)
@@ -90,9 +94,7 @@ namespace Calculator
                 return 6;
             if (this is ComplexNumber)
                 return 7;
-            if (this is GaussianInteger)
-                return 8;
-            return 9;
+            return 8;
         }
         public virtual int CompareTo(object obj)
         {
@@ -122,14 +124,12 @@ namespace Calculator
     class Integer : Rational
     {
         public int Value { get; }
+        public static Integer Zero { get; } = new Integer(0);
+        public static Integer One { get; } = new Integer(1);
         public Integer(int value)
         {
             Value = value;
-        }
-        public int getNormSquared()
-        {
-            return Value * Value;
-        }
+        }    
         protected override Number add(Number number)
         {
             if (number is Integer)
@@ -153,7 +153,7 @@ namespace Calculator
         public override Number exponentiate(Number exponent)
         {
             if (Value == 0)
-                return new Integer(0);
+                return Zero;
             Integer exponentIntegerFactor = new Integer(exponent.getGreatestIntegerFactor());
             if (exponentIntegerFactor.Value > 1)
                 return base.exponentiate(exponentIntegerFactor).exponentiate(
@@ -169,8 +169,8 @@ namespace Calculator
                     radicandFactors.Add(new Integer(-1), 1);
                 }
                 Integer factor;
-                for (int i = 2; i <= radicand / 2;)                
-                    if (radicand % i == 0) 
+                for (int i = 2; i <= radicand / 2;)
+                    if (radicand % i == 0)
                     {
                         factor = new Integer(i);
                         if (radicandFactors.ContainsKey(factor))
@@ -196,15 +196,15 @@ namespace Calculator
                 }
                 exponentDivisors.Add(exponentFraction.Denominator);
                 Dictionary<int, Number> termComponents = new Dictionary<int, Number>();
-                termComponents.Add(1, new Integer(1));
-                termComponents.Add(exponentFraction.Denominator, new Integer(1));
+                termComponents.Add(1, One);
+                termComponents.Add(exponentFraction.Denominator, One);
                 foreach (Integer n in radicandFactors.Keys)
                     for (int i = exponentDivisors.Count - 1; i >= 0; --i)
                         if (exponentDivisors[i] <= radicandFactors[n])
                         {
                             int index = exponentFraction.Denominator / exponentDivisors[i];
                             if (!termComponents.ContainsKey(index))
-                                termComponents.Add(index, new Integer(1));
+                                termComponents.Add(index, One);
                             for (int j = 0;
                                 j < radicandFactors[n] / exponentDivisors[i]; ++j)
                                 termComponents[index] = termComponents[index] * n;
@@ -227,12 +227,12 @@ namespace Calculator
                     else
                         termComponents[exponentFraction.Denominator] =
                             termComponents[exponentFraction.Denominator].negative();
-                    if (exponentFraction.Denominator % 2 == 0)                                            
+                    if (exponentFraction.Denominator % 2 == 0)
                         coefficient *= ComplexExponential.create(
-                            Fraction.create(1, 2 * exponentFraction.Denominator));                    
-                    else                    
-                        coefficient = coefficient.negative();                    
-                }                
+                            new Fraction(1, 2 * exponentFraction.Denominator));
+                    else
+                        coefficient = coefficient.negative();
+                }
                 List<Factor> factors = new List<Factor>();
                 int largestIndex = 1;
                 foreach (int index in termComponents.Keys)
@@ -241,8 +241,8 @@ namespace Calculator
                     if (index > largestIndex)
                         largestIndex = index;
                 }
-                Number output = Product.create(new Integer(1), factors) * coefficient;
-                return output;                
+                Number output = Product.create(One, factors) * coefficient;
+                return output;
             }
             return base.exponentiate(exponent);
         }
@@ -280,9 +280,10 @@ namespace Calculator
         }
         public static int getGCD(int a, int b)
         {
+            int c;
             while (b != 0)
             {
-                int c = b;
+                c = b;
                 b = a % b;
                 a = c;
             }
@@ -299,7 +300,7 @@ namespace Calculator
     {
         public int Numerator { get; }
         public int Denominator { get; }
-        Fraction(int numerator, int denominator)
+        public Fraction(int numerator, int denominator)
         {
             Numerator = numerator;
             Denominator = denominator;
@@ -419,7 +420,7 @@ namespace Calculator
                 if (CompareTo(exponentiation) == 0)
                     return Product.create(new Integer(2), new List<Factor> { this });
                 if (CompareTo(exponentiation.negative()) == 0)
-                    return new Integer(0);
+                    return Integer.Zero;
                 return new Sum(new List<Term> { this, exponentiation });
             }
             return number + this;
@@ -444,7 +445,7 @@ namespace Calculator
                         return create(((Exponentiation)outputBase).Base, Exponent * Exponent);
                     return (outputBase).exponentiate(Exponent);
                 }
-                return Product.create(new Integer(1), new List<Factor> { this, exponentiation });
+                return Product.create(Integer.One, new List<Factor> { this, exponentiation });
             }
             return number * this;
         }
@@ -475,20 +476,10 @@ namespace Calculator
         {
             String encloseNumber(Number number)
             {
-                if (number is Integer)
-                {
-                    Integer integer = (Integer)number;
-                    if (integer.Value >= 0)
-                        return integer.ToString();
-                }
-                if (number is GaussianInteger)
-                {
-                    GaussianInteger gaussian = (GaussianInteger)number;
-                    if (((Integer)gaussian.Real).Value == 0 &&
-                        ((Integer)gaussian.Imaginary).Value == 1)
-                        return "i";
-                }
-                return '(' + number.ToString() + ')';
+                string numberString = number.ToString();
+                if ((number is Integer && ((Integer)number).Value >= 0) || numberString == "i")
+                    return numberString;
+                return '(' + numberString + ')';
             }
             return encloseNumber(Base) + '^' + encloseNumber(Exponent);
         }
@@ -496,7 +487,7 @@ namespace Calculator
     class Surd : Exponentiation
     {
         public int Index { get; }
-        public Surd(Number radicand, int index) : base(radicand, Fraction.create(1, index))
+        public Surd(Number radicand, int index) : base(radicand, new Fraction(1, index))
         {
             Index = index;
         }
@@ -515,6 +506,10 @@ namespace Calculator
         {
             return exponentiate(Fraction.create(Index - 1, Index)) / this;
         }
+        public override bool isAlgebraic()
+        {
+            return Base.isAlgebraic();
+        }
     }
     class Transcendental : Exponentiation
     {
@@ -522,7 +517,11 @@ namespace Calculator
         { }
         public override Number reciprocal()
         {
-            return Exponentiation.create(Base, Exponent.negative());
+            return create(Base, Exponent.negative());
+        }
+        public override bool isAlgebraic()
+        {
+            return false;
         }
     }
     class ComplexExponential : Factor
@@ -536,7 +535,7 @@ namespace Calculator
                 Exponent = exponentFraction -
                     new Integer(exponentFraction.Numerator / exponentFraction.Denominator);
                 if (exponentFraction.Numerator < 0)
-                    Exponent += new Integer(1);
+                    Exponent += Integer.One;
             }
             else
                 Exponent = exponent;
@@ -544,7 +543,7 @@ namespace Calculator
         public static Number create(Number exponent)
         {
             if (exponent is Integer)
-                return new Integer(1);
+                return Integer.One;
             if (exponent is Fraction)
             {
                 Fraction exponentFraction = (Fraction)exponent;
@@ -560,19 +559,19 @@ namespace Calculator
                 switch (denominator)
                 {
                     case 1:
-                        cosine = new Integer(1);
+                        cosine = Integer.One;
                         break;
                     case 3:
-                        cosine = Fraction.create(-1, 2);
+                        cosine = new Fraction(-1, 2);
                         break;
                     case 5:
-                        cosine = (new Surd(new Integer(5), 2) - new Integer(1)) /
+                        cosine = (new Surd(new Integer(5), 2) - Integer.One) /
                             new Integer(4);
                         break;
                     case 15:
                         {
                             Surd a = new Surd(new Integer(5), 2);
-                            cosine = (new Integer(1) + a + new Surd(new Integer(30) -
+                            cosine = (Integer.One + a + new Surd(new Integer(30) -
                                 new Integer(6) * a, 2)) / new Integer(8);
                             break;
                         }
@@ -583,13 +582,13 @@ namespace Calculator
                             Integer c = new Integer(2);
                             Surd d = new Surd(a * c - b * new Integer(2), 2);
                             cosine = (new Integer(-1) + b + d + new Surd(a + b * new Integer(3) -
-                                d - new Surd((a + b) * c, 2) * c, 2) * c) * Fraction.create(1, 16);
+                                d - new Surd((a + b) * c, 2) * c, 2) * c) * new Fraction(1, 16);
                             break;
                         }
                     default:
                         return new ComplexExponential(exponent);
                 }
-                Rational e = Fraction.create(1, 2);
+                Rational e = new Fraction(1, 2);
                 for (int i = 0; i < multiplicityOfTwo; ++i)
                 {
                     denominator *= 2;
@@ -597,7 +596,7 @@ namespace Calculator
                     if (4 < 3 * denominator && denominator < 4)
                         cosine = cosine.negative();
                 }
-                Number s = new Integer(1);
+                Number s = Integer.One;
                 Number t = cosine;
                 Number angleMultipleCosine = cosine;
                 for (int i = 1; i < numerator; ++i)
@@ -606,8 +605,8 @@ namespace Calculator
                     s = t;
                     t = angleMultipleCosine;
                 }
-                Number output = ComplexNumber.create(angleMultipleCosine, (new Integer(1) -
-                    angleMultipleCosine * angleMultipleCosine).exponentiate(e));
+                Number output = ComplexNumber.create(angleMultipleCosine,
+                    (Integer.One - angleMultipleCosine * angleMultipleCosine).exponentiate(e));
                 if (denominator < 4 * numerator && 4 * numerator < 2 * denominator ||
                     3 * denominator < 4 * numerator && 4 * numerator < 4 * denominator)
                     return output.negative();
@@ -645,7 +644,7 @@ namespace Calculator
             if (number is Fraction)
                 return Product.create((Fraction)number, new List<Factor> { this, });
             if (number is Exponentiation)
-                return Product.create(new Integer(1), new List<Factor> { this, (Factor)number });
+                return Product.create(Integer.One, new List<Factor> { this, (Factor)number });
             if (number is ComplexExponential)
                 return create(Exponent + ((ComplexExponential)number).Exponent);
             return number * this;
@@ -653,6 +652,10 @@ namespace Calculator
         public override Number reciprocal()
         {
             return create(Exponent.negative());
+        }
+        public override bool isAlgebraic()
+        {
+            return Exponent is Fraction;
         }
         public override Number exponentiate(Number exponent)
         {
@@ -675,7 +678,7 @@ namespace Calculator
         }
         public override string ToString()
         {
-            Number exponentWith_i = Exponent * new GaussianInteger(new Integer(0), new Integer(1));
+            Number exponentWith_i = Exponent * ComplexNumber.create(Integer.Zero, Integer.One);
             return "e^(" + exponentWith_i.insertString("tau") + ')';
         }
     }
@@ -688,14 +691,14 @@ namespace Calculator
             Coefficient = coefficient;
             Factors = factors;
             Factors.Sort();
-        }
+        }        
         public static Term create(Rational coefficient, List<Factor> factors)
         {
             if (coefficient is Integer)
             {
                 int coefficientInt = ((Integer)coefficient).Value;
                 if (coefficientInt == 0)
-                    return new Integer(0);
+                    return Integer.Zero;
                 if (factors.Count == 1 && coefficientInt == 1)
                     return factors[0];
             }
@@ -715,7 +718,7 @@ namespace Calculator
             if (number is Factor)
             {
                 if (Factors.Count == 1 && number.Equals(Factors[0]))
-                    return create((Rational)(Coefficient + new Integer(1)), Factors);
+                    return create((Rational)(Coefficient + Integer.One), Factors);
                 return new Sum(new List<Term> { this, (Term)number });
             }
             if (number is Product)
@@ -773,6 +776,13 @@ namespace Calculator
             foreach (Factor factor in Factors)
                 factors.Add((Factor)factor.reciprocal());
             return create((Rational)Coefficient.reciprocal(), factors);
+        }
+        public override bool isAlgebraic()
+        {
+            foreach (Factor factor in Factors)
+                if (!factor.isAlgebraic())
+                    return false;
+            return true;
         }
         public override int getDenominatorLCM()
         {
@@ -906,7 +916,7 @@ namespace Calculator
             List<Term> terms = new List<Term>();
             if (number is Term)
             {
-                Number output = new Integer(0);
+                Number output = Integer.Zero;
                 foreach (Term term in Terms)
                     output += term * number;
                 return output;
@@ -914,7 +924,7 @@ namespace Calculator
             if (number is Sum)
             {
                 Sum multiplier = (Sum)number;
-                Number output = new Integer(0);
+                Number output = Integer.Zero;
                 foreach (Term multiplicandTerm in Terms)
                     foreach (Term multiplierTerm in multiplier.Terms)
                         output += multiplicandTerm * multiplierTerm;
@@ -923,8 +933,82 @@ namespace Calculator
             return number * this;
         }
         public override Number reciprocal()
-        {//Placeholder.
-            return new Transcendental(this, new Integer(-1));
+        {
+            //if (!isAlgebraic())
+                return new Transcendental(this, new Integer(-1));
+            List<Number> spanningSet = new List<Number> { Integer.One };
+            List<List<Number>> matrix =
+                new List<List<Number>> { new List<Number> { Integer.Zero } };
+            List<Rational> augmentationRow = new List<Rational> { Integer.Zero, Integer.One };
+            List<List<Rational>> augmentation = new List<List<Rational>> { augmentationRow };            
+            void incorporateSpanElement(Number n)
+            {
+                if (n is Rational)
+                {
+                    matrix[matrix.Count - 1][0] = n;
+                    return;
+                }
+                Number spanComponent;
+                Rational coefficient;
+                if (n is Factor)
+                {
+                    spanComponent = n;
+                    coefficient = Integer.One;
+                }
+                else
+                {
+                    Product product = (Product)n;
+                    spanComponent = Product.create(Integer.One, product.Factors);
+                    coefficient = product.Coefficient;
+                }
+                for (int i = 0; i < spanningSet.Count; ++i)
+                    if (spanningSet[i].Equals(spanComponent))
+                    { 
+                        matrix[matrix.Count - 1][i] = coefficient;
+                        return;
+                    }
+                spanningSet.Add(spanComponent);
+                for (int i = 1; i < matrix.Count - 1; ++i)
+                    matrix[i].Add(Integer.Zero);
+                matrix[matrix.Count - 1].Add(coefficient);
+                augmentationRow.Insert(0, Integer.Zero);
+                augmentation.Add(augmentationRow);
+            }
+            foreach (Term term in Terms)
+                incorporateSpanElement(term);
+            List<Number> powers = new List<Number> { this };            
+            for (int i = 1; i < spanningSet.Count; ++i)
+            {
+                powers.Add(powers[i - 1] * this);
+                List<Number> matrixRow = new List<Number>();
+                for (int j = 0; j < matrix[0].Count; ++j)
+                    matrixRow.Add(Integer.Zero);
+                matrix.Add(matrixRow);
+                if (powers[i] is Sum)
+                    foreach (Term term in ((Sum)powers[i]).Terms)
+                        incorporateSpanElement(term);
+                else
+                    incorporateSpanElement((Term)powers[i]);
+            }
+            for (int i = matrix.Count - 2; i >= 0; --i)
+                if (matrix[i][i + 1] != Integer.Zero)
+                {
+                    Number scalar = (matrix[i][i + 1] / matrix[i + 1][i + 1]);
+                    for (int j = 0; j <= i + 1; ++i)
+                        matrix[i][j] -= matrix[i + 1][j] * scalar;
+                    for (int j = 0; j < augmentation[i].Count; ++j)
+                        augmentation[i][j] =
+                            (Rational)(augmentation[i][j] - augmentation[i + 1][j] * scalar);
+                }
+            IntegerPolynomial annullingPolynomial =
+                IntegerPolynomial.getPrimitivePart(augmentation[0]);
+        }
+        public override bool isAlgebraic()
+        {
+            foreach (Term term in Terms)
+                if (!term.isAlgebraic())
+                    return false;
+            return true;
         }
         public override int getDenominatorLCM()
         {
@@ -997,8 +1081,6 @@ namespace Calculator
                 Integer imaginaryInteger = (Integer)imaginary;
                 if (imaginaryInteger.Value == 0)
                     return real;
-                if (real is Integer)
-                    return new GaussianInteger((Integer)real, imaginaryInteger);
             }
             return new ComplexNumber(real, imaginary);
         }
@@ -1073,53 +1155,136 @@ namespace Calculator
             return output.ToString();
         }
     }
-    class GaussianInteger : ComplexNumber
-    {
-        public GaussianInteger(Integer real, Integer imaginary) : base(real, imaginary)
-        { }
-        public int getNormSquared()
-        {
-            int real = ((Integer)Real).Value;
-            int imaginary = ((Integer)Imaginary).Value;
-            return real * real + imaginary * imaginary;
-        }
-    }
-    class Polynomial
+    class Polynomial<T> where T : Number
     {
         //The index of the coefficient represents the degree of its term.
-        List<Number> Coefficients { get; }
-        public Polynomial(List<Number> coefficients)
+        public List<T> Coefficients { get; }
+        protected Polynomial(List<T> coefficients)
         {
-            Integer zero = new Integer(0);
-            while (coefficients.Count != 0 && coefficients[coefficients.Count - 1].Equals(zero))
+            while (coefficients.Count != 0 &&
+                coefficients[coefficients.Count - 1].Equals(Integer.Zero))
                 coefficients.RemoveAt(coefficients.Count - 1);
             Coefficients = coefficients;
         }
-        public static Polynomial operator *(Polynomial a, Polynomial b)
+        public static Polynomial<T> operator +(Polynomial<T> a, Polynomial<T> b)
         {
-            List<Number> output = new List<Number>();
-            Integer zero = new Integer(0);
+            if (a.Coefficients.Count <= b.Coefficients.Count)
+                return b + a;
+            List<T> output = a.Coefficients;
+            for (int i = 0; i < b.Coefficients.Count; ++i)
+                output[i] = (T)(output[i] + b.Coefficients[i]);
+            return new Polynomial<T>(output);
+        }
+        public Polynomial<T> negative()
+        {
+            List<T> output = new List<T>();
+            foreach (Number coefficient in Coefficients)
+                output.Add((T)coefficient.negative());
+            return new Polynomial<T>(output);
+        }
+        public static Polynomial<T> operator -(Polynomial<T> a, Polynomial<T> b)
+        {
+            return a + b.negative();
+        }
+        public static Polynomial<T> operator *(Polynomial<T> a, Polynomial<T> b)
+        {
+            List<T> output = new List<T>();
             for (int i = 0; i < a.Coefficients.Count + b.Coefficients.Count - 1; ++i)
-                output.Add(zero);
+                output.Add((T)(Number)Integer.Zero);
             for (int i = 0; i < a.Coefficients.Count; ++i)
                 for (int j = 0; j < b.Coefficients.Count; ++j)
-                    output[i + j] += a.Coefficients[i] * b.Coefficients[j];
-            return new Polynomial(output);
+                    output[i + j] = (T)(output[i + j] + a.Coefficients[i] * b.Coefficients[j]);
+            return new Polynomial<T>(output);
         }
-        public Polynomial modulo(Polynomial divisor)
+        public static Polynomial<T> operator /(Polynomial<T> a, Polynomial<T> b)
         {
-            List<Number> remainder = Coefficients;
-            while (remainder.Count >= divisor.Coefficients.Count)
-            {
-                Number multiplier = remainder[remainder.Count - 1] /
-                    divisor.Coefficients[divisor.Coefficients.Count - 1];
-                remainder.RemoveAt(remainder.Count - 1);
-                for (int i = 1; i < divisor.Coefficients.Count - 1; ++i)
-                    remainder[remainder.Count - i] -=
-                        multiplier * divisor.Coefficients[divisor.Coefficients.Count - 1 - i];
-            }
-            return new Polynomial(remainder);
+            List<T> quotient = new List<T>();
+            if (b.Coefficients.Count <= a.Coefficients.Count) 
+                for (int i = 1; i <= b.Coefficients.Count; ++i)             
+                    quotient.Insert(0, (T)(a.Coefficients[a.Coefficients.Count - i] /
+                        b.Coefficients[b.Coefficients.Count - i]));            
+            return new Polynomial<T>(quotient);
         }
+        public static Polynomial<T> operator %(Polynomial<T> a, Polynomial<T> b)
+        {
+            List<T> remainder = a.Coefficients;
+            T scalar;
+            if (b.Coefficients.Count <= a.Coefficients.Count)
+                for (int i = 1; i <= b.Coefficients.Count; ++i)
+                {
+                    scalar = (T)(a.Coefficients[a.Coefficients.Count - i] /
+                        b.Coefficients[b.Coefficients.Count - i]);
+                    remainder.RemoveAt(remainder.Count - 1);
+                    for (int j = 1; j < b.Coefficients.Count - 1; ++j)
+                        remainder[remainder.Count - i] = (T)(remainder[remainder.Count - i] -
+                            scalar * b.Coefficients[b.Coefficients.Count - i - 1]);
+                }
+            return new Polynomial<T>(remainder);
+        }
+        public Polynomial<T> getDerivative()
+        {
+            List<T> derivativeCoefficients = new List<T>();
+            for (int i = 1; i < Coefficients.Count; ++i)
+                derivativeCoefficients.Add((T)(Coefficients[i] * new Integer(i)));
+            return new Polynomial<T>(derivativeCoefficients);
+        }                
+    }
+    class NumberPolynomial : Polynomial<Number>
+    {
+        public NumberPolynomial(List<Number> coefficients) : base(coefficients)
+        { }        
+    }
+    class IntegerPolynomial : Polynomial<Integer>
+    {
+        public IntegerPolynomial(List<Integer> coefficients) : base(coefficients)
+        { }
+        public static IntegerPolynomial getPrimitivePart(List<Rational> coefficients)
+        {
+            int LCM = 1;
+            foreach (Rational rational in coefficients)
+                LCM = Integer.getLCM(LCM, rational.getDenominatorLCM());
+            Integer LCMinteger = new Integer(LCM);
+            List<Integer> integerCoefficients = new List<Integer>();
+            foreach (Rational rational in coefficients)
+                integerCoefficients.Add((Integer)(rational / LCMinteger));
+            return new IntegerPolynomial(integerCoefficients);
+        }
+        public IntegerPolynomial getPsuedoremainder(IntegerPolynomial divisor)
+        {
+            return (IntegerPolynomial)(this * new IntegerPolynomial(
+                new List<Integer> {(Integer)(divisor.Coefficients[0].exponentiate(
+                new Integer(Coefficients.Count - divisor.Coefficients.Count + 1))) }) % divisor);
+        }
+        public static IntegerPolynomial getGCD(IntegerPolynomial a, IntegerPolynomial b)
+        {
+            IntegerPolynomial c;
+            while (b.Coefficients.Count != 0)
+            {
+                c = b;
+                b = a.getPsuedoremainder(b);
+                a = c;
+            }
+            return a;
+        }
+        /*public Dictionary<IntegerPolynomial, int> getFactorization()
+        {
+            Dictionary<IntegerPolynomial, int> squareFreeFactors =
+                new Dictionary<IntegerPolynomial, int>();
+            Polynomial<Integer> derivative = getDerivative();
+            IntegerPolynomial a = getGCD(this, (IntegerPolynomial)derivative);
+            Polynomial<Integer> b = this / a;
+            Polynomial<Integer> c = derivative / a - b.getDerivative();
+            while (!(b.Coefficients.Count == 1 && b.Coefficients[0].Equals(Integer.One)))
+            {
+                a = getGCD((IntegerPolynomial)b, (IntegerPolynomial)c);
+                if (squareFreeFactors.ContainsKey(a))
+                    squareFreeFactors[a] += 1;
+                else
+                    squareFreeFactors.Add(a, 1);
+                b = b / a;
+                c = c / a - b.getDerivative();
+            }
+        }*/
     }
     class Program
     {
@@ -1163,7 +1328,7 @@ namespace Calculator
                 {
                     if (operations[i] == '+')
                     {
-                        numbers[i] = new Integer(1);
+                        numbers[i] = Integer.One;
                         numbers.Insert(i + 1, null);
                         operations[i] = ' ';
                         operations.Insert(i + 1, '*');
@@ -1265,7 +1430,7 @@ namespace Calculator
                                 if (c == 'i')
                                 {
                                     int number = int.Parse(numberCollector.ToString());
-                                    numbers.Add(ComplexNumber.create(new Integer(0),
+                                    numbers.Add(ComplexNumber.create(Integer.Zero,
                                         new Integer(number)));
                                     operations.Add(' ');
                                 }
@@ -1288,7 +1453,7 @@ namespace Calculator
                         }
                         else if (c == 'i')
                         {
-                            numbers.Add(new GaussianInteger(new Integer(0), new Integer(1)));
+                            numbers.Add(ComplexNumber.create(Integer.Zero, Integer.One));
                             operations.Add(' ');
                         }
                         else if (!"()+-*/^".Contains(c.ToString()))
@@ -1312,7 +1477,7 @@ namespace Calculator
                             numbers.Insert(i, null);
                             i += 2;
                         }
-                        else if ((operations[i] == ')' || numbers[i] is GaussianInteger) &&
+                        else if ((operations[i] == ')' || numbers[i] is ComplexNumber) &&
                             i + 1 < operations.Count && (numbers[i + 1] != null ||
                             operations[i + 1] == '('))
                         {
