@@ -27,15 +27,17 @@ namespace Calculator
             if (exponent is Integer)
             {
                 int intExponent = ((Integer)exponent).Value;
-                Number output = Integer.One;
                 if (intExponent < 0)
+                    return exponentiate(exponent).reciprocal();
+                Number output = Integer.One;
+                Number baseToAPowerOfTwo = this;
+                while (intExponent > 0)
                 {
-                    for (int i = 0; i > intExponent; --i)
-                        output = this * output;
-                    return output.reciprocal();
+                    if (intExponent % 2 == 1)
+                        output *= baseToAPowerOfTwo;
+                    baseToAPowerOfTwo *= baseToAPowerOfTwo;
+                    intExponent /= 2;
                 }
-                for (int i = 0; i < intExponent; ++i)
-                    output = this * output;
                 return output;
             }
             Integer exponentIntegerFactor = new Integer(exponent.getGreatestIntegerFactor());
