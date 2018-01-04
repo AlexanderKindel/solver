@@ -188,15 +188,8 @@ namespace Calculator
                     radicandFactors[factor] += 1;
                 else
                     radicandFactors.Add(factor, 1);
-                List<int> exponentDivisors = new List<int>();
-                int divisor = 1;
-                while (divisor <= exponentFraction.Denominator / 2)
-                {
-                    if (exponentFraction.Denominator % divisor == 0)
-                        exponentDivisors.Add(divisor);
-                    ++divisor;
-                }
-                exponentDivisors.Add(exponentFraction.Denominator);
+                List<int> exponentDivisors =
+                    new Integer(exponentFraction.Denominator).getDivisors();               
                 Dictionary<int, Number> termComponents = new Dictionary<int, Number>();
                 termComponents.Add(1, One);
                 termComponents.Add(exponentFraction.Denominator, One);
@@ -296,6 +289,20 @@ namespace Calculator
         public static int getLCM(int x, int y)
         {
             return x / getGCD(x, y) * y;
+        }
+        public List<int>getDivisors()
+        {
+            int x = Value;
+            List<int> divisors = new List<int>();
+            int divisor = 1;
+            while (divisor <= x / 2)
+            {
+                if (x % divisor == 0)
+                    divisors.Add(divisor);
+                ++divisor;
+            }
+            divisors.Add(x);
+            return divisors;
         }
     }
     class Fraction : Rational
@@ -1004,6 +1011,8 @@ namespace Calculator
                 }
             IntegerPolynomial annullingPolynomial =
                 IntegerPolynomial.getPrimitivePart(augmentation[0]);
+            Dictionary<IntegerPolynomial, int> factorization =
+                annullingPolynomial.getFactorization();
         }
         public override bool isAlgebraic()
         {
@@ -1157,7 +1166,7 @@ namespace Calculator
             return output.ToString();
         }
     }
-    class Polynomial<T> where T : Number
+    class Polynomial<T> : IComparable where T : Number
     {
         //The index of the coefficient represents the degree of its term.
         public List<T> Coefficients { get; }
@@ -1223,13 +1232,34 @@ namespace Calculator
                 }
             return new Polynomial<T>(remainder);
         }
+        public T evaluateAt(T input)
+        {
+            T output = Coefficients[0];
+            for (int i = 1; i < Coefficients.Count; ++i)
+                output = (T)(output + Coefficients[i] * input.exponentiate(new Integer(i)));
+            return output;
+        }
         public Polynomial<T> getDerivative()
         {
             List<T> derivativeCoefficients = new List<T>();
             for (int i = 1; i < Coefficients.Count; ++i)
                 derivativeCoefficients.Add((T)(Coefficients[i] * new Integer(i)));
             return new Polynomial<T>(derivativeCoefficients);
-        }                
+        }
+        public virtual int CompareTo(object obj)
+        {
+            Polynomial<T> polynomial = (Polynomial<T>)obj;
+            int comparison = Coefficients.Count - polynomial.Coefficients.Count;
+            if (comparison != 0)
+                return comparison;
+            for(int i=0;i<Coefficients.Count;++i)
+            {
+                comparison = Coefficients[i].CompareTo(polynomial.Coefficients[i]);
+                if (comparison != 0)
+                    return comparison;
+            }
+            return 0;
+        }
     }
     class NumberPolynomial : Polynomial<Number>
     {
@@ -1268,9 +1298,9 @@ namespace Calculator
             }
             return a;
         }
-        /*public Dictionary<IntegerPolynomial, int> getFactorization()
+        public Dictionary<IntegerPolynomial, int> getFactorization()
         {
-            Dictionary<IntegerPolynomial, int> squareFreeFactors =
+            Dictionary<IntegerPolynomial, int> factors =
                 new Dictionary<IntegerPolynomial, int>();
             Polynomial<Integer> derivative = getDerivative();
             IntegerPolynomial a = getGCD(this, (IntegerPolynomial)derivative);
@@ -1279,14 +1309,102 @@ namespace Calculator
             while (!(b.Coefficients.Count == 1 && b.Coefficients[0].Equals(Integer.One)))
             {
                 a = getGCD((IntegerPolynomial)b, (IntegerPolynomial)c);
-                if (squareFreeFactors.ContainsKey(a))
-                    squareFreeFactors[a] += 1;
+                if (factors.ContainsKey(a))
+                    factors[a] += 1;
                 else
-                    squareFreeFactors.Add(a, 1);
+                    factors.Add(a, 1);
                 b = b / a;
                 c = c / a - b.getDerivative();
             }
-        }*/
+            Dictionary<IntegerPolynomial, int> irreducibleFactors =
+                new Dictionary<IntegerPolynomial, int>();
+            void attemptFactorization()
+            {
+                foreach (IntegerPolynomial factor in factors.Keys)
+                {
+                    for (int i = 1; i < (factor.Coefficients.Count + 1) / 2; ++i) 
+                    {
+                        List<Integer> outputValues = new List<Integer>();
+                        List<List<int>> outputValueDivisors = new List<List<int>>();
+                        outputValues.Add(evaluateAt(new Integer(0)));
+                        outputValueDivisors.Add(outputValues[0].getDivisors());
+                        for (int j = 1; j <= i; ++j)
+                        {
+                            outputValues.Add(evaluateAt(new Integer(j)));
+                            outputValueDivisors.Add(outputValues[j].getDivisors());
+                            int numberOfPositiveDivisors = outputValueDivisors[j].Count;
+                            for (int k = 0; k < numberOfPositiveDivisors; ++k)
+                                outputValueDivisors[j].Add(-outputValueDivisors[j][k]);
+                        }
+                        List<List<int>> outputCombinations = new List<List<int>>();
+                        void generateAllCombinations(int outputValueIndex, List<int> combination)
+                        {
+                            if (outputValueIndex < outputValueDivisors.Count)
+                                foreach (int divisor in outputValueDivisors[outputValueIndex])
+                                {
+                                    List<int> enlargedCombination = combination;
+                                    enlargedCombination.Add(divisor);
+                                    generateAllCombinations(outputValueIndex + 1,
+                                        enlargedCombination);
+                                }
+                            else
+                                outputCombinations.Add(combination);
+                        }
+                        generateAllCombinations(0, new List<int>());
+                        foreach (List<int> combination in outputCombinations)
+                        {
+                            IntegerPolynomial factorCandidate =
+                                new IntegerPolynomial(new List<Integer> { Integer.Zero });
+                            for (int j = 0; j < outputValueDivisors.Count; ++j)
+                            {
+                                IntegerPolynomial numerator =
+                                    new IntegerPolynomial(new List<Integer> { outputValues[j] });
+                                int denominator = 1;
+                                for (int k = 0; k < outputValueDivisors.Count; ++k)
+                                    if (k != j)
+                                    {
+                                        numerator = (IntegerPolynomial)(numerator *
+                                            new IntegerPolynomial(new List<Integer> {
+                                            new Integer(-k), Integer.One }));
+                                        denominator *= j - k;
+                                    }
+                                List<Integer> basisPolynomialCoefficients = new List<Integer>();
+                                foreach (Integer coefficient in numerator.Coefficients)
+                                    basisPolynomialCoefficients.Add(
+                                        new Integer(coefficient.Value / denominator));
+                                factorCandidate = (IntegerPolynomial)(factorCandidate +
+                                    new IntegerPolynomial(basisPolynomialCoefficients));
+                            }
+                            if (factor.getPsuedoremainder(factorCandidate).Coefficients.Count == 0)
+                            {
+                                int multiplicity = factors[factor];
+                                if (irreducibleFactors.ContainsKey(factorCandidate))
+                                    irreducibleFactors[factorCandidate] += multiplicity;
+                                else
+                                    irreducibleFactors.Add(factorCandidate, multiplicity);
+                                factors.Remove(factor);
+                                IntegerPolynomial reducedFactor =
+                                    (IntegerPolynomial)(factor / factorCandidate);
+                                if (factors.ContainsKey(reducedFactor))
+                                    factors[reducedFactor] += multiplicity;
+                                else
+                                    factors.Add(reducedFactor, multiplicity);
+                                return;
+                            }
+                        }                        
+                    }
+                    if (irreducibleFactors.ContainsKey(factor))
+                        irreducibleFactors[factor] += factors[factor];
+                    else
+                        irreducibleFactors.Add(factor, factors[factor]);
+                    factors.Remove(factor);
+                    return;
+                }
+            }
+            while (factors.Count > 0)
+                attemptFactorization();
+            return irreducibleFactors;
+        }        
     }
     class Program
     {
