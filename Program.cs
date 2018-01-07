@@ -943,13 +943,14 @@ namespace Calculator
         }
         public override Number reciprocal()
         {
-            //if (!isAlgebraic())
+            if (!isAlgebraic())
                 return new Transcendental(this, new Integer(-1));
             List<Number> spanningSet = new List<Number> { Integer.One };
             List<List<Number>> matrix =
                 new List<List<Number>> { new List<Number> { Integer.Zero } };
             List<Rational> augmentationRow = new List<Rational> { Integer.Zero, Integer.One };
-            List<List<Rational>> augmentation = new List<List<Rational>> { augmentationRow };            
+            List<List<Rational>> augmentation =
+                new List<List<Rational>> { new List<Rational>(augmentationRow) };            
             void incorporateSpanElement(Number n)
             {
                 if (n is Rational)
@@ -978,10 +979,14 @@ namespace Calculator
                     }
                 spanningSet.Add(spanComponent);
                 for (int i = 1; i < matrix.Count - 1; ++i)
+                {
                     matrix[i].Add(Integer.Zero);
+                    augmentation[i].Add(Integer.Zero);
+                }
                 matrix[matrix.Count - 1].Add(coefficient);
+                augmentation[augmentation.Count - 1].Add(Integer.Zero);
                 augmentationRow.Insert(0, Integer.Zero);
-                augmentation.Add(augmentationRow);
+                augmentation.Add(new List<Rational>(augmentationRow));
             }
             foreach (Term term in Terms)
                 incorporateSpanElement(term);
@@ -998,21 +1003,23 @@ namespace Calculator
                         incorporateSpanElement(term);
                 else
                     incorporateSpanElement((Term)powers[i]);
-            }
+            }            
             for (int i = matrix.Count - 2; i >= 0; --i)
                 if (matrix[i][i + 1] != Integer.Zero)
                 {
                     Number scalar = (matrix[i][i + 1] / matrix[i + 1][i + 1]);
-                    for (int j = 0; j <= i + 1; ++i)
+                    for (int j = 0; j <= i + 1; ++j)
                         matrix[i][j] -= matrix[i + 1][j] * scalar;
                     for (int j = 0; j < augmentation[i].Count; ++j)
                         augmentation[i][j] =
                             (Rational)(augmentation[i][j] - augmentation[i + 1][j] * scalar);
                 }
-            IntegerPolynomial annullingPolynomial =
+            augmentation[0][0] = (Rational)(matrix[0][0].negative());
+            Polynomial<Integer> annullingPolynomial =
                 IntegerPolynomial.getPrimitivePart(augmentation[0]);
-            Dictionary<IntegerPolynomial, int> factorization =
+            Dictionary<Polynomial<Integer>, int> factorization =
                 annullingPolynomial.getFactorization();
+            return new Transcendental(this, new Integer(-1));//placeholder
         }
         public override bool isAlgebraic()
         {
@@ -1170,7 +1177,7 @@ namespace Calculator
     {
         //The index of the coefficient represents the degree of its term.
         public List<T> Coefficients { get; }
-        protected Polynomial(List<T> coefficients)
+        public Polynomial(List<T> coefficients)
         {
             while (coefficients.Count != 0 &&
                 coefficients[coefficients.Count - 1].Equals(Integer.Zero))
@@ -1259,18 +1266,11 @@ namespace Calculator
                     return comparison;
             }
             return 0;
-        }
+        }        
     }
-    class NumberPolynomial : Polynomial<Number>
+    static class IntegerPolynomial
     {
-        public NumberPolynomial(List<Number> coefficients) : base(coefficients)
-        { }        
-    }
-    class IntegerPolynomial : Polynomial<Integer>
-    {
-        public IntegerPolynomial(List<Integer> coefficients) : base(coefficients)
-        { }
-        public static IntegerPolynomial getPrimitivePart(List<Rational> coefficients)
+        public static Polynomial<Integer> getPrimitivePart(List<Rational> coefficients)
         {
             int LCM = 1;
             foreach (Rational rational in coefficients)
@@ -1278,18 +1278,19 @@ namespace Calculator
             Integer LCMinteger = new Integer(LCM);
             List<Integer> integerCoefficients = new List<Integer>();
             foreach (Rational rational in coefficients)
-                integerCoefficients.Add((Integer)(rational / LCMinteger));
-            return new IntegerPolynomial(integerCoefficients);
+                integerCoefficients.Add((Integer)(rational * LCMinteger));
+            return new Polynomial<Integer>(integerCoefficients);
         }
-        public IntegerPolynomial getPsuedoremainder(IntegerPolynomial divisor)
+        public static Polynomial<Integer> getPsuedoremainder(
+            this Polynomial<Integer> polynomial, Polynomial<Integer> divisor)
         {
-            return (IntegerPolynomial)(this * new IntegerPolynomial(
-                new List<Integer> {(Integer)(divisor.Coefficients[0].exponentiate(
-                new Integer(Coefficients.Count - divisor.Coefficients.Count + 1))) }) % divisor);
+            return polynomial * new Polynomial<Integer>(new List<Integer> {
+                (Integer)(divisor.Coefficients[0].exponentiate(new Integer(
+                polynomial.Coefficients.Count - divisor.Coefficients.Count + 1))) }) % divisor;
         }
-        public static IntegerPolynomial getGCD(IntegerPolynomial a, IntegerPolynomial b)
+        public static Polynomial<Integer> getGCD(Polynomial<Integer> a, Polynomial<Integer> b)
         {
-            IntegerPolynomial c;
+            Polynomial<Integer> c;
             while (b.Coefficients.Count != 0)
             {
                 c = b;
@@ -1298,17 +1299,18 @@ namespace Calculator
             }
             return a;
         }
-        public Dictionary<IntegerPolynomial, int> getFactorization()
+        public static Dictionary<Polynomial<Integer>, int> getFactorization(
+            this Polynomial<Integer> polynomial)
         {
-            Dictionary<IntegerPolynomial, int> factors =
-                new Dictionary<IntegerPolynomial, int>();
-            Polynomial<Integer> derivative = getDerivative();
-            IntegerPolynomial a = getGCD(this, (IntegerPolynomial)derivative);
-            Polynomial<Integer> b = this / a;
+            Dictionary<Polynomial<Integer>, int> factors =
+                new Dictionary<Polynomial<Integer>, int>();
+            Polynomial<Integer> derivative = polynomial.getDerivative();
+            Polynomial<Integer> a = getGCD(polynomial, derivative);
+            Polynomial<Integer> b = polynomial / a;
             Polynomial<Integer> c = derivative / a - b.getDerivative();
             while (!(b.Coefficients.Count == 1 && b.Coefficients[0].Equals(Integer.One)))
             {
-                a = getGCD((IntegerPolynomial)b, (IntegerPolynomial)c);
+                a = getGCD(b, c);
                 if (factors.ContainsKey(a))
                     factors[a] += 1;
                 else
@@ -1316,21 +1318,21 @@ namespace Calculator
                 b = b / a;
                 c = c / a - b.getDerivative();
             }
-            Dictionary<IntegerPolynomial, int> irreducibleFactors =
-                new Dictionary<IntegerPolynomial, int>();
+            Dictionary<Polynomial<Integer>, int> irreducibleFactors =
+                new Dictionary<Polynomial<Integer>, int>();
             void attemptFactorization()
             {
-                foreach (IntegerPolynomial factor in factors.Keys)
+                foreach (Polynomial<Integer> factor in factors.Keys)
                 {
                     for (int i = 1; i < (factor.Coefficients.Count + 1) / 2; ++i) 
                     {
                         List<Integer> outputValues = new List<Integer>();
                         List<List<int>> outputValueDivisors = new List<List<int>>();
-                        outputValues.Add(evaluateAt(new Integer(0)));
+                        outputValues.Add(polynomial.evaluateAt(new Integer(0)));
                         outputValueDivisors.Add(outputValues[0].getDivisors());
                         for (int j = 1; j <= i; ++j)
                         {
-                            outputValues.Add(evaluateAt(new Integer(j)));
+                            outputValues.Add(polynomial.evaluateAt(new Integer(j)));
                             outputValueDivisors.Add(outputValues[j].getDivisors());
                             int numberOfPositiveDivisors = outputValueDivisors[j].Count;
                             for (int k = 0; k < numberOfPositiveDivisors; ++k)
@@ -1353,27 +1355,26 @@ namespace Calculator
                         generateAllCombinations(0, new List<int>());
                         foreach (List<int> combination in outputCombinations)
                         {
-                            IntegerPolynomial factorCandidate =
-                                new IntegerPolynomial(new List<Integer> { Integer.Zero });
+                            Polynomial<Integer> factorCandidate =
+                                new Polynomial<Integer>(new List<Integer> { Integer.Zero });
                             for (int j = 0; j < outputValueDivisors.Count; ++j)
                             {
-                                IntegerPolynomial numerator =
-                                    new IntegerPolynomial(new List<Integer> { outputValues[j] });
+                                Polynomial<Integer> numerator =
+                                    new Polynomial<Integer>(new List<Integer> { outputValues[j] });
                                 int denominator = 1;
                                 for (int k = 0; k < outputValueDivisors.Count; ++k)
                                     if (k != j)
                                     {
-                                        numerator = (IntegerPolynomial)(numerator *
-                                            new IntegerPolynomial(new List<Integer> {
-                                            new Integer(-k), Integer.One }));
+                                        numerator = numerator * new Polynomial<Integer>(
+                                            new List<Integer> { new Integer(-k), Integer.One });
                                         denominator *= j - k;
                                     }
                                 List<Integer> basisPolynomialCoefficients = new List<Integer>();
                                 foreach (Integer coefficient in numerator.Coefficients)
                                     basisPolynomialCoefficients.Add(
                                         new Integer(coefficient.Value / denominator));
-                                factorCandidate = (IntegerPolynomial)(factorCandidate +
-                                    new IntegerPolynomial(basisPolynomialCoefficients));
+                                factorCandidate = factorCandidate +
+                                    new Polynomial<Integer>(basisPolynomialCoefficients);
                             }
                             if (factor.getPsuedoremainder(factorCandidate).Coefficients.Count == 0)
                             {
@@ -1383,8 +1384,7 @@ namespace Calculator
                                 else
                                     irreducibleFactors.Add(factorCandidate, multiplicity);
                                 factors.Remove(factor);
-                                IntegerPolynomial reducedFactor =
-                                    (IntegerPolynomial)(factor / factorCandidate);
+                                Polynomial<Integer> reducedFactor = factor / factorCandidate;
                                 if (factors.ContainsKey(reducedFactor))
                                     factors[reducedFactor] += multiplicity;
                                 else
