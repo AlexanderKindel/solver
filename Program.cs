@@ -323,8 +323,8 @@ namespace Calculator
             denominator /= GCD;
             if (denominator < 0)
             {
-                numerator *= 1;
-                denominator *= 1;
+                numerator *= -1;
+                denominator *= -1;
             }
             if (denominator == 1)
                 return new Integer(numerator);
@@ -1015,8 +1015,15 @@ namespace Calculator
                             (Rational)(augmentation[i][j] - augmentation[i + 1][j] * scalar);
                 }
             augmentation[0][0] = (Rational)(matrix[0][0].negative());
+            int LCM = 1;
+            foreach (Rational rational in augmentation[0])
+                LCM = Integer.getLCM(LCM, rational.getDenominatorLCM());
+            Integer LCMinteger = new Integer(LCM);
+            List<Integer> integerCoefficients = new List<Integer>();
+            foreach (Rational rational in augmentation[0])
+                integerCoefficients.Add((Integer)(rational * LCMinteger));
             Polynomial<Integer> annullingPolynomial =
-                IntegerPolynomial.getPrimitivePart(augmentation[0]);
+                new Polynomial<Integer>(integerCoefficients).getPrimitivePart();
             Dictionary<Polynomial<Integer>, int> factorization =
                 annullingPolynomial.getFactorization();
             return new Transcendental(this, new Integer(-1));//placeholder
@@ -1225,17 +1232,17 @@ namespace Calculator
         }
         public static Polynomial<T> operator %(Polynomial<T> a, Polynomial<T> b)
         {
-            List<T> remainder = a.Coefficients;
+            List<T> remainder = new List<T>(a.Coefficients);
             T scalar;
             if (b.Coefficients.Count <= a.Coefficients.Count)
-                for (int i = 1; i <= b.Coefficients.Count; ++i)
+                for (int i = 0; i < b.Coefficients.Count; ++i)
                 {
-                    scalar = (T)(a.Coefficients[a.Coefficients.Count - i] /
-                        b.Coefficients[b.Coefficients.Count - i]);
+                    scalar = (T)(remainder[remainder.Count - 1] /
+                        b.Coefficients[b.Coefficients.Count - 1]);
                     remainder.RemoveAt(remainder.Count - 1);
-                    for (int j = 1; j < b.Coefficients.Count - 1; ++j)
-                        remainder[remainder.Count - i] = (T)(remainder[remainder.Count - i] -
-                            scalar * b.Coefficients[b.Coefficients.Count - i - 1]);
+                    for (int j = 1; j < b.Coefficients.Count; ++j)
+                        remainder[remainder.Count - j] = (T)(remainder[remainder.Count - j] -
+                            scalar * b.Coefficients[b.Coefficients.Count - j - 1]);
                 }
             return new Polynomial<T>(remainder);
         }
@@ -1266,38 +1273,52 @@ namespace Calculator
                     return comparison;
             }
             return 0;
-        }        
+        }
     }
     static class IntegerPolynomial
     {
-        public static Polynomial<Integer> getPrimitivePart(List<Rational> coefficients)
+        public static int getContent(this Polynomial<Integer> polynomial)
         {
-            int LCM = 1;
-            foreach (Rational rational in coefficients)
-                LCM = Integer.getLCM(LCM, rational.getDenominatorLCM());
-            Integer LCMinteger = new Integer(LCM);
-            List<Integer> integerCoefficients = new List<Integer>();
-            foreach (Rational rational in coefficients)
-                integerCoefficients.Add((Integer)(rational * LCMinteger));
-            return new Polynomial<Integer>(integerCoefficients);
+            int GCD = polynomial.Coefficients[0].Value;
+            for (int i = 1; i < polynomial.Coefficients.Count; ++i)
+                GCD = Integer.getGCD(GCD, polynomial.Coefficients[i].Value);
+            return GCD;
         }
+        public static Polynomial<Integer> getPrimitivePart(this Polynomial<Integer> polynomial)
+        {
+            Integer GCDinteger = new Integer(getContent(polynomial));
+            List<Integer> reducedCoefficients = new List<Integer>();
+            foreach (Integer integer in polynomial.Coefficients)
+                reducedCoefficients.Add((Integer)(integer / GCDinteger));
+            return new Polynomial<Integer>(reducedCoefficients);
+        }        
         public static Polynomial<Integer> getPsuedoremainder(
             this Polynomial<Integer> polynomial, Polynomial<Integer> divisor)
         {
-            return polynomial * new Polynomial<Integer>(new List<Integer> {
-                (Integer)(divisor.Coefficients[0].exponentiate(new Integer(
-                polynomial.Coefficients.Count - divisor.Coefficients.Count + 1))) }) % divisor;
+            return (polynomial * new Polynomial<Integer>(new List<Integer> {(Integer)(
+                divisor.Coefficients[divisor.Coefficients.Count - 1].exponentiate(new Integer(
+                polynomial.Coefficients.Count - divisor.Coefficients.Count + 1))) })) % divisor;
         }
         public static Polynomial<Integer> getGCD(Polynomial<Integer> a, Polynomial<Integer> b)
         {
-            Polynomial<Integer> c;
-            while (b.Coefficients.Count != 0)
+            Integer c = new Integer(-1);
+            Integer d = new Integer(a.Coefficients.Count - b.Coefficients.Count);
+            Polynomial<Integer> polynomial1 = b;
+            Polynomial<Integer> polynomial2 = getPsuedoremainder(a, b) / new Polynomial<Integer>(
+                new List<Integer> {(Integer)(c.exponentiate(d + Integer.One)) });
+            while (polynomial2.Coefficients.Count != 0)
             {
-                c = b;
-                b = a.getPsuedoremainder(b);
-                a = c;
+                c = (Integer)(polynomial2.Coefficients[polynomial2.Coefficients.Count - 1].
+                    negative().exponentiate(d) / c.exponentiate(d - Integer.One));
+                d = new Integer(polynomial1.Coefficients.Count - polynomial2.Coefficients.Count);
+                Polynomial<Integer> polynomial3 = getPsuedoremainder(polynomial1, polynomial2) /
+                    new Polynomial<Integer>(new List<Integer> { (Integer)(polynomial1.Coefficients[
+                    polynomial1.Coefficients.Count - 1].negative() * c.exponentiate(d)) });
+                polynomial1 = polynomial2;
+                polynomial2 = polynomial3;
             }
-            return a;
+            return polynomial1.getPrimitivePart() * new Polynomial<Integer>(
+                new List<Integer> { new Integer(Integer.getGCD(a.getContent(), b.getContent())) });
         }
         public static Dictionary<Polynomial<Integer>, int> getFactorization(
             this Polynomial<Integer> polynomial)
