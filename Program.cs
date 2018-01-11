@@ -978,15 +978,9 @@ namespace Calculator
                         return;
                     }
                 spanningSet.Add(spanComponent);
-                for (int i = 1; i < matrix.Count - 1; ++i)
-                {
+                for (int i = 0; i < matrix.Count - 1; ++i)                
                     matrix[i].Add(Integer.Zero);
-                    augmentation[i].Add(Integer.Zero);
-                }
                 matrix[matrix.Count - 1].Add(coefficient);
-                augmentation[augmentation.Count - 1].Add(Integer.Zero);
-                augmentationRow.Insert(0, Integer.Zero);
-                augmentation.Add(new List<Rational>(augmentationRow));
             }
             foreach (Term term in Terms)
                 incorporateSpanElement(term);
@@ -998,29 +992,49 @@ namespace Calculator
                 for (int j = 0; j < matrix[0].Count; ++j)
                     matrixRow.Add(Integer.Zero);
                 matrix.Add(matrixRow);
+                for (int j = 0; j < augmentation.Count; ++j)
+                    augmentation[j].Add(Integer.Zero);
+                augmentationRow.Insert(0, Integer.Zero);
+                augmentation.Add(new List<Rational>(augmentationRow));
                 if (powers[i] is Sum)
                     foreach (Term term in ((Sum)powers[i]).Terms)
                         incorporateSpanElement(term);
                 else
                     incorporateSpanElement((Term)powers[i]);
-            }            
-            for (int i = matrix.Count - 2; i >= 0; --i)
-                if (matrix[i][i + 1] != Integer.Zero)
+            }
+            List<int> possiblePivotRows = new List<int>();
+            for (int i = matrix.Count - 1; i >= 0; --i)
+                possiblePivotRows.Add(i); 
+            for (int i = matrix.Count - 1; i > 0; --i)
+            {
+                int ithColumnPivotRowIndex = 0;
+                foreach(int j in possiblePivotRows)
+                    if (!matrix[j][i].Equals(Integer.Zero))
+                    {
+                        ithColumnPivotRowIndex = j;
+                        possiblePivotRows.Remove(j);
+                        break;
+                    }
+                for (int j = ithColumnPivotRowIndex; j > 0; --j) 
                 {
-                    Number scalar = (matrix[i][i + 1] / matrix[i + 1][i + 1]);
-                    for (int j = 0; j <= i + 1; ++j)
-                        matrix[i][j] -= matrix[i + 1][j] * scalar;
-                    for (int j = 0; j < augmentation[i].Count; ++j)
-                        augmentation[i][j] =
-                            (Rational)(augmentation[i][j] - augmentation[i + 1][j] * scalar);
+                    Number scalar = matrix[j - 1][i] / matrix[ithColumnPivotRowIndex][i];
+                    matrix[j - 1][i] = Integer.Zero;
+                    for (int k = i - 1; k >= 0; --k) 
+                        matrix[j - 1][k] -= scalar * matrix[ithColumnPivotRowIndex][k];
+                    for (int k = 0; k < augmentation[j - 1].Count; ++k)
+                        augmentation[j - 1][k] = (Rational)(augmentation[j - 1][k] -
+                            scalar * augmentation[ithColumnPivotRowIndex][k]);
                 }
-            augmentation[0][0] = (Rational)(matrix[0][0].negative());
+            }
+            int constantCombinationRowIndex = possiblePivotRows[0];
+            augmentation[constantCombinationRowIndex][0] =
+                (Rational)(matrix[constantCombinationRowIndex][0].negative());
             int LCM = 1;
-            foreach (Rational rational in augmentation[0])
+            foreach (Rational rational in augmentation[constantCombinationRowIndex])
                 LCM = Integer.getLCM(LCM, rational.getDenominatorLCM());
             Integer LCMinteger = new Integer(LCM);
             List<Integer> integerCoefficients = new List<Integer>();
-            foreach (Rational rational in augmentation[0])
+            foreach (Rational rational in augmentation[constantCombinationRowIndex])
                 integerCoefficients.Add((Integer)(rational * LCMinteger));
             Polynomial<Integer> annullingPolynomial =
                 new Polynomial<Integer>(integerCoefficients).getPrimitivePart();
@@ -1274,6 +1288,15 @@ namespace Calculator
             }
             return 0;
         }
+#if DEBUG
+        public override string ToString()
+        {
+            StringBuilder output = new StringBuilder();
+            foreach (T coefficient in Coefficients)
+                output.Append(coefficient.ToString() + ',');
+            return output.ToString();
+        }
+#endif
     }
     static class IntegerPolynomial
     {
@@ -1329,7 +1352,9 @@ namespace Calculator
             Polynomial<Integer> a = getGCD(polynomial, derivative);
             Polynomial<Integer> b = polynomial / a;
             Polynomial<Integer> c = derivative / a - b.getDerivative();
-            while (!(b.Coefficients.Count == 1 && b.Coefficients[0].Equals(Integer.One)))
+            factors.Add(b, 1);
+            while (!(b.Coefficients.Count == 1 && (b.Coefficients[0].Equals(Integer.One)
+                || b.Coefficients[0].Equals(new Integer(-1))))) 
             {
                 a = getGCD(b, c);
                 if (factors.ContainsKey(a))
