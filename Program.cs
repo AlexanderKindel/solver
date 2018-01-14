@@ -946,7 +946,7 @@ namespace Calculator
             if (!isAlgebraic())
                 return new Transcendental(this, new Integer(-1));
             List<Number> spanningSet = new List<Number> { Integer.One };
-            List<List<Number>> matrix =
+            List<List<Number>> basisDecompositionOfPowers =
                 new List<List<Number>> { new List<Number> { Integer.Zero } };
             List<Rational> augmentationRow = new List<Rational> { Integer.Zero, Integer.One };
             List<List<Rational>> augmentation =
@@ -955,7 +955,7 @@ namespace Calculator
             {
                 if (n is Rational)
                 {
-                    matrix[matrix.Count - 1][0] = n;
+                    basisDecompositionOfPowers[basisDecompositionOfPowers.Count - 1][0] = n;
                     return;
                 }
                 Number spanComponent;
@@ -973,14 +973,15 @@ namespace Calculator
                 }
                 for (int i = 0; i < spanningSet.Count; ++i)
                     if (spanningSet[i].Equals(spanComponent))
-                    { 
-                        matrix[matrix.Count - 1][i] = coefficient;
+                    {
+                        basisDecompositionOfPowers[basisDecompositionOfPowers.Count - 1][i] =
+                            coefficient;
                         return;
                     }
                 spanningSet.Add(spanComponent);
-                for (int i = 0; i < matrix.Count - 1; ++i)                
-                    matrix[i].Add(Integer.Zero);
-                matrix[matrix.Count - 1].Add(coefficient);
+                for (int i = 0; i < basisDecompositionOfPowers.Count - 1; ++i)
+                    basisDecompositionOfPowers[i].Add(Integer.Zero);
+                basisDecompositionOfPowers[basisDecompositionOfPowers.Count - 1].Add(coefficient);
             }
             foreach (Term term in Terms)
                 incorporateSpanElement(term);
@@ -988,10 +989,10 @@ namespace Calculator
             for (int i = 1; i < spanningSet.Count; ++i)
             {
                 powers.Add(powers[i - 1] * this);
-                List<Number> matrixRow = new List<Number>();
-                for (int j = 0; j < matrix[0].Count; ++j)
-                    matrixRow.Add(Integer.Zero);
-                matrix.Add(matrixRow);
+                List<Number> basisDecompositionRow = new List<Number>();
+                for (int j = 0; j < basisDecompositionOfPowers[0].Count; ++j)
+                    basisDecompositionRow.Add(Integer.Zero);
+                basisDecompositionOfPowers.Add(basisDecompositionRow);
                 for (int j = 0; j < augmentation.Count; ++j)
                     augmentation[j].Add(Integer.Zero);
                 augmentationRow.Insert(0, Integer.Zero);
@@ -1002,6 +1003,9 @@ namespace Calculator
                 else
                     incorporateSpanElement((Term)powers[i]);
             }
+            List<List<Number>> matrix = new List<List<Number>>();
+            foreach (List<Number> list in basisDecompositionOfPowers)
+                matrix.Add(new List<Number>(list));
             List<int> possiblePivotRows = new List<int>();
             for (int i = matrix.Count - 1; i >= 0; --i)
                 possiblePivotRows.Add(i); 
@@ -1038,8 +1042,18 @@ namespace Calculator
                 integerCoefficients.Add((Integer)(rational * LCMinteger));
             Polynomial<Integer> annullingPolynomial =
                 new Polynomial<Integer>(integerCoefficients).getPrimitivePart();
-            Dictionary<Polynomial<Integer>, int> factorization =
-                annullingPolynomial.getFactorization();
+            List<Polynomial<Integer>> factors = annullingPolynomial.getFactors();
+            Polynomial<Number> minimalPolynomial;
+            foreach (Polynomial<Integer> factor in factors)
+            {
+                minimalPolynomial =
+                    new Polynomial<Number>(new List<Number> { factor.Coefficients[0] });
+                for (int i = 1; i < factor.Coefficients.Count; ++i)
+                    minimalPolynomial += factor.Coefficients[i] *
+                        new Polynomial<Number>(basisDecompositionOfPowers[i - 1]);
+                if (minimalPolynomial.Coefficients.Count == 0)
+                    break;
+            }
             return new Transcendental(this, new Integer(-1));//placeholder
         }
         public override bool isAlgebraic()
@@ -1235,6 +1249,14 @@ namespace Calculator
                     output[i + j] = (T)(output[i + j] + a.Coefficients[i] * b.Coefficients[j]);
             return new Polynomial<T>(output);
         }
+        public static Polynomial<T> operator *(T a, Polynomial<T> b)
+        {
+            return new Polynomial<T>(new List<T> { a }) * b;
+        }
+        public static Polynomial<T> operator *(Polynomial<T> a, T b)
+        {
+            return b * a;
+        }
         struct Division
         {
             public Polynomial<T> Quotient;
@@ -1327,9 +1349,9 @@ namespace Calculator
         public static Polynomial<Integer> getPsuedoremainder(
             this Polynomial<Integer> polynomial, Polynomial<Integer> divisor)
         {
-            return (polynomial * new Polynomial<Integer>(new List<Integer> {(Integer)(
-                divisor.Coefficients[divisor.Coefficients.Count - 1].exponentiate(new Integer(
-                polynomial.Coefficients.Count - divisor.Coefficients.Count + 1))) })) % divisor;
+            return ((Integer)(divisor.Coefficients[divisor.Coefficients.Count - 1].exponentiate(
+                new Integer(polynomial.Coefficients.Count - divisor.Coefficients.Count + 1))) *
+                polynomial) % divisor;
         }
         public static Polynomial<Integer> getGCD(Polynomial<Integer> a, Polynomial<Integer> b)
         {
@@ -1342,11 +1364,9 @@ namespace Calculator
             }
             return a;
         }
-        public static Dictionary<Polynomial<Integer>, int> getFactorization(
-            this Polynomial<Integer> polynomial)
+        public static List<Polynomial<Integer>> getFactors(this Polynomial<Integer> polynomial)
         {
-            Dictionary<Polynomial<Integer>, int> factors =
-                new Dictionary<Polynomial<Integer>, int>();
+            List<Polynomial<Integer>> factors = new List<Polynomial<Integer>>();
             Polynomial<Integer> derivative = polynomial.getDerivative();
             Polynomial<Integer> a = getGCD(polynomial, derivative);
             Polynomial<Integer> b = polynomial / a;
@@ -1355,18 +1375,15 @@ namespace Calculator
                 || b.Coefficients[0].Equals(new Integer(-1))))) 
             {
                 a = getGCD(b, c);
-                if (factors.ContainsKey(a))
-                    factors[a] += 1;
-                else
-                    factors.Add(a, 1);
+                if (!factors.Contains(a))
+                    factors.Add(a);
                 b = b / a;
                 c = c / a - b.getDerivative();
             }
-            Dictionary<Polynomial<Integer>, int> irreducibleFactors =
-                new Dictionary<Polynomial<Integer>, int>();
+            List<Polynomial<Integer>> irreducibleFactors = new List<Polynomial<Integer>>();
             void attemptFactorization()
             {
-                foreach (Polynomial<Integer> factor in factors.Keys)
+                foreach (Polynomial<Integer> factor in factors)
                 {
                     for (int i = 1; i < (factor.Coefficients.Count + 1) / 2; ++i) 
                     {
@@ -1400,7 +1417,7 @@ namespace Calculator
                         foreach (List<int> combination in outputCombinations)
                         {
                             Polynomial<Integer> factorCandidate =
-                                new Polynomial<Integer>(new List<Integer> { Integer.Zero });
+                                new Polynomial<Integer>(new List<Integer>());
                             for (int j = 0; j < outputValueDivisors.Count; ++j)
                             {
                                 Polynomial<Integer> numerator =
@@ -1422,31 +1439,25 @@ namespace Calculator
                             }
                             if (factor.getPsuedoremainder(factorCandidate).Coefficients.Count == 0)
                             {
-                                int multiplicity = factors[factor];
-                                if (irreducibleFactors.ContainsKey(factorCandidate))
-                                    irreducibleFactors[factorCandidate] += multiplicity;
-                                else
-                                    irreducibleFactors.Add(factorCandidate, multiplicity);
+                                if (!irreducibleFactors.Contains(factorCandidate))
+                                    irreducibleFactors.Add(factorCandidate);
                                 factors.Remove(factor);
                                 Polynomial<Integer> reducedFactor = factor / factorCandidate;
-                                if (factors.ContainsKey(reducedFactor))
-                                    factors[reducedFactor] += multiplicity;
-                                else
-                                    factors.Add(reducedFactor, multiplicity);
+                                if (!factors.Contains(reducedFactor))
+                                    factors.Add(reducedFactor);
                                 return;
                             }
                         }                        
                     }
-                    if (irreducibleFactors.ContainsKey(factor))
-                        irreducibleFactors[factor] += factors[factor];
-                    else
-                        irreducibleFactors.Add(factor, factors[factor]);
+                    if (!irreducibleFactors.Contains(factor))
+                        irreducibleFactors.Add(factor);
                     factors.Remove(factor);
                     return;
                 }
             }
             while (factors.Count > 0)
                 attemptFactorization();
+            irreducibleFactors.Sort();
             return irreducibleFactors;
         }        
     }
