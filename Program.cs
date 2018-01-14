@@ -513,7 +513,7 @@ namespace Calculator
         }
         public override Number reciprocal()
         {
-            return exponentiate(Fraction.create(Index - 1, Index)) / this;
+            return Base.exponentiate(Fraction.create(Index - 1, Index)) / Base;
         }
         public override bool isAlgebraic()
         {
@@ -1207,7 +1207,7 @@ namespace Calculator
         }
         public static Polynomial<T> operator +(Polynomial<T> a, Polynomial<T> b)
         {
-            if (a.Coefficients.Count <= b.Coefficients.Count)
+            if (a.Coefficients.Count < b.Coefficients.Count)
                 return b + a;
             List<T> output = a.Coefficients;
             for (int i = 0; i < b.Coefficients.Count; ++i)
@@ -1235,30 +1235,37 @@ namespace Calculator
                     output[i + j] = (T)(output[i + j] + a.Coefficients[i] * b.Coefficients[j]);
             return new Polynomial<T>(output);
         }
-        public static Polynomial<T> operator /(Polynomial<T> a, Polynomial<T> b)
+        struct Division
+        {
+            public Polynomial<T> Quotient;
+            public Polynomial<T> Remainder;
+        }
+        static Division divide(Polynomial<T> a, Polynomial<T> b)
         {
             List<T> quotient = new List<T>();
-            if (b.Coefficients.Count <= a.Coefficients.Count) 
-                for (int i = 1; i <= b.Coefficients.Count; ++i)             
-                    quotient.Insert(0, (T)(a.Coefficients[a.Coefficients.Count - i] /
-                        b.Coefficients[b.Coefficients.Count - i]));            
-            return new Polynomial<T>(quotient);
-        }
-        public static Polynomial<T> operator %(Polynomial<T> a, Polynomial<T> b)
-        {
             List<T> remainder = new List<T>(a.Coefficients);
-            T scalar;
             if (b.Coefficients.Count <= a.Coefficients.Count)
-                for (int i = 0; i < b.Coefficients.Count; ++i)
+                for (int i = 0; i <= a.Coefficients.Count - b.Coefficients.Count; ++i)
                 {
-                    scalar = (T)(remainder[remainder.Count - 1] /
-                        b.Coefficients[b.Coefficients.Count - 1]);
+                    quotient.Insert(0, (T)(remainder[remainder.Count - 1] /
+                        b.Coefficients[b.Coefficients.Count - 1]));
                     remainder.RemoveAt(remainder.Count - 1);
                     for (int j = 1; j < b.Coefficients.Count; ++j)
                         remainder[remainder.Count - j] = (T)(remainder[remainder.Count - j] -
-                            scalar * b.Coefficients[b.Coefficients.Count - j - 1]);
+                            quotient[0] * b.Coefficients[b.Coefficients.Count - j - 1]);
                 }
-            return new Polynomial<T>(remainder);
+            Division division;
+            division.Quotient = new Polynomial<T>(quotient);
+            division.Remainder = new Polynomial<T>(remainder);
+            return division;
+        }
+        public static Polynomial<T> operator /(Polynomial<T> a, Polynomial<T> b)
+        {
+            return divide(a, b).Quotient;
+        }
+        public static Polynomial<T> operator %(Polynomial<T> a, Polynomial<T> b)
+        {
+            return divide(a, b).Remainder;
         }
         public T evaluateAt(T input)
         {
@@ -1280,7 +1287,7 @@ namespace Calculator
             int comparison = Coefficients.Count - polynomial.Coefficients.Count;
             if (comparison != 0)
                 return comparison;
-            for(int i=0;i<Coefficients.Count;++i)
+            for (int i = 0; i < Coefficients.Count; ++i) 
             {
                 comparison = Coefficients[i].CompareTo(polynomial.Coefficients[i]);
                 if (comparison != 0)
@@ -1302,6 +1309,8 @@ namespace Calculator
     {
         public static int getContent(this Polynomial<Integer> polynomial)
         {
+            if (polynomial.Coefficients.Count == 0)
+                return 1;
             int GCD = polynomial.Coefficients[0].Value;
             for (int i = 1; i < polynomial.Coefficients.Count; ++i)
                 GCD = Integer.getGCD(GCD, polynomial.Coefficients[i].Value);
@@ -1324,24 +1333,14 @@ namespace Calculator
         }
         public static Polynomial<Integer> getGCD(Polynomial<Integer> a, Polynomial<Integer> b)
         {
-            Integer c = new Integer(-1);
-            Integer d = new Integer(a.Coefficients.Count - b.Coefficients.Count);
-            Polynomial<Integer> polynomial1 = b;
-            Polynomial<Integer> polynomial2 = getPsuedoremainder(a, b) / new Polynomial<Integer>(
-                new List<Integer> {(Integer)(c.exponentiate(d + Integer.One)) });
-            while (polynomial2.Coefficients.Count != 0)
+            Polynomial<Integer> c;
+            while (b.Coefficients.Count != 0)
             {
-                c = (Integer)(polynomial2.Coefficients[polynomial2.Coefficients.Count - 1].
-                    negative().exponentiate(d) / c.exponentiate(d - Integer.One));
-                d = new Integer(polynomial1.Coefficients.Count - polynomial2.Coefficients.Count);
-                Polynomial<Integer> polynomial3 = getPsuedoremainder(polynomial1, polynomial2) /
-                    new Polynomial<Integer>(new List<Integer> { (Integer)(polynomial1.Coefficients[
-                    polynomial1.Coefficients.Count - 1].negative() * c.exponentiate(d)) });
-                polynomial1 = polynomial2;
-                polynomial2 = polynomial3;
+                c = getPsuedoremainder(a, b).getPrimitivePart();
+                a = b;
+                b = c;
             }
-            return polynomial1.getPrimitivePart() * new Polynomial<Integer>(
-                new List<Integer> { new Integer(Integer.getGCD(a.getContent(), b.getContent())) });
+            return a;
         }
         public static Dictionary<Polynomial<Integer>, int> getFactorization(
             this Polynomial<Integer> polynomial)
@@ -1352,7 +1351,6 @@ namespace Calculator
             Polynomial<Integer> a = getGCD(polynomial, derivative);
             Polynomial<Integer> b = polynomial / a;
             Polynomial<Integer> c = derivative / a - b.getDerivative();
-            factors.Add(b, 1);
             while (!(b.Coefficients.Count == 1 && (b.Coefficients[0].Equals(Integer.One)
                 || b.Coefficients[0].Equals(new Integer(-1))))) 
             {
