@@ -10,10 +10,7 @@ namespace Calculator
         public abstract Number negative();
         protected abstract Number multiply(Number number);
         public abstract Number reciprocal();
-        public virtual bool isAlgebraic()
-        {
-            return true;
-        }
+        public abstract Polynomial getMinimalPolynomial();
         public virtual int getDenominatorLCM()
         {
             return 1;
@@ -122,7 +119,12 @@ namespace Calculator
     abstract class Factor : Term
     { }
     abstract class Rational : Factor
-    { }
+    {
+        public override Polynomial getMinimalPolynomial()
+        {
+            return new Polynomial(new List<Rational> { (Rational)negative(), Integer.One });
+        }
+    }
     class Integer : Rational
     {
         public int Value { get; }
@@ -131,7 +133,7 @@ namespace Calculator
         public Integer(int value)
         {
             Value = value;
-        }    
+        }
         protected override Number add(Number number)
         {
             if (number is Integer)
@@ -151,7 +153,7 @@ namespace Calculator
         public override Number reciprocal()
         {
             return Fraction.create(1, Value);
-        }
+        }        
         public override Number exponentiate(Number exponent)
         {
             if (Value == 0)
@@ -189,7 +191,7 @@ namespace Calculator
                 else
                     radicandFactors.Add(factor, 1);
                 List<int> exponentDivisors =
-                    new Integer(exponentFraction.Denominator).getDivisors();               
+                    new Integer(exponentFraction.Denominator).getDivisors();
                 Dictionary<int, Number> termComponents = new Dictionary<int, Number>();
                 termComponents.Add(1, One);
                 termComponents.Add(exponentFraction.Denominator, One);
@@ -229,13 +231,8 @@ namespace Calculator
                         coefficient = coefficient.negative();
                 }
                 List<Factor> factors = new List<Factor>();
-                int largestIndex = 1;
-                foreach (int index in termComponents.Keys)
-                {
+                foreach (int index in termComponents.Keys)               
                     factors.Add(new Surd(termComponents[index], index));
-                    if (index > largestIndex)
-                        largestIndex = index;
-                }
                 Number output = Product.create(One, factors) * coefficient;
                 return output;
             }
@@ -290,7 +287,7 @@ namespace Calculator
         {
             return x / getGCD(x, y) * y;
         }
-        public List<int>getDivisors()
+        public List<int> getDivisors()
         {
             int x = Value;
             List<int> divisors = new List<int>();
@@ -515,9 +512,15 @@ namespace Calculator
         {
             return Base.exponentiate(Fraction.create(Index - 1, Index)) / Base;
         }
-        public override bool isAlgebraic()
+        public override Polynomial getMinimalPolynomial()
         {
-            return Base.isAlgebraic();
+            Polynomial baseMinimalPolynomial = Base.getMinimalPolynomial();
+            if (baseMinimalPolynomial == null)
+                return null;
+            List<Rational> coefficients = baseMinimalPolynomial.Coefficients;
+            for (int i = 1; i < Index; ++i)
+                coefficients.Insert(1, Integer.Zero);
+            return new Polynomial(coefficients);
         }
     }
     class Transcendental : Exponentiation
@@ -528,9 +531,9 @@ namespace Calculator
         {
             return create(Base, Exponent.negative());
         }
-        public override bool isAlgebraic()
+        public override Polynomial getMinimalPolynomial()
         {
-            return false;
+            return null;
         }
     }
     class ComplexExponential : Factor
@@ -662,9 +665,16 @@ namespace Calculator
         {
             return create(Exponent.negative());
         }
-        public override bool isAlgebraic()
+        public override Polynomial getMinimalPolynomial()
         {
-            return Exponent is Fraction;
+            if (!(Exponent is Fraction))
+                return null;            
+            List<Rational> coefficients = new List<Rational> { new Integer(-1) };
+            int index = ((Fraction)Exponent).Denominator;
+            for (int i = 1; i < index; ++i)
+                coefficients.Add(Integer.Zero);
+            coefficients.Add(Integer.One);
+            return new Polynomial(coefficients);
         }
         public override Number exponentiate(Number exponent)
         {
@@ -700,7 +710,7 @@ namespace Calculator
             Coefficient = coefficient;
             Factors = factors;
             Factors.Sort();
-        }        
+        }
         public static Term create(Rational coefficient, List<Factor> factors)
         {
             if (coefficient is Integer)
@@ -786,12 +796,22 @@ namespace Calculator
                 factors.Add((Factor)factor.reciprocal());
             return create((Rational)Coefficient.reciprocal(), factors);
         }
-        public override bool isAlgebraic()
+        public override Polynomial getMinimalPolynomial()
         {
-            foreach (Factor factor in Factors)
-                if (!factor.isAlgebraic())
-                    return false;
-            return true;
+            Polynomial[] minimalPolynomials = new Polynomial[Factors.Count];
+            for (int i = 0; i < Factors.Count; ++i)
+            {
+                Polynomial polynomial = Factors[i].getMinimalPolynomial();
+                if (polynomial == null)
+                    return null;
+                minimalPolynomials[i] = polynomial;
+            }
+            MultivariatePolynomial variableForm = new MultivariatePolynomial(minimalPolynomials);
+            int[] indices = new int[minimalPolynomials.Length];
+            for (int i = 0; i < indices.Length; ++i)
+                indices[i] = 1;
+            variableForm.setCoefficient(Coefficient, indices);
+            return variableForm.getMinimalPolynomial();            
         }
         public override int getDenominatorLCM()
         {
@@ -838,8 +858,8 @@ namespace Calculator
         StringBuilder formatFactors()
         {
             StringBuilder output = new StringBuilder(Factors[0].ToString());
-            for (int i = 1; i < Factors.Count; ++i)            
-                output.Append('*' + Factors[i].ToString());            
+            for (int i = 1; i < Factors.Count; ++i)
+                output.Append('*' + Factors[i].ToString());
             return output;
         }
         string addCoefficient(StringBuilder factors)
@@ -882,6 +902,7 @@ namespace Calculator
         public List<Term> Terms { get; }
         public Sum(List<Term> terms)
         {
+            terms.Sort();
             Terms = terms;
         }
         protected override Number add(Number number)
@@ -943,125 +964,45 @@ namespace Calculator
         }
         public override Number reciprocal()
         {
-            if (!isAlgebraic())
-                return new Transcendental(this, new Integer(-1));
-            List<Number> spanningSet = new List<Number> { Integer.One };
-            List<List<Number>> basisDecompositionOfPowers =
-                new List<List<Number>> { new List<Number> { Integer.Zero } };
-            List<Rational> augmentationRow = new List<Rational> { Integer.Zero, Integer.One };
-            List<List<Rational>> augmentation =
-                new List<List<Rational>> { new List<Rational>(augmentationRow) };            
-            void incorporateSpanElement(Number n)
-            {
-                if (n is Rational)
-                {
-                    basisDecompositionOfPowers[basisDecompositionOfPowers.Count - 1][0] = n;
-                    return;
-                }
-                Number spanComponent;
-                Rational coefficient;
-                if (n is Factor)
-                {
-                    spanComponent = n;
-                    coefficient = Integer.One;
-                }
-                else
-                {
-                    Product product = (Product)n;
-                    spanComponent = Product.create(Integer.One, product.Factors);
-                    coefficient = product.Coefficient;
-                }
-                for (int i = 0; i < spanningSet.Count; ++i)
-                    if (spanningSet[i].Equals(spanComponent))
-                    {
-                        basisDecompositionOfPowers[basisDecompositionOfPowers.Count - 1][i] =
-                            coefficient;
-                        return;
-                    }
-                spanningSet.Add(spanComponent);
-                for (int i = 0; i < basisDecompositionOfPowers.Count - 1; ++i)
-                    basisDecompositionOfPowers[i].Add(Integer.Zero);
-                basisDecompositionOfPowers[basisDecompositionOfPowers.Count - 1].Add(coefficient);
-            }
-            foreach (Term term in Terms)
-                incorporateSpanElement(term);
-            List<Number> powers = new List<Number> { this };            
-            for (int i = 1; i < spanningSet.Count; ++i)
-            {
-                powers.Add(powers[i - 1] * this);
-                List<Number> basisDecompositionRow = new List<Number>();
-                for (int j = 0; j < basisDecompositionOfPowers[0].Count; ++j)
-                    basisDecompositionRow.Add(Integer.Zero);
-                basisDecompositionOfPowers.Add(basisDecompositionRow);
-                for (int j = 0; j < augmentation.Count; ++j)
-                    augmentation[j].Add(Integer.Zero);
-                augmentationRow.Insert(0, Integer.Zero);
-                augmentation.Add(new List<Rational>(augmentationRow));
-                if (powers[i] is Sum)
-                    foreach (Term term in ((Sum)powers[i]).Terms)
-                        incorporateSpanElement(term);
-                else
-                    incorporateSpanElement((Term)powers[i]);
-            }
-            List<List<Number>> matrix = new List<List<Number>>();
-            foreach (List<Number> list in basisDecompositionOfPowers)
-                matrix.Add(new List<Number>(list));
-            List<int> possiblePivotRows = new List<int>();
-            for (int i = matrix.Count - 1; i >= 0; --i)
-                possiblePivotRows.Add(i); 
-            for (int i = matrix.Count - 1; i > 0; --i)
-            {
-                int ithColumnPivotRowIndex = 0;
-                foreach(int j in possiblePivotRows)
-                    if (!matrix[j][i].Equals(Integer.Zero))
-                    {
-                        ithColumnPivotRowIndex = j;
-                        possiblePivotRows.Remove(j);
-                        break;
-                    }
-                for (int j = ithColumnPivotRowIndex; j > 0; --j) 
-                {
-                    Number scalar = matrix[j - 1][i] / matrix[ithColumnPivotRowIndex][i];
-                    matrix[j - 1][i] = Integer.Zero;
-                    for (int k = i - 1; k >= 0; --k) 
-                        matrix[j - 1][k] -= scalar * matrix[ithColumnPivotRowIndex][k];
-                    for (int k = 0; k < augmentation[j - 1].Count; ++k)
-                        augmentation[j - 1][k] = (Rational)(augmentation[j - 1][k] -
-                            scalar * augmentation[ithColumnPivotRowIndex][k]);
-                }
-            }
-            int constantCombinationRowIndex = possiblePivotRows[0];
-            augmentation[constantCombinationRowIndex][0] =
-                (Rational)(matrix[constantCombinationRowIndex][0].negative());
-            int LCM = 1;
-            foreach (Rational rational in augmentation[constantCombinationRowIndex])
-                LCM = Integer.getLCM(LCM, rational.getDenominatorLCM());
-            Integer LCMinteger = new Integer(LCM);
-            List<Integer> integerCoefficients = new List<Integer>();
-            foreach (Rational rational in augmentation[constantCombinationRowIndex])
-                integerCoefficients.Add((Integer)(rational * LCMinteger));
-            Polynomial<Integer> annullingPolynomial =
-                new Polynomial<Integer>(integerCoefficients).getPrimitivePart();
-            List<Polynomial<Integer>> factors = annullingPolynomial.getFactors();
-            Polynomial<Number> minimalPolynomial;
-            foreach (Polynomial<Integer> factor in factors)
-            {
-                minimalPolynomial =
-                    new Polynomial<Number>(new List<Number> { factor.Coefficients[0] });
-                for (int i = 1; i < factor.Coefficients.Count; ++i)
-                    minimalPolynomial += factor.Coefficients[i] *
-                        new Polynomial<Number>(basisDecompositionOfPowers[i - 1]);
-                if (minimalPolynomial.Coefficients.Count == 0)
-                    break;
-            }
+            Polynomial minimalPolynomial = getMinimalPolynomial();
+            if (minimalPolynomial == null) 
+                return new Transcendental(this, new Integer(-1));            
             return new Transcendental(this, new Integer(-1));//placeholder
         }
-        public override bool isAlgebraic()
+        public override Polynomial getMinimalPolynomial()
         {
-            foreach (Term term in Terms)
-                if (!term.isAlgebraic())
-                    return false;
-            return true;
+            Polynomial[] minimalPolynomials = new Polynomial[Terms.Count];
+            Rational constant;
+            int startIndex;
+            if(Terms[0] is Rational)
+            {
+                constant = (Rational)Terms[0];
+                minimalPolynomials = new Polynomial[Terms.Count - 1];
+                startIndex = 1;
+            }
+            else
+            {
+                constant = Integer.Zero;
+                minimalPolynomials = new Polynomial[Terms.Count];
+                startIndex = 0;
+            }
+            for (int i = startIndex; i < Terms.Count; ++i)
+            {
+                Polynomial polynomial = Terms[i].getMinimalPolynomial();
+                if (polynomial == null)
+                    return null;
+                minimalPolynomials[i - startIndex] = polynomial;
+            }
+            MultivariatePolynomial variableForm = new MultivariatePolynomial(minimalPolynomials);
+            int[] indices = new int[minimalPolynomials.Length];
+            variableForm.setCoefficient(constant, indices);
+            for (int i = 0; i < indices.Length; ++i)
+            {
+                indices[i] = 1;
+                variableForm.setCoefficient(Integer.One, indices);
+                indices[i] = 0;
+            }
+            return variableForm.getMinimalPolynomial();
         }
         public override int getDenominatorLCM()
         {
@@ -1165,6 +1106,15 @@ namespace Calculator
             Number denominator = Real * Real + Imaginary * Imaginary;
             return create(Real / denominator, Imaginary.negative() / denominator);
         }
+        public override Polynomial getMinimalPolynomial()
+        {
+            MultivariatePolynomial variableForm = new MultivariatePolynomial(new Polynomial[] {
+                Real.getMinimalPolynomial(), Imaginary.getMinimalPolynomial(),
+                new Polynomial(new List<Rational> { new Integer(-1), Integer.Zero, Integer.One })});
+            variableForm.setCoefficient(Integer.One, new int[] { 1, 0, 0 });
+            variableForm.setCoefficient(Integer.One, new int[] { 0, 1, 1 });
+            return variableForm.getMinimalPolynomial();
+        }
         public override int getDenominatorLCM()
         {
             return Integer.getLCM(Real.getDenominatorLCM(), Imaginary.getDenominatorLCM());
@@ -1208,108 +1158,129 @@ namespace Calculator
             return output.ToString();
         }
     }
-    class Polynomial<T> : IComparable where T : Number
+    class Polynomial : IComparable
     {
         //The index of the coefficient represents the degree of its term.
-        public List<T> Coefficients { get; }
-        public Polynomial(List<T> coefficients)
+        public List<Rational> Coefficients { get; }
+        public Polynomial(List<Rational> coefficients)
         {
             while (coefficients.Count != 0 &&
                 coefficients[coefficients.Count - 1].Equals(Integer.Zero))
                 coefficients.RemoveAt(coefficients.Count - 1);
             Coefficients = coefficients;
         }
-        public static Polynomial<T> operator +(Polynomial<T> a, Polynomial<T> b)
+        public Polynomial getIntegerPolynomial()
+        {
+            if (Coefficients.Count == 0)
+                return this;
+            int LCM = 1;
+            foreach (Rational coefficient in Coefficients)
+                LCM = Integer.getLCM(LCM, coefficient.getDenominatorLCM());
+            Integer integerLCM = new Integer(LCM);
+            List<Rational> integerCoefficients = new List<Rational>();
+            foreach (Rational coefficient in Coefficients)
+                integerCoefficients.Add((Rational)(coefficient * integerLCM));
+            int content = ((Integer)integerCoefficients[0]).Value;
+            for (int i = 1; i < integerCoefficients.Count; ++i)
+                content = Integer.getGCD(content, ((Integer)integerCoefficients[i]).Value);
+            Integer integerContent = new Integer(content);
+            List<Rational> reducedCoefficients = new List<Rational>();
+            foreach (Rational coefficient in integerCoefficients)
+                reducedCoefficients.Add((Integer)(coefficient / integerContent));
+            return new Polynomial(reducedCoefficients);
+        }
+        public static Polynomial operator +(Polynomial a, Polynomial b)
         {
             if (a.Coefficients.Count < b.Coefficients.Count)
                 return b + a;
-            List<T> output = a.Coefficients;
+            List<Rational> output = a.Coefficients;
             for (int i = 0; i < b.Coefficients.Count; ++i)
-                output[i] = (T)(output[i] + b.Coefficients[i]);
-            return new Polynomial<T>(output);
+                output[i] = (Rational)(output[i] + b.Coefficients[i]);
+            return new Polynomial(output);
         }
-        public Polynomial<T> negative()
+        public Polynomial negative()
         {
-            List<T> output = new List<T>();
+            List<Rational> output = new List<Rational>();
             foreach (Number coefficient in Coefficients)
-                output.Add((T)coefficient.negative());
-            return new Polynomial<T>(output);
+                output.Add((Rational)coefficient.negative());
+            return new Polynomial(output);
         }
-        public static Polynomial<T> operator -(Polynomial<T> a, Polynomial<T> b)
+        public static Polynomial operator -(Polynomial a, Polynomial b)
         {
             return a + b.negative();
         }
-        public static Polynomial<T> operator *(Polynomial<T> a, Polynomial<T> b)
+        public static Polynomial operator *(Polynomial a, Polynomial b)
         {
-            List<T> output = new List<T>();
+            List<Rational> output = new List<Rational>();
             for (int i = 0; i < a.Coefficients.Count + b.Coefficients.Count - 1; ++i)
-                output.Add((T)(Number)Integer.Zero);
+                output.Add(Integer.Zero);
             for (int i = 0; i < a.Coefficients.Count; ++i)
                 for (int j = 0; j < b.Coefficients.Count; ++j)
-                    output[i + j] = (T)(output[i + j] + a.Coefficients[i] * b.Coefficients[j]);
-            return new Polynomial<T>(output);
+                    output[i + j] =
+                        (Rational)(output[i + j] + a.Coefficients[i] * b.Coefficients[j]);
+            return new Polynomial(output);
         }
-        public static Polynomial<T> operator *(T a, Polynomial<T> b)
+        public static Polynomial operator *(Rational a, Polynomial b)
         {
-            return new Polynomial<T>(new List<T> { a }) * b;
+            return new Polynomial(new List<Rational> { a }) * b;
         }
-        public static Polynomial<T> operator *(Polynomial<T> a, T b)
+        public static Polynomial operator *(Polynomial a, Rational b)
         {
             return b * a;
         }
         struct Division
         {
-            public Polynomial<T> Quotient;
-            public Polynomial<T> Remainder;
+            public Polynomial Quotient;
+            public Polynomial Remainder;
         }
-        static Division divide(Polynomial<T> a, Polynomial<T> b)
+        Division divide(Polynomial divisor)
         {
-            List<T> quotient = new List<T>();
-            List<T> remainder = new List<T>(a.Coefficients);
-            if (b.Coefficients.Count <= a.Coefficients.Count)
-                for (int i = 0; i <= a.Coefficients.Count - b.Coefficients.Count; ++i)
+            List<Rational> quotient = new List<Rational>();
+            List<Rational> remainder = new List<Rational>(Coefficients);
+            if (divisor.Coefficients.Count <= Coefficients.Count)
+                for (int i = 0; i <= Coefficients.Count - divisor.Coefficients.Count; ++i)
                 {
-                    quotient.Insert(0, (T)(remainder[remainder.Count - 1] /
-                        b.Coefficients[b.Coefficients.Count - 1]));
+                    quotient.Insert(0, (Rational)(remainder[remainder.Count - 1] /
+                        divisor.Coefficients[divisor.Coefficients.Count - 1]));
                     remainder.RemoveAt(remainder.Count - 1);
-                    for (int j = 1; j < b.Coefficients.Count; ++j)
-                        remainder[remainder.Count - j] = (T)(remainder[remainder.Count - j] -
-                            quotient[0] * b.Coefficients[b.Coefficients.Count - j - 1]);
+                    for (int j = 1; j < divisor.Coefficients.Count; ++j)
+                        remainder[remainder.Count - j] = (Rational)(remainder[remainder.Count - j] -
+                            quotient[0] * divisor.Coefficients[divisor.Coefficients.Count - j - 1]);
                 }
             Division division;
-            division.Quotient = new Polynomial<T>(quotient);
-            division.Remainder = new Polynomial<T>(remainder);
+            division.Quotient = new Polynomial(quotient);
+            division.Remainder = new Polynomial(remainder);
             return division;
         }
-        public static Polynomial<T> operator /(Polynomial<T> a, Polynomial<T> b)
+        public static Polynomial operator /(Polynomial a, Polynomial b)
         {
-            return divide(a, b).Quotient;
+            return a.divide(b).Quotient;
         }
-        public static Polynomial<T> operator %(Polynomial<T> a, Polynomial<T> b)
+        public static Polynomial operator %(Polynomial a, Polynomial b)
         {
-            return divide(a, b).Remainder;
+            return a.divide(b).Remainder;
         }
-        public T evaluateAt(T input)
+        public Rational evaluateAt(Integer input)
         {
-            T output = Coefficients[0];
+            Rational output = Coefficients[0];
             for (int i = 1; i < Coefficients.Count; ++i)
-                output = (T)(output + Coefficients[i] * input.exponentiate(new Integer(i)));
+                output = (Rational)(output + Coefficients[i] * input.exponentiate(new Integer(i)));
             return output;
         }
-        public Polynomial<T> getDerivative()
+        public Polynomial getDerivative()
         {
-            List<T> derivativeCoefficients = new List<T>();
+            List<Rational> derivativeCoefficients = new List<Rational>();
             for (int i = 1; i < Coefficients.Count; ++i)
-                derivativeCoefficients.Add((T)(Coefficients[i] * new Integer(i)));
-            return new Polynomial<T>(derivativeCoefficients);
+                derivativeCoefficients.Add((Rational)(Coefficients[i] * new Integer(i)));
+            return new Polynomial(derivativeCoefficients);
         }
         public virtual int CompareTo(object obj)
         {
-            Polynomial<T> polynomial = (Polynomial<T>)obj;
+            Polynomial polynomial = (Polynomial)obj;
             int comparison = Coefficients.Count - polynomial.Coefficients.Count;
             if (comparison != 0)
                 return comparison;
-            for (int i = 0; i < Coefficients.Count; ++i) 
+            for (int i = 0; i < Coefficients.Count; ++i)
             {
                 comparison = Coefficients[i].CompareTo(polynomial.Coefficients[i]);
                 if (comparison != 0)
@@ -1317,83 +1288,47 @@ namespace Calculator
             }
             return 0;
         }
-#if DEBUG
-        public override string ToString()
+        public static Polynomial getGCD(Polynomial a, Polynomial b)
         {
-            StringBuilder output = new StringBuilder();
-            foreach (T coefficient in Coefficients)
-                output.Append(coefficient.ToString() + ',');
-            return output.ToString();
-        }
-#endif
-    }
-    static class IntegerPolynomial
-    {
-        public static int getContent(this Polynomial<Integer> polynomial)
-        {
-            if (polynomial.Coefficients.Count == 0)
-                return 1;
-            int GCD = polynomial.Coefficients[0].Value;
-            for (int i = 1; i < polynomial.Coefficients.Count; ++i)
-                GCD = Integer.getGCD(GCD, polynomial.Coefficients[i].Value);
-            return GCD;
-        }
-        public static Polynomial<Integer> getPrimitivePart(this Polynomial<Integer> polynomial)
-        {
-            Integer GCDinteger = new Integer(getContent(polynomial));
-            List<Integer> reducedCoefficients = new List<Integer>();
-            foreach (Integer integer in polynomial.Coefficients)
-                reducedCoefficients.Add((Integer)(integer / GCDinteger));
-            return new Polynomial<Integer>(reducedCoefficients);
-        }        
-        public static Polynomial<Integer> getPsuedoremainder(
-            this Polynomial<Integer> polynomial, Polynomial<Integer> divisor)
-        {
-            return ((Integer)(divisor.Coefficients[divisor.Coefficients.Count - 1].exponentiate(
-                new Integer(polynomial.Coefficients.Count - divisor.Coefficients.Count + 1))) *
-                polynomial) % divisor;
-        }
-        public static Polynomial<Integer> getGCD(Polynomial<Integer> a, Polynomial<Integer> b)
-        {
-            Polynomial<Integer> c;
             while (b.Coefficients.Count != 0)
             {
-                c = getPsuedoremainder(a, b).getPrimitivePart();
+                Polynomial c = a % b;
                 a = b;
                 b = c;
             }
             return a;
         }
-        public static List<Polynomial<Integer>> getFactors(this Polynomial<Integer> polynomial)
+        public List<Polynomial> getFactors()
         {
-            List<Polynomial<Integer>> factors = new List<Polynomial<Integer>>();
-            Polynomial<Integer> derivative = polynomial.getDerivative();
-            Polynomial<Integer> a = getGCD(polynomial, derivative);
-            Polynomial<Integer> b = polynomial / a;
-            Polynomial<Integer> c = derivative / a - b.getDerivative();
+            Polynomial integerPolynomial = getIntegerPolynomial();          
+            List<Polynomial> factors = new List<Polynomial>();
+            Polynomial derivative = integerPolynomial.getDerivative();
+            Polynomial a = getGCD(integerPolynomial, derivative);
+            Polynomial b = integerPolynomial / a;
+            Polynomial c = derivative / a - b.getDerivative();
             while (!(b.Coefficients.Count == 1 && (b.Coefficients[0].Equals(Integer.One)
-                || b.Coefficients[0].Equals(new Integer(-1))))) 
+                || b.Coefficients[0].Equals(new Integer(-1)))))
             {
                 a = getGCD(b, c);
                 if (!factors.Contains(a))
-                    factors.Add(a);
+                    factors.Add(a.getIntegerPolynomial());
                 b = b / a;
                 c = c / a - b.getDerivative();
             }
-            List<Polynomial<Integer>> irreducibleFactors = new List<Polynomial<Integer>>();
+            List<Polynomial> irreducibleFactors = new List<Polynomial>();
             void attemptFactorization()
             {
-                foreach (Polynomial<Integer> factor in factors)
+                foreach (Polynomial factor in factors)
                 {
-                    for (int i = 1; i < (factor.Coefficients.Count + 1) / 2; ++i) 
+                    for (int i = 1; i < (factor.Coefficients.Count + 1) / 2; ++i)
                     {
                         List<Integer> outputValues = new List<Integer>();
                         List<List<int>> outputValueDivisors = new List<List<int>>();
-                        outputValues.Add(polynomial.evaluateAt(new Integer(0)));
+                        outputValues.Add((Integer)evaluateAt(Integer.Zero));
                         outputValueDivisors.Add(outputValues[0].getDivisors());
                         for (int j = 1; j <= i; ++j)
                         {
-                            outputValues.Add(polynomial.evaluateAt(new Integer(j)));
+                            outputValues.Add((Integer)evaluateAt(new Integer(j)));
                             outputValueDivisors.Add(outputValues[j].getDivisors());
                             int numberOfPositiveDivisors = outputValueDivisors[j].Count;
                             for (int k = 0; k < numberOfPositiveDivisors; ++k)
@@ -1416,38 +1351,36 @@ namespace Calculator
                         generateAllCombinations(0, new List<int>());
                         foreach (List<int> combination in outputCombinations)
                         {
-                            Polynomial<Integer> factorCandidate =
-                                new Polynomial<Integer>(new List<Integer>());
+                            Polynomial factorCandidate = new Polynomial(new List<Rational>());
                             for (int j = 0; j < outputValueDivisors.Count; ++j)
                             {
-                                Polynomial<Integer> numerator =
-                                    new Polynomial<Integer>(new List<Integer> { outputValues[j] });
+                                Polynomial numerator =
+                                    new Polynomial(new List<Rational> { outputValues[j] });
                                 int denominator = 1;
                                 for (int k = 0; k < outputValueDivisors.Count; ++k)
                                     if (k != j)
                                     {
-                                        numerator = numerator * new Polynomial<Integer>(
-                                            new List<Integer> { new Integer(-k), Integer.One });
+                                        numerator *= new Polynomial(
+                                            new List<Rational> { new Integer(-k), Integer.One });
                                         denominator *= j - k;
                                     }
-                                List<Integer> basisPolynomialCoefficients = new List<Integer>();
-                                foreach (Integer coefficient in numerator.Coefficients)
-                                    basisPolynomialCoefficients.Add(
-                                        new Integer(coefficient.Value / denominator));
-                                factorCandidate = factorCandidate +
-                                    new Polynomial<Integer>(basisPolynomialCoefficients);
+                                List<Rational> basisPolynomialCoefficients = new List<Rational>();
+                                foreach (Rational coefficient in numerator.Coefficients)
+                                    basisPolynomialCoefficients.Add((Rational)(coefficient /
+                                        new Integer(denominator)));
+                                factorCandidate += new Polynomial(basisPolynomialCoefficients);
                             }
-                            if (factor.getPsuedoremainder(factorCandidate).Coefficients.Count == 0)
+                            if ((factor % factorCandidate).Coefficients.Count == 0) 
                             {
                                 if (!irreducibleFactors.Contains(factorCandidate))
                                     irreducibleFactors.Add(factorCandidate);
                                 factors.Remove(factor);
-                                Polynomial<Integer> reducedFactor = factor / factorCandidate;
+                                Polynomial reducedFactor = factor / factorCandidate;
                                 if (!factors.Contains(reducedFactor))
                                     factors.Add(reducedFactor);
                                 return;
                             }
-                        }                        
+                        }
                     }
                     if (!irreducibleFactors.Contains(factor))
                         irreducibleFactors.Add(factor);
@@ -1459,7 +1392,226 @@ namespace Calculator
                 attemptFactorization();
             irreducibleFactors.Sort();
             return irreducibleFactors;
-        }        
+        }
+#if DEBUG
+        public override string ToString()
+        {
+            StringBuilder output = new StringBuilder();
+            foreach (Rational coefficient in Coefficients)
+                output.Append(coefficient.ToString() + ',');
+            return output.ToString();
+        }
+#endif
+    }
+    class MultivariatePolynomial
+    {//Represents a polynomial whose variables each represent a specific number.
+        Polynomial[] MinimalPolynomials;        
+        public Rational[] Coefficients { get; }
+        public MultivariatePolynomial(Polynomial[] minimalPolynomials)
+        {//The nth minimalPolynomial entry is the minimal polynomial of the number the nth variable
+         //represents.
+            MinimalPolynomials = minimalPolynomials;
+            int numberOfCoefficients = 1;
+            for (int i = 0; i < MinimalPolynomials.Length; ++i)
+                numberOfCoefficients *= MinimalPolynomials[i].Coefficients.Count - 1;
+            Coefficients = new Rational[numberOfCoefficients];
+            for (int i = 0; i < Coefficients.Length; ++i)
+                Coefficients[i] = Integer.Zero;
+        }
+        int getInternalIndex(params int[] externalIndices)
+        {
+            int index = 0;
+            int multiplier = 1;
+            for (int i = 0; i < externalIndices.Length; ++i)
+            {
+                index += externalIndices[i] * multiplier;
+                multiplier *= MinimalPolynomials[i].Coefficients.Count - 1;
+            }
+            return index;
+        }
+        int[] getExternalIndices(int internalIndex)
+        {
+            int[] indices = new int[MinimalPolynomials.Length];
+            for (int i = 0; i < MinimalPolynomials.Length; ++i)
+            {
+                indices[i] = internalIndex % (MinimalPolynomials[i].Coefficients.Count - 1);
+                internalIndex /= MinimalPolynomials[i].Coefficients.Count - 1;
+            }
+            return indices;
+        }
+        public void setCoefficient(Rational coefficient, int[] indices)
+        {//The nth index is the degree with respect to the nth variable of the term being set.
+            Coefficients[getInternalIndex(indices)] = coefficient;
+        }
+        public static MultivariatePolynomial operator +(MultivariatePolynomial a,
+            MultivariatePolynomial b)
+        {
+            MultivariatePolynomial sum = new MultivariatePolynomial(a.MinimalPolynomials);
+            for (int i = 0; i < a.Coefficients.Length; ++i)
+                sum.Coefficients[i] = (Rational)(a.Coefficients[i] + b.Coefficients[i]);
+            return sum;
+        }
+        static MultivariatePolynomial reductionlessMultiply(MultivariatePolynomial a,
+            MultivariatePolynomial b)
+        {
+            MultivariatePolynomial product =
+                new MultivariatePolynomial(a.MinimalPolynomials);
+            for (int i = 0; i < a.Coefficients.Length; ++i)
+                for (int j = 0; j < b.Coefficients.Length; ++j)
+                {
+                    Rational coefficient = (Rational)(a.Coefficients[i] * b.Coefficients[j]);
+                    if (!coefficient.Equals(Integer.Zero)) 
+                        product.Coefficients[i + j] =
+                            (Rational)(a.Coefficients[i] * b.Coefficients[j]);
+                }
+            return product;
+        }
+        public static MultivariatePolynomial operator *(MultivariatePolynomial a,
+            MultivariatePolynomial b)
+        {
+            MultivariatePolynomial product = new MultivariatePolynomial(a.MinimalPolynomials);
+            for (int i = 0; i < a.Coefficients.Length; ++i)
+                for (int j = 0; j < b.Coefficients.Length; ++j)
+                {                    
+                    Rational coefficient = (Rational)(a.Coefficients[i] * b.Coefficients[j]);
+                    if (coefficient == Integer.Zero)
+                        continue;
+                    MultivariatePolynomial productComponent =
+                        new MultivariatePolynomial(a.MinimalPolynomials);
+                    productComponent.Coefficients[0] = coefficient;
+                    int[] indices = a.getExternalIndices(i);
+                    int[] indicesB = a.getExternalIndices(j);
+                    int[] termComponentIndices = new int[indices.Length];
+                    for (int k = 0; k < indices.Length; ++k)
+                    {
+                        indices[k] += indicesB[k];
+                        MultivariatePolynomial termComponent =
+                            new MultivariatePolynomial(a.MinimalPolynomials);                        
+                        if (indices[k] < a.MinimalPolynomials[k].Coefficients.Count - 1)
+                        {
+                            termComponentIndices[k] = indices[k];
+                            termComponent.setCoefficient(Integer.One, termComponentIndices);
+                        }
+                        else
+                        {
+                            int remainder =
+                                indices[k] - a.MinimalPolynomials[k].Coefficients.Count + 1;
+                            if (remainder != 0)
+                            {
+                                termComponentIndices[k] = remainder;
+                                MultivariatePolynomial remainderComponent =
+                                    new MultivariatePolynomial(a.MinimalPolynomials);
+                                remainderComponent.setCoefficient(Integer.One,
+                                    termComponentIndices);
+                                productComponent =
+                                    reductionlessMultiply(productComponent, remainderComponent);
+                            }
+                            for (int l = 0; l < a.MinimalPolynomials[k].Coefficients.Count - 1; ++l)
+                            {
+                                termComponentIndices[k] = l;
+                                termComponent.setCoefficient((Rational)a.MinimalPolynomials[k].
+                                    Coefficients[l].negative(), termComponentIndices);
+                            }                            
+                        }
+                        productComponent = reductionlessMultiply(productComponent, termComponent);
+                        termComponentIndices[k] = 0;
+                    }
+                    product += productComponent;
+                }
+            return product;
+        }
+        public static MultivariatePolynomial operator *(Rational a, MultivariatePolynomial b)
+        {
+            MultivariatePolynomial product = new MultivariatePolynomial(b.MinimalPolynomials);
+            for (int i = 0; i < b.Coefficients.Length; ++i)
+                product.Coefficients[i] = (Rational)(a * b.Coefficients[i]);
+            return product;
+        }
+        public static MultivariatePolynomial operator *(MultivariatePolynomial a, Rational b)
+        {
+            return b * a;
+        }
+        public Polynomial getMinimalPolynomial()
+        {            
+            MultivariatePolynomial[] powers = new MultivariatePolynomial[Coefficients.Length];
+            MultivariatePolynomial power = new MultivariatePolynomial(MinimalPolynomials);
+            power.Coefficients[0] = Integer.One;
+            MultivariatePolynomial[] matrix = new MultivariatePolynomial[Coefficients.Length];
+            Polynomial[] augmentation = new Polynomial[Coefficients.Length];
+            List<Rational> augmentationRow = new List<Rational> { Integer.One };
+            for (int i = 0; i < Coefficients.Length; ++i)
+            {
+                power *= this;                
+                powers[i] = power;
+                matrix[i] = power;                
+                augmentationRow.Insert(0, Integer.Zero);
+                augmentation[i] = new Polynomial(new List<Rational>(augmentationRow));                
+            }
+            for (int i = 1; i < matrix.Length; ++i)            
+                for (int j = i; j < matrix.Length; ++j)
+                    if (matrix[i - 1].Coefficients[Coefficients.Length - i] == Integer.Zero)
+                    {
+                        MultivariatePolynomial tempRow = matrix[j];
+                        Polynomial tempAugmentationRow = augmentation[j];
+                        matrix[j] = matrix[i - 1];
+                        augmentation[j] = augmentation[i - 1];
+                        matrix[i - 1] = tempRow;
+                        augmentation[i - 1] = tempAugmentationRow;
+                    }
+                    else
+                    {
+                        Rational scalar = (Rational)(matrix[i].Coefficients[Coefficients.Length - i]
+                            / matrix[i - 1].Coefficients[Coefficients.Length - i].negative());
+                        for (int k = i; k < matrix.Length; ++k)
+                        {                           
+                            matrix[k] += matrix[i - 1] * scalar;
+                            augmentation[k] += augmentation[i - 1] * scalar;
+                        }
+                        break;
+                    }
+            List<Rational> annullingPolynomialCoefficients =
+                augmentation[matrix.Length - 1].Coefficients;
+            annullingPolynomialCoefficients[0] = (Rational)(
+                annullingPolynomialCoefficients[0] - matrix[matrix.Length - 1].Coefficients[0]);
+            Polynomial minimalPolynomial = new Polynomial(annullingPolynomialCoefficients);
+            List<Polynomial> factors = minimalPolynomial.getFactors();            
+            foreach (Polynomial factor in factors)
+            {
+                MultivariatePolynomial sum = new MultivariatePolynomial(MinimalPolynomials);
+                sum.Coefficients[0] = factor.Coefficients[0];
+                for (int i = 1; i < factor.Coefficients.Count; ++i)
+                    sum += factor.Coefficients[i] * powers[i - 1];
+                bool sumIsZero = true;
+                foreach (Rational coefficient in sum.Coefficients)
+                    if (!coefficient.Equals(Integer.Zero)) 
+                    {
+                        sumIsZero = false;
+                        break;
+                    }
+                if(sumIsZero)
+                {
+                    minimalPolynomial = factor;
+                    break;
+                }
+            }
+            return minimalPolynomial * (Rational)minimalPolynomial.Coefficients[
+                minimalPolynomial.Coefficients.Count - 1].reciprocal();
+        }
+#if DEBUG
+        public override string ToString()
+        {
+            StringBuilder output = new StringBuilder();
+            for (int i = 0; i < Coefficients.Length; ++i)
+            {
+                output.Append(Coefficients[i].ToString());
+                int[] externalCoefficients = getExternalIndices(i);
+                for (int j = 0; j < externalCoefficients.Length; ++j)
+                    output.Append("(" + externalCoefficients[j] + ")");
+                output.Append("+");
+            }
+            return output.ToString();
+        }
+#endif
     }
     class Program
     {
@@ -1587,9 +1739,13 @@ namespace Calculator
             {
                 try
                 {
+#if DEBUG
+                    string input = "1/(2^(1/2)+1)";
+#else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
                         return;
+#endif
                     List<char> operations = new List<char>();
                     List<Number> numbers = new List<Number>();
                     StringBuilder numberCollector = new StringBuilder();
@@ -1678,6 +1834,9 @@ namespace Calculator
                 {
                     Console.WriteLine(e.Message);
                 }
+#if DEBUG
+                return;
+#endif
             }
         }
     }
