@@ -11,48 +11,52 @@ namespace Calculator
         protected abstract Number multiply(Number number);
         public abstract Number reciprocal();
         public abstract Polynomial getMinimalPolynomial();
-        public virtual int getDenominatorLCM()
+        public virtual Integer getDenominatorLCM()
         {
-            return 1;
+            return Integer.One;
         }
-        public virtual int getGreatestIntegerFactor()
+        public virtual Integer getGreatestIntegerFactor()
         {
-            return 1;
+            return Integer.One;
         }
         public virtual Number exponentiate(Number exponent)
         {
             if (exponent is Integer)
             {
-                int intExponent = ((Integer)exponent).Value;
-                if (intExponent < 0)
+                Integer intExponent = (Integer)exponent;
+                if (intExponent.Sign < 0)
                     return exponentiate(exponent).reciprocal();
                 Number output = Integer.One;
                 Number baseToAPowerOfTwo = this;
-                while (intExponent > 0)
+                while (intExponent.Sign > 0)
                 {
-                    if (intExponent % 2 == 1)
+                    IntegerDivision division = intExponent.euclideanDivideBy(new Integer(2)); 
+                    if (division.remainder == Integer.One)
                         output *= baseToAPowerOfTwo;
                     baseToAPowerOfTwo *= baseToAPowerOfTwo;
-                    intExponent /= 2;
+                    intExponent = division.quotient;
                 }
                 return output;
             }
-            Integer exponentIntegerFactor = new Integer(exponent.getGreatestIntegerFactor());
-            if (exponentIntegerFactor.Value > 1)
+            Integer exponentIntegerFactor = exponent.getGreatestIntegerFactor();
+            if (exponentIntegerFactor > Integer.One)
                 return exponentiate(exponentIntegerFactor).exponentiate(
                     exponent / exponentIntegerFactor);
             if (exponent is Fraction)
             {
                 Fraction exponentFraction = (Fraction)exponent;
-                Integer denominatorLCM = new Integer(getDenominatorLCM());
-                if (denominatorLCM.Value != 1)
+                Integer denominatorLCM = getDenominatorLCM();
+                if (denominatorLCM != Integer.One)
+                {
+                    IntegerDivision division =
+                        exponentFraction.Numerator.euclideanDivideBy(exponentFraction.Denominator);
                     return (this * denominatorLCM).exponentiate(exponent) *
-                        denominatorLCM.exponentiate(Fraction.create(exponentFraction.Denominator -
-                        exponentFraction.Numerator % exponentFraction.Denominator,
-                        exponentFraction.Denominator)) / denominatorLCM.exponentiate(new Integer(
-                        exponentFraction.Numerator / exponentFraction.Denominator + 1));
-                Integer numeratorGCD = new Integer(getGreatestIntegerFactor());
-                if (numeratorGCD.Value != 1)
+                        denominatorLCM.exponentiate(Fraction.create((Integer)(exponentFraction.
+                        Denominator - division.remainder), exponentFraction.Denominator)) /
+                        denominatorLCM.exponentiate(division.quotient + Integer.One);
+                }
+                Integer numeratorGCD = getGreatestIntegerFactor();
+                if (numeratorGCD != Integer.One)
                 {
                     Number factor = numeratorGCD.exponentiate(exponent);
                     if (!(factor is Exponentiation))
@@ -125,176 +129,474 @@ namespace Calculator
             return new Polynomial(new List<Rational> { (Rational)negative(), Integer.One });
         }
     }
+    struct IntegerDivision
+    {
+        public Integer quotient;
+        public Integer remainder;
+    }
     class Integer : Rational
     {
-        public int Value { get; }
         public static Integer Zero { get; } = new Integer(0);
         public static Integer One { get; } = new Integer(1);
+        uint[] Values;
+        public sbyte Sign { get; }
+        Integer(uint[] values, sbyte sign)
+        {
+            int lastNonzeroValueIndex = 0;
+            for (int i = values.Length - 1; i >= 0; --i)
+                if (values[i] != 0)
+                {
+                    lastNonzeroValueIndex = i;
+                    break;
+                }
+            Values = new uint[lastNonzeroValueIndex + 1];
+            for (int i = 0; i <= lastNonzeroValueIndex; ++i)
+                Values[i] = values[i];
+            if (Values.Length == 1 && Values[0] == 0)
+                Sign = 0;
+            else
+                Sign = sign;
+        }
         public Integer(int value)
         {
-            Value = value;
+            if (value == 0)
+            {
+                Sign = 0;
+                Values = new uint[] { (uint)value };
+            }
+            else if (value > 0)
+            {
+                Sign = 1;
+                Values = new uint[] { (uint)value };
+            }
+            else
+            {
+                Sign = -1;
+                Values = takeTwosComplement(new uint[] { (uint)-value });
+            }
         }
         protected override Number add(Number number)
         {
-            if (number is Integer)
-                return new Integer(Value + ((Integer)number).Value);
-            return number + this;
+            if(!(number is Integer))
+                return number + this;
+            Integer integer = (Integer)number;
+            uint[] aValues;
+            uint[] bValues;
+            void padValueArrays(Integer shortInteger, Integer longInteger)
+            {
+                aValues = new uint[longInteger.Values.Length];
+                shortInteger.Values.CopyTo(aValues, 0);
+                if (shortInteger.Sign < 0)
+                    for (int i = shortInteger.Values.Length; i < longInteger.Values.Length; ++i)
+                        aValues[i] = ~0u;
+                bValues = longInteger.Values;
+            }
+            if (Values.Length < integer.Values.Length)
+                padValueArrays(this, integer);
+            else
+                padValueArrays(integer, this);
+            uint[] sum = new uint[aValues.Length + 1];
+            bool remainder = false;
+            for (int i = 0; i < aValues.Length; ++i)
+            {
+                uint power = 1;
+                for (int j = 0; j < 32; ++j)
+                {
+                    bool aDigitIsZero = (aValues[i] & power) == 0;
+                    bool bDigitIsZero = (bValues[i] & power) == 0;
+                    if (remainder)
+                    {
+                        if (aDigitIsZero)
+                        {
+                            if (bDigitIsZero)
+                            {
+                                sum[i] |= power;
+                                remainder = false;
+                            }
+                        }
+                        else if (!bDigitIsZero)
+                            sum[i] |= power;
+                    }
+                    else if (!aDigitIsZero)
+                    {
+                        if (!bDigitIsZero)
+                            remainder = true;
+                        else
+                            sum[i] |= power;
+                    }
+                    else if (!bDigitIsZero)
+                        sum[i] |= power;
+                    power = power << 1;
+                }
+            }
+            if (Sign < 0)
+            {
+                if (integer.Sign < 0)
+                {
+                    if (!remainder)
+                        sum[sum.Length - 1] = ~1u;
+                    return new Integer(sum, -1);
+                }
+                if (remainder)
+                    return new Integer(sum, 1);
+                return new Integer(sum, -1);
+            }
+            if (integer.Sign < 0)
+            {
+                if (remainder)
+                    return new Integer(sum, 1);
+                return new Integer(sum, -1);
+            }
+            if (remainder)
+                sum[sum.Length - 1] = 1;
+            return new Integer(sum, 1);
+        }
+        static uint[] takeTwosComplement(uint[] values)
+        {
+            uint[] outputValues = new uint[values.Length];
+            for (int i = 0; i < values.Length; ++i)
+                outputValues[i] = ~values[i];
+            for (int i = 0; i < values.Length; ++i)
+            {
+                uint power = 1;
+                for (int j = 0; j < 32; ++j)
+                {
+                    outputValues[i] ^= power;
+                    if ((values[i] & power) != 0)
+                        return outputValues;
+                    power = power << 1;
+                }
+            }
+            return outputValues;
+        }
+        public static Integer operator ++(Integer a)
+        {
+            return (Integer)(a + One);
         }
         public override Number negative()
         {
-            return new Integer(-Value);
+            return new Integer(takeTwosComplement(Values), (sbyte)-Sign);
+        }
+        public static Integer operator --(Integer a)
+        {
+            return (Integer)(a + new Integer(-1));
+        }
+        static uint[] shiftValuesLeft(uint[] values, int valuePlaces, int digitPlaces)
+        {
+            uint[] shiftedValues;
+            if (digitPlaces == 0)
+            {
+                shiftedValues = new uint[values.Length + valuePlaces];
+                values.CopyTo(shiftedValues, valuePlaces);
+            }
+            else if (digitPlaces > 0)
+            {
+                shiftedValues = new uint[values.Length + valuePlaces + 1];
+                for (int i = 0; i < values.Length; ++i)
+                {
+                    shiftedValues[valuePlaces + i] += values[i] << digitPlaces;
+                    shiftedValues[valuePlaces + i + 1] += values[i] >> 32 - digitPlaces;
+                }
+            }
+            else
+            {
+                shiftedValues = new uint[values.Length + valuePlaces];
+                for (int i = 0; i < values.Length; ++i)
+                {
+                    if (valuePlaces + i - 1 >= 0)
+                        shiftedValues[valuePlaces + i - 1] += values[i] << 32 + digitPlaces;
+                    shiftedValues[valuePlaces + i] += values[i] >> -digitPlaces;
+                }
+            }
+            return shiftedValues;
+        }
+        Integer shiftLeft(int valuePlaces, int digitPlaces)
+        {
+            return new Integer(shiftValuesLeft(Values, valuePlaces, digitPlaces), Sign);
         }
         protected override Number multiply(Number number)
         {
-            if (number is Integer)
-                return new Integer(Value * ((Integer)number).Value);
-            return number * this;
+            if (!(number is Integer))
+                return number * this;
+            Integer integer = (Integer)number;
+            Integer product = new Integer(0);
+            for (int i = 0; i < integer.Values.Length; ++i)
+            {
+                uint power = 1;
+                for (int j = 0; j < 32; ++j)
+                {
+                    if ((integer.Values[i] & power) != 0)
+                        product = (Integer)(product + shiftLeft(i, j));
+                    power = power << 1;
+                }
+            }
+            if (integer.Sign < 0)
+                return new Integer(product.Values, (sbyte)-product.Sign);
+            return product;
         }
         public override Number reciprocal()
         {
-            return Fraction.create(1, Value);
-        }        
+            return Fraction.create(One, this);
+        }
+        public IntegerDivision euclideanDivideBy(Integer divisor)
+        {
+            if (divisor.Sign == 0)
+                throw new DivideByZeroException();
+            Integer remainder;
+            if (Sign < 0)
+                remainder = (Integer)negative();
+            else
+                remainder = this;
+            uint[] quotient = new uint[Values.Length];
+            int divisorLeadingDigitPlace = 0;
+            void divideBy(Integer positiveDivisor)
+            {
+                uint power = 0b10000000000000000000000000000000;
+                for (int i = 32; i > 0; --i)
+                {
+                    if ((positiveDivisor.Values[positiveDivisor.Values.Length - 1] & power) != 0)
+                    {
+                        divisorLeadingDigitPlace = i;
+                        break;
+                    }
+                    power = power >> 1;
+                }
+                void calculateValue(int valuePlace, int stoppingDigitPlace)
+                {
+                    power = 0b10000000000000000000000000000000;
+                    for (int i = 32; i >= stoppingDigitPlace; --i)
+                    {
+                        Integer shiftedDivisor = positiveDivisor.shiftLeft(valuePlace -
+                            positiveDivisor.Values.Length + 1, i - divisorLeadingDigitPlace);
+                        Integer difference = (Integer)(remainder + shiftedDivisor.negative());
+                        if (difference.Sign >= 0)
+                        {
+                            quotient[valuePlace] |= power;
+                            remainder = difference;
+                        }
+                        power = power >> 1;
+                    }
+                }
+                for (int i = Values.Length - 1; i >= positiveDivisor.Values.Length; --i)
+                    calculateValue(i, 1);
+                calculateValue(positiveDivisor.Values.Length - 1, divisorLeadingDigitPlace);
+            }
+            IntegerDivision division = new IntegerDivision();
+            if (divisor.Sign < 0)
+            {
+                divideBy(new Integer(takeTwosComplement(divisor.Values), 1));
+                division.quotient = new Integer(takeTwosComplement(shiftValuesLeft(quotient, 0,
+                    1 - divisorLeadingDigitPlace)), divisor.Sign);
+            }
+            else
+            {
+                divideBy(divisor);
+                division.quotient =
+                    new Integer(quotient, divisor.Sign).shiftLeft(0, 1 - divisorLeadingDigitPlace);
+            }
+            if (Sign < 0)
+                division.quotient = (Integer)division.quotient.negative();
+            division.remainder = remainder;
+            return division;
+        }
         public override Number exponentiate(Number exponent)
         {
-            if (Value == 0)
+            if (Sign == 0)
                 return Zero;
-            Integer exponentIntegerFactor = new Integer(exponent.getGreatestIntegerFactor());
-            if (exponentIntegerFactor.Value > 1)
+            Integer exponentIntegerFactor = exponent.getGreatestIntegerFactor();
+            if (exponentIntegerFactor > One)
                 return base.exponentiate(exponentIntegerFactor).exponentiate(
                     exponent / exponentIntegerFactor);
             if (exponent is Fraction)
             {
                 Fraction exponentFraction = (Fraction)exponent;
-                int radicand = Value;
-                Dictionary<Integer, int> radicandFactors = new Dictionary<Integer, int> { };
-                if (radicand < 0)
+                Integer radicand = this;
+                Dictionary<Integer, Integer> radicandFactors = new Dictionary<Integer, Integer> { };
+                if (radicand.Sign < 0)
                 {
-                    radicand *= -1;
-                    radicandFactors.Add(new Integer(-1), 1);
+                    radicand = (Integer)radicand.negative();
+                    radicandFactors.Add(new Integer(-1), One);
                 }
                 Integer factor;
-                for (int i = 2; i <= radicand / 2;)
-                    if (radicand % i == 0)
+                for (Integer i = new Integer(2);
+                    i <= radicand.euclideanDivideBy(new Integer(2)).quotient;)
+                {
+                    IntegerDivision division = radicand.euclideanDivideBy(i);
+                    if (division.remainder.Sign == 0)
                     {
-                        factor = new Integer(i);
+                        factor = i;
                         if (radicandFactors.ContainsKey(factor))
-                            radicandFactors[factor] += 1;
+                            ++radicandFactors[factor];
                         else
-                            radicandFactors.Add(factor, 1);
-                        radicand /= i;
+                            radicandFactors.Add(factor, One);
+                        radicand = division.quotient;
                     }
                     else
                         ++i;
-                factor = new Integer(radicand);
+                }
+                factor = radicand;
                 if (radicandFactors.ContainsKey(factor))
-                    radicandFactors[factor] += 1;
+                    ++radicandFactors[factor];
                 else
-                    radicandFactors.Add(factor, 1);
-                List<int> exponentDivisors =
-                    new Integer(exponentFraction.Denominator).getDivisors();
-                Dictionary<int, Number> termComponents = new Dictionary<int, Number>();
-                termComponents.Add(1, One);
+                    radicandFactors.Add(factor, One);
+                List<Integer> exponentDivisors = exponentFraction.Denominator.getDivisors();
+                Dictionary<Integer, Number> termComponents = new Dictionary<Integer, Number>();
+                termComponents.Add(One, One);
                 termComponents.Add(exponentFraction.Denominator, One);
                 foreach (Integer n in radicandFactors.Keys)
                     for (int i = exponentDivisors.Count - 1; i >= 0; --i)
                         if (exponentDivisors[i] <= radicandFactors[n])
                         {
-                            int index = exponentFraction.Denominator / exponentDivisors[i];
+                            Integer index =
+                                (Integer)(exponentFraction.Denominator / exponentDivisors[i]);
                             if (!termComponents.ContainsKey(index))
                                 termComponents.Add(index, One);
-                            for (int j = 0;
-                                j < radicandFactors[n] / exponentDivisors[i]; ++j)
+                            IntegerDivision division =
+                                radicandFactors[n].euclideanDivideBy(exponentDivisors[i]);
+                            for (Integer j = Zero; j < division.quotient; ++j)
                                 termComponents[index] = termComponents[index] * n;
-                            for (int j = 0;
-                                j < radicandFactors[n] % exponentDivisors[i]; ++j)
+                            for (Integer j = Zero; j < division.remainder; ++j)
                                 termComponents[exponentFraction.Denominator] =
                                     termComponents[exponentFraction.Denominator] * n;
                             break;
                         }
-                Number coefficient = termComponents[1];
-                termComponents.Remove(1);
-                int highestIndexComponent =
-                    ((Integer)termComponents[exponentFraction.Denominator]).Value;
-                if (highestIndexComponent == 1)
+                Number coefficient = termComponents[One];
+                termComponents.Remove(One);
+                Integer highestIndexComponent =
+                    (Integer)termComponents[exponentFraction.Denominator];
+                if (highestIndexComponent == One)
                     termComponents.Remove(exponentFraction.Denominator);
-                else if (highestIndexComponent < 0)
+                else if (highestIndexComponent.Sign < 0)
                 {
-                    if (highestIndexComponent == -1)
+                    if (highestIndexComponent == new Integer(-1))
                         termComponents.Remove(exponentFraction.Denominator);
                     else
                         termComponents[exponentFraction.Denominator] =
                             termComponents[exponentFraction.Denominator].negative();
-                    if (exponentFraction.Denominator % 2 == 0)
-                        coefficient *= ComplexExponential.create(
-                            new Fraction(1, 2 * exponentFraction.Denominator));
+                    Integer two = new Integer(2);
+                    if (exponentFraction.Denominator.euclideanDivideBy(two).remainder.Sign == 0)
+                        coefficient *= ComplexExponential.create(new Fraction(One,
+                            (Integer)(two * exponentFraction.Denominator)));
                     else
                         coefficient = coefficient.negative();
                 }
                 List<Factor> factors = new List<Factor>();
-                foreach (int index in termComponents.Keys)               
+                foreach (Integer index in termComponents.Keys)               
                     factors.Add(new Surd(termComponents[index], index));
                 Number output = Product.create(One, factors) * coefficient;
                 return output;
             }
             return base.exponentiate(exponent);
         }
-        public override int getGreatestIntegerFactor()
+        public override Integer getGreatestIntegerFactor()
         {
-            return Value;
+            return this;
         }
         public override int CompareTo(object obj)
         {
             int comparison = base.CompareTo(obj);
             if (comparison != 0)
                 return comparison;
-            return Value - ((Integer)obj).Value;
+            return ((Integer)(this - (Integer)obj)).Sign;
         }
-        public String format()
+        public override bool Equals(object obj)
         {
-            if (Value != 1)
-                if (Value == -1)
-                    return "-";
-                else
-                    return Value.ToString();
-            return "";
+            return CompareTo(obj) == 0;
         }
+        public static bool operator ==(Integer a, Integer b)
+        {
+            if (a.Sign != b.Sign || a.Values.Length != b.Values.Length)
+                return false;
+            for (int i = 0; i < a.Values.Length; ++i)
+                if (a.Values[i] != b.Values[i])
+                    return false;
+            return true;
+        }
+        public static bool operator !=(Integer a, Integer b)
+        {
+            return !(a == b);
+        }
+        public static bool operator <(Integer a, Integer b)
+        {
+            if (((Integer)(a - b)).Sign < 0)
+                return true;
+            return false;
+        }
+        public static bool operator >(Integer a, Integer b)
+        {
+            if (((Integer)(a - b)).Sign > 0)
+                return true;
+            return false;
+        }
+        public static bool operator <=(Integer a, Integer b)
+        {
+            return !(a > b);
+        }
+        public static bool operator >=(Integer a, Integer b)
+        {
+            return !(a < b);
+        }        
         public override int GetHashCode()
         {
-            return Value;
+            uint output = 0;
+            foreach (uint value in Values)
+                output = output ^ value;
+            return (int)(output * Sign);
         }
         public override String insertString(String str)
         {
-            return format() + str;
+            if (this != One)
+                if (this == new Integer(-1))
+                    return '-' + str;
+                else
+                    return ToString() + str;
+            return str;
         }
-        public override String ToString()
+        public override string ToString()
         {
-            return Value.ToString();
+            StringBuilder convertDigits(Integer integer)
+            {
+                StringBuilder output = new StringBuilder();
+                Integer power = new Integer(10);
+                while (integer.Sign != 0)
+                {
+                    IntegerDivision division = integer.euclideanDivideBy(power);
+                    integer = division.quotient;
+                    output.Insert(0, division.remainder.Values[0]);
+                }
+                return output;
+            }
+            if (Sign < 0)
+                return convertDigits(
+                    new Integer(takeTwosComplement(Values), 1)).Insert(0, '-').ToString();
+            return convertDigits(this).ToString();
         }
-        public static int getGCD(int a, int b)
+        public static Integer getGCD(Integer a, Integer b)
         {
-            int c;
-            while (b != 0)
+            Integer c;
+            while (b.Sign != 0)
             {
                 c = b;
-                b = a % b;
+                b = a.euclideanDivideBy(b).remainder;
                 a = c;
             }
-            if (a < 0)
-                a *= -1;
+            if (a.Sign < 0)
+                a = (Integer)a.negative();
             return a;
         }
-        public static int getLCM(int x, int y)
+        public static Integer getLCM(Integer a, Integer b)
         {
-            return x / getGCD(x, y) * y;
+            return (Integer)(a / getGCD(a, b) * b);
         }
-        public List<int> getDivisors()
+        public List<Integer> getDivisors()
         {
-            int x = Value;
-            List<int> divisors = new List<int>();
-            int divisor = 1;
-            while (divisor <= x / 2)
+            Integer x = this;
+            List<Integer> divisors = new List<Integer>();
+            Integer divisor = Integer.One;
+            Integer half = x.euclideanDivideBy(new Integer(2)).quotient;
+            while (divisor <= half)
             {
-                if (x % divisor == 0)
+                if (x.euclideanDivideBy(divisor).remainder.Sign == 0)
                     divisors.Add(divisor);
                 ++divisor;
             }
@@ -304,53 +606,54 @@ namespace Calculator
     }
     class Fraction : Rational
     {
-        public int Numerator { get; }
-        public int Denominator { get; }
-        public Fraction(int numerator, int denominator)
+        public Integer Numerator { get; }
+        public Integer Denominator { get; }
+        public Fraction(Integer numerator, Integer denominator)
         {
             Numerator = numerator;
             Denominator = denominator;
         }
-        public static Rational create(int numerator, int denominator)
+        public static Rational create(Integer numerator, Integer denominator)
         {
-            if (denominator == 0)
+            if (denominator.Sign == 0)
                 throw new DivideByZeroException();
-            int GCD = Integer.getGCD(numerator, denominator);
-            numerator /= GCD;
-            denominator /= GCD;
-            if (denominator < 0)
+            Integer GCD = Integer.getGCD(numerator, denominator);
+            numerator = numerator.euclideanDivideBy(GCD).quotient;
+            denominator = denominator.euclideanDivideBy(GCD).quotient;
+            if (denominator.Sign < 0)
             {
-                numerator *= -1;
-                denominator *= -1;
+                numerator = (Integer)numerator.negative();
+                denominator = (Integer)denominator.negative();
             }
-            if (denominator == 1)
-                return new Integer(numerator);
+            if (denominator == Integer.One)
+                return numerator;
             return new Fraction(numerator, denominator);
         }
         protected override Number add(Number number)
         {
             if (number is Integer)
-                return create(Numerator + ((Integer)number).Value * Denominator, Denominator);
+                return create((Integer)(Numerator + number * Denominator), Denominator);
             if (number is Fraction)
             {
                 Fraction fraction = (Fraction)number;
-                return create(Numerator * fraction.Denominator + fraction.Numerator * Denominator,
-                    Denominator * fraction.Denominator);
+                return create((Integer)(Numerator * fraction.Denominator + fraction.Numerator *
+                    Denominator), (Integer)(Denominator * fraction.Denominator));
             }
             return number + this;
         }
         public override Number negative()
         {
-            return new Fraction(-Numerator, Denominator);
+            return new Fraction((Integer)(Numerator.negative()), Denominator);
         }
         protected override Number multiply(Number number)
         {
             if (number is Integer)
-                return create(Numerator * ((Integer)number).Value, Denominator);
+                return create((Integer)(Numerator * number), Denominator);
             if (number is Fraction)
             {
                 Fraction fraction = (Fraction)number;
-                return create(Numerator * fraction.Numerator, Denominator * fraction.Denominator);
+                return create((Integer)(Numerator * fraction.Numerator),
+                    (Integer)(Denominator * fraction.Denominator));
             }
             return number * this;
         }
@@ -358,11 +661,11 @@ namespace Calculator
         {
             return create(Denominator, Numerator);
         }
-        public override int getDenominatorLCM()
+        public override Integer getDenominatorLCM()
         {
             return Denominator;
         }
-        public override int getGreatestIntegerFactor()
+        public override Integer getGreatestIntegerFactor()
         {
             return Numerator;
         }
@@ -372,18 +675,18 @@ namespace Calculator
             if (comparison != 0)
                 return comparison;
             Fraction fraction = (Fraction)obj;
-            comparison = Numerator - fraction.Numerator;
+            comparison = ((Integer)(Numerator - fraction.Numerator)).Sign;
             if (comparison != 0)
                 return comparison;
-            return Denominator - fraction.Denominator;
+            return ((Integer)(Denominator - fraction.Denominator)).Sign;
         }
         public override int GetHashCode()
         {
-            return Numerator ^ Denominator;
+            return Numerator.GetHashCode() ^ Denominator.GetHashCode();
         }
         public override String insertString(String str)
         {
-            return new Integer(Numerator).insertString(str) + "/" + Denominator;
+            return Numerator.insertString(str) + "/" + Denominator;
         }
         public override String ToString()
         {
@@ -404,7 +707,7 @@ namespace Calculator
             if (exponent is Fraction)
             {
                 Fraction exponentFraction = (Fraction)exponent;
-                if (exponentFraction.Numerator == 1)
+                if (exponentFraction.Numerator == Integer.One)
                     return new Surd(expBase, exponentFraction.Denominator);
             }
             return new Transcendental(expBase, exponent);
@@ -414,7 +717,7 @@ namespace Calculator
             if (number is Integer)
             {
                 Integer integer = (Integer)number;
-                if (integer.Value == 0)
+                if (integer.Sign == 0)
                     return this;
                 return new Sum(new List<Term> { this, integer });
             }
@@ -483,7 +786,7 @@ namespace Calculator
             String encloseNumber(Number number)
             {
                 string numberString = number.ToString();
-                if ((number is Integer && ((Integer)number).Value >= 0) || numberString == "i")
+                if ((number is Integer && ((Integer)number).Sign >= 0) || numberString == "i")
                     return numberString;
                 return '(' + numberString + ')';
             }
@@ -492,8 +795,9 @@ namespace Calculator
     }
     class Surd : Exponentiation
     {
-        public int Index { get; }
-        public Surd(Number radicand, int index) : base(radicand, new Fraction(1, index))
+        public Integer Index { get; }
+        public Surd(Number radicand, Integer index) :
+            base(radicand, new Fraction(Integer.One, index))
         {
             Index = index;
         }
@@ -502,24 +806,29 @@ namespace Calculator
             if (number is Surd)
             {
                 Surd surd = (Surd)number;
-                int indexLCM = Integer.getLCM(Index, surd.Index);
-                return (Base.exponentiate(new Integer(indexLCM / Index)) * surd.Base.exponentiate(
-                    new Integer(indexLCM / surd.Index))).exponentiate(Fraction.create(1, indexLCM));
+                Integer indexLCM = Integer.getLCM(Index, surd.Index);
+                return (Base.exponentiate(indexLCM / Index) * surd.Base.exponentiate(indexLCM /
+                    surd.Index)).exponentiate(Fraction.create(Integer.One, indexLCM));
             }
             return base.multiply(number);
         }
         public override Number reciprocal()
         {
-            return Base.exponentiate(Fraction.create(Index - 1, Index)) / Base;
+            return Base.exponentiate(Fraction.create((Integer)(Index - Integer.One), Index)) / Base;
         }
         public override Polynomial getMinimalPolynomial()
         {
             Polynomial baseMinimalPolynomial = Base.getMinimalPolynomial();
             if (baseMinimalPolynomial == null)
                 return null;
-            List<Rational> coefficients = baseMinimalPolynomial.Coefficients;
-            for (int i = 1; i < Index; ++i)
-                coefficients.Insert(1, Integer.Zero);
+            List<Rational> coefficients =
+                new List<Rational> { baseMinimalPolynomial.Coefficients[0] };
+            for (int i = 1; i < baseMinimalPolynomial.Coefficients.Count; ++i)
+            {
+                for (Integer j = Integer.One; j < Index; ++j)
+                    coefficients.Add(Integer.Zero);
+                coefficients.Add(baseMinimalPolynomial.Coefficients[i]);
+            }
             return new Polynomial(coefficients);
         }
     }
@@ -544,9 +853,9 @@ namespace Calculator
             if (exponent is Fraction)
             {
                 Fraction exponentFraction = (Fraction)exponent;
-                Exponent = exponentFraction -
-                    new Integer(exponentFraction.Numerator / exponentFraction.Denominator);
-                if (exponentFraction.Numerator < 0)
+                Exponent = exponentFraction - exponentFraction.Numerator.euclideanDivideBy(
+                    exponentFraction.Denominator).quotient;
+                if (exponentFraction.Numerator.Sign < 0)
                     Exponent += Integer.One;
             }
             else
@@ -559,68 +868,67 @@ namespace Calculator
             if (exponent is Fraction)
             {
                 Fraction exponentFraction = (Fraction)exponent;
-                int denominator = exponentFraction.Denominator;
-                int numerator = exponentFraction.Numerator % denominator;
+                Integer denominator = exponentFraction.Denominator;
+                Integer numerator =
+                    exponentFraction.Numerator.euclideanDivideBy(denominator).remainder;                
+                Integer two = new Integer(2);
+                IntegerDivision division = denominator.euclideanDivideBy(two);
                 int multiplicityOfTwo = 0;
-                while (denominator % 2 == 0)
+                while (division.remainder.Sign == 0)
                 {
-                    denominator /= 2;
+                    denominator = division.quotient;
+                    division = denominator.euclideanDivideBy(two);
                     ++multiplicityOfTwo;
                 }
                 Number cosine;
-                switch (denominator)
+                if (denominator == Integer.One)
+                    cosine = Integer.One;
+                else if (denominator == new Integer(3)) 
+                    cosine = new Fraction(new Integer(-1), two);
+                else if(denominator == new Integer(5))
+                    cosine = (new Surd(new Integer(5),
+                        new Integer(2)) - Integer.One) / new Integer(4);
+                else if (denominator == new Integer(15))
                 {
-                    case 1:
-                        cosine = Integer.One;
-                        break;
-                    case 3:
-                        cosine = new Fraction(-1, 2);
-                        break;
-                    case 5:
-                        cosine = (new Surd(new Integer(5), 2) - Integer.One) /
-                            new Integer(4);
-                        break;
-                    case 15:
-                        {
-                            Surd a = new Surd(new Integer(5), 2);
-                            cosine = (Integer.One + a + new Surd(new Integer(30) -
-                                new Integer(6) * a, 2)) / new Integer(8);
-                            break;
-                        }
-                    case 17:
-                        {
-                            Integer a = new Integer(17);
-                            Surd b = new Surd(a, 2);
-                            Integer c = new Integer(2);
-                            Surd d = new Surd(a * c - b * new Integer(2), 2);
-                            cosine = (new Integer(-1) + b + d + new Surd(a + b * new Integer(3) -
-                                d - new Surd((a + b) * c, 2) * c, 2) * c) * new Fraction(1, 16);
-                            break;
-                        }
-                    default:
-                        return new ComplexExponential(exponent);
+                    Surd a = new Surd(new Integer(5), two);
+                    cosine = (Integer.One + a + new Surd(new Integer(30) -
+                        new Integer(6) * a, two)) / new Integer(8);         
                 }
-                Rational e = new Fraction(1, 2);
+                else if (denominator == new Integer(17))
+                {
+                    Integer seventeen = new Integer(17);
+                    Surd a = new Surd(seventeen, two);
+                    Surd b = new Surd(seventeen * two - a * two, two);
+                    cosine = (new Integer(-1) + a + b + new Surd(seventeen + a * new Integer(3) -
+                        b - new Surd((seventeen + a) * two, two) * two, two) * two) *
+                        new Fraction(Integer.One, new Integer(16));
+                }
+                else
+                    return new ComplexExponential(exponent);
+                Rational half = new Fraction(Integer.One, two);
+                Integer three = new Integer(3); 
+                Integer four = new Integer(4);
                 for (int i = 0; i < multiplicityOfTwo; ++i)
                 {
-                    denominator *= 2;
-                    cosine = (cosine * e + e).exponentiate(e);
-                    if (4 < 3 * denominator && denominator < 4)
+                    denominator = (Integer)(denominator * two);
+                    cosine = (cosine * half + half).exponentiate(half);
+                    if (four < (Integer)(three * denominator) && denominator < four)
                         cosine = cosine.negative();
                 }
-                Number s = Integer.One;
-                Number t = cosine;
+                Number r = Integer.One;
+                Number s = cosine;
                 Number angleMultipleCosine = cosine;
-                for (int i = 1; i < numerator; ++i)
+                for (Integer i = Integer.One; i < numerator; ++i)
                 {
-                    angleMultipleCosine = new Integer(2) * cosine * t - s;
-                    s = t;
-                    t = angleMultipleCosine;
+                    angleMultipleCosine = two * cosine * s - r;
+                    r = s;
+                    s = angleMultipleCosine;
                 }
                 Number output = ComplexNumber.create(angleMultipleCosine,
-                    (Integer.One - angleMultipleCosine * angleMultipleCosine).exponentiate(e));
-                if (denominator < 4 * numerator && 4 * numerator < 2 * denominator ||
-                    3 * denominator < 4 * numerator && 4 * numerator < 4 * denominator)
+                    (Integer.One - angleMultipleCosine * angleMultipleCosine).exponentiate(half));
+                Integer t = (Integer)(four * numerator);
+                if (denominator < t && t < (Integer)(two * denominator) ||
+                    (Integer)(three * denominator) < t && t < (Integer)(four * denominator))
                     return output.negative();
                 return output;
             }
@@ -631,7 +939,7 @@ namespace Calculator
             if (number is Integer)
             {
                 Integer integer = (Integer)number;
-                if (integer.Value == 0)
+                if (integer.Sign == 0)
                     return this;
                 return new Sum(new List<Term> { this, integer });
             }
@@ -670,8 +978,8 @@ namespace Calculator
             if (!(Exponent is Fraction))
                 return null;            
             List<Rational> coefficients = new List<Rational> { new Integer(-1) };
-            int index = ((Fraction)Exponent).Denominator;
-            for (int i = 1; i < index; ++i)
+            Integer index = ((Fraction)Exponent).Denominator;
+            for (Integer i = Integer.One; i < index; ++i)
                 coefficients.Add(Integer.Zero);
             coefficients.Add(Integer.One);
             return new Polynomial(coefficients);
@@ -715,10 +1023,10 @@ namespace Calculator
         {
             if (coefficient is Integer)
             {
-                int coefficientInt = ((Integer)coefficient).Value;
-                if (coefficientInt == 0)
+                Integer coefficientInteger = (Integer)coefficient;
+                if (coefficientInteger.Sign == 0)
                     return Integer.Zero;
-                if (factors.Count == 1 && coefficientInt == 1)
+                if (factors.Count == 1 && coefficientInteger == Integer.One)
                     return factors[0];
             }
             if (factors.Count == 0)
@@ -730,7 +1038,7 @@ namespace Calculator
             if (number is Integer)
             {
                 Integer integer = (Integer)number;
-                if (integer.Value == 0)
+                if (integer.Sign == 0)
                     return this;
                 return new Sum(new List<Term> { this, integer });
             }
@@ -813,11 +1121,11 @@ namespace Calculator
             variableForm.setCoefficient(Coefficient, indices);
             return variableForm.getMinimalPolynomial();            
         }
-        public override int getDenominatorLCM()
+        public override Integer getDenominatorLCM()
         {
             return Coefficient.getDenominatorLCM();
         }
-        public override int getGreatestIntegerFactor()
+        public override Integer getGreatestIntegerFactor()
         {
             return Coefficient.getGreatestIntegerFactor();
         }
@@ -864,18 +1172,18 @@ namespace Calculator
         }
         string addCoefficient(StringBuilder factors)
         {
-            int numerator;
+            Integer numerator;
             if (Coefficient is Integer)
-                numerator = ((Integer)Coefficient).Value;
+                numerator = (Integer)Coefficient;
             else
             {
                 Fraction coefficientFraction = (Fraction)Coefficient;
                 factors.Append("/" + coefficientFraction.Denominator);
                 numerator = coefficientFraction.Numerator;
             }
-            if (numerator != 1)
+            if (numerator != Integer.One)
             {
-                if (numerator == -1)
+                if (numerator == new Integer(-1))
                     return factors.Insert(0, '-').ToString();
                 else
                 {
@@ -1004,16 +1312,16 @@ namespace Calculator
             }
             return variableForm.getMinimalPolynomial();
         }
-        public override int getDenominatorLCM()
+        public override Integer getDenominatorLCM()
         {
-            int LCM = 1;
+            Integer LCM = Integer.One;
             foreach (Term term in Terms)
                 LCM = Integer.getLCM(LCM, term.getDenominatorLCM());
             return LCM;
         }
-        public override int getGreatestIntegerFactor()
+        public override Integer getGreatestIntegerFactor()
         {
-            int GCD = Terms[0].getGreatestIntegerFactor();
+            Integer GCD = Terms[0].getGreatestIntegerFactor();
             for (int i = 1; i < Terms.Count; ++i)
                 GCD = Integer.getGCD(GCD, Terms[i].getGreatestIntegerFactor());
             return GCD;
@@ -1073,7 +1381,7 @@ namespace Calculator
             if (imaginary is Integer)
             {
                 Integer imaginaryInteger = (Integer)imaginary;
-                if (imaginaryInteger.Value == 0)
+                if (imaginaryInteger.Sign == 0)
                     return real;
             }
             return new ComplexNumber(real, imaginary);
@@ -1115,11 +1423,11 @@ namespace Calculator
             variableForm.setCoefficient(Integer.One, new int[] { 0, 1, 1 });
             return variableForm.getMinimalPolynomial();
         }
-        public override int getDenominatorLCM()
+        public override Integer getDenominatorLCM()
         {
             return Integer.getLCM(Real.getDenominatorLCM(), Imaginary.getDenominatorLCM());
         }
-        public override int getGreatestIntegerFactor()
+        public override Integer getGreatestIntegerFactor()
         {
             return Integer.getGCD(Real.getGreatestIntegerFactor(),
                 Imaginary.getGreatestIntegerFactor());
@@ -1141,7 +1449,7 @@ namespace Calculator
         }
         public override string insertString(string str)
         {
-            if (Real is Integer && ((Integer)Real).Value == 0)
+            if (Real is Integer && ((Integer)Real).Sign == 0)
                 return Imaginary.insertString("i*" + str);
             return '(' + ToString() + ')' + str;
         }
@@ -1149,7 +1457,7 @@ namespace Calculator
         {
             StringBuilder output =
                 new StringBuilder(Imaginary.insertString("i").ToString());
-            if (!(Real is Integer && ((Integer)Real).Value == 0))
+            if (!(Real is Integer && ((Integer)Real).Sign == 0))
             {
                 if (output[0] != '-')
                     output.Insert(0, '+');
@@ -1173,20 +1481,19 @@ namespace Calculator
         {
             if (Coefficients.Count == 0)
                 return this;
-            int LCM = 1;
+            Integer LCM = Integer.One;
             foreach (Rational coefficient in Coefficients)
                 LCM = Integer.getLCM(LCM, coefficient.getDenominatorLCM());
-            Integer integerLCM = new Integer(LCM);
+            Integer integerLCM = LCM;
             List<Rational> integerCoefficients = new List<Rational>();
             foreach (Rational coefficient in Coefficients)
                 integerCoefficients.Add((Rational)(coefficient * integerLCM));
-            int content = ((Integer)integerCoefficients[0]).Value;
+            Integer content = (Integer)integerCoefficients[0];
             for (int i = 1; i < integerCoefficients.Count; ++i)
-                content = Integer.getGCD(content, ((Integer)integerCoefficients[i]).Value);
-            Integer integerContent = new Integer(content);
+                content = Integer.getGCD(content, (Integer)integerCoefficients[i]);
             List<Rational> reducedCoefficients = new List<Rational>();
             foreach (Rational coefficient in integerCoefficients)
-                reducedCoefficients.Add((Integer)(coefficient / integerContent));
+                reducedCoefficients.Add((Integer)(coefficient / content));
             return new Polynomial(reducedCoefficients);
         }
         public static Polynomial operator +(Polynomial a, Polynomial b)
@@ -1323,7 +1630,7 @@ namespace Calculator
                     for (int i = 1; i < (factor.Coefficients.Count + 1) / 2; ++i)
                     {
                         List<Integer> outputValues = new List<Integer>();
-                        List<List<int>> outputValueDivisors = new List<List<int>>();
+                        List<List<Integer>> outputValueDivisors = new List<List<Integer>>();
                         outputValues.Add((Integer)evaluateAt(Integer.Zero));
                         outputValueDivisors.Add(outputValues[0].getDivisors());
                         for (int j = 1; j <= i; ++j)
@@ -1332,15 +1639,17 @@ namespace Calculator
                             outputValueDivisors.Add(outputValues[j].getDivisors());
                             int numberOfPositiveDivisors = outputValueDivisors[j].Count;
                             for (int k = 0; k < numberOfPositiveDivisors; ++k)
-                                outputValueDivisors[j].Add(-outputValueDivisors[j][k]);
+                                outputValueDivisors[j].Add(
+                                    (Integer)outputValueDivisors[j][k].negative());
                         }
-                        List<List<int>> outputCombinations = new List<List<int>>();
-                        void generateAllCombinations(int outputValueIndex, List<int> combination)
+                        List<List<Integer>> outputCombinations = new List<List<Integer>>();
+                        void generateAllCombinations(int outputValueIndex,
+                            List<Integer> combination)
                         {
                             if (outputValueIndex < outputValueDivisors.Count)
-                                foreach (int divisor in outputValueDivisors[outputValueIndex])
+                                foreach (Integer divisor in outputValueDivisors[outputValueIndex])
                                 {
-                                    List<int> enlargedCombination = combination;
+                                    List<Integer> enlargedCombination = combination;
                                     enlargedCombination.Add(divisor);
                                     generateAllCombinations(outputValueIndex + 1,
                                         enlargedCombination);
@@ -1348,8 +1657,8 @@ namespace Calculator
                             else
                                 outputCombinations.Add(combination);
                         }
-                        generateAllCombinations(0, new List<int>());
-                        foreach (List<int> combination in outputCombinations)
+                        generateAllCombinations(0, new List<Integer>());
+                        foreach (List<Integer> combination in outputCombinations)
                         {
                             Polynomial factorCandidate = new Polynomial(new List<Rational>());
                             for (int j = 0; j < outputValueDivisors.Count; ++j)
@@ -1474,7 +1783,7 @@ namespace Calculator
                 for (int j = 0; j < b.Coefficients.Length; ++j)
                 {                    
                     Rational coefficient = (Rational)(a.Coefficients[i] * b.Coefficients[j]);
-                    if (coefficient == Integer.Zero)
+                    if (coefficient.Equals(Integer.Zero))
                         continue;
                     MultivariatePolynomial productComponent =
                         new MultivariatePolynomial(a.MinimalPolynomials);
@@ -1549,7 +1858,7 @@ namespace Calculator
             }
             for (int i = 1; i < matrix.Length; ++i)            
                 for (int j = i; j < matrix.Length; ++j)
-                    if (matrix[i - 1].Coefficients[Coefficients.Length - i] == Integer.Zero)
+                    if (matrix[i - 1].Coefficients[Coefficients.Length - i].Equals(Integer.Zero))
                     {
                         MultivariatePolynomial tempRow = matrix[j];
                         Polynomial tempAugmentationRow = augmentation[j];
@@ -1559,11 +1868,12 @@ namespace Calculator
                         augmentation[i - 1] = tempAugmentationRow;
                     }
                     else
-                    {
-                        Rational scalar = (Rational)(matrix[i].Coefficients[Coefficients.Length - i]
-                            / matrix[i - 1].Coefficients[Coefficients.Length - i].negative());
+                    {                        
                         for (int k = i; k < matrix.Length; ++k)
-                        {                           
+                        {
+                            Rational scalar =
+                                (Rational)(matrix[k].Coefficients[Coefficients.Length - i] /
+                                matrix[i - 1].Coefficients[Coefficients.Length - i].negative());
                             matrix[k] += matrix[i - 1] * scalar;
                             augmentation[k] += augmentation[i - 1] * scalar;
                         }
