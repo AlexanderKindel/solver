@@ -113,10 +113,10 @@ namespace Calculator
         }
         public abstract override int GetHashCode();
 
-        //Treats str as the String representation of a numerical constant, and returns the String
+        //Treats str as the string representation of a numerical constant, and returns the string
         //representation of the reference object multiplied by that constant.
-        public abstract String insertString(String str);
-        public abstract override String ToString();
+        public abstract string insertString(string str);
+        public abstract override string ToString();
     }
     abstract class Term : Number
     { }
@@ -139,7 +139,7 @@ namespace Calculator
         public static Integer Zero { get; } = new Integer(0);
         public static Integer One { get; } = new Integer(1);
         uint[] Values;
-        public sbyte Sign { get; }
+        public sbyte Sign { get; private set; }
         Integer(uint[] values, sbyte sign)
         {
             int lastNonzeroValueIndex = 0;
@@ -172,8 +172,26 @@ namespace Calculator
             else
             {
                 Sign = -1;
-                Values = takeTwosComplement(new uint[] { (uint)-value });
+                Values = new uint[] { (uint)-value };
             }
+        }
+        public static Integer parse(string decimalString)
+        {
+            Integer output = Zero;
+            Integer multiplier = One;
+            Integer multiplierStepSize = new Integer(1000000000);
+            int startIndex = decimalString.Length - 9;
+            while (startIndex >= 0)
+            {
+                output = (Integer)(output + multiplier *
+                    new Integer(int.Parse(decimalString.Substring(startIndex, 9))));
+                multiplier = (Integer)(multiplier * multiplierStepSize);
+                startIndex -= 9;
+            }
+            if (startIndex > -9)
+                output = (Integer)(output + multiplier *
+                    new Integer(int.Parse(decimalString.Substring(0, startIndex + 9))));
+            return output;
         }
         protected override Number add(Number number)
         {
@@ -182,20 +200,41 @@ namespace Calculator
             Integer integer = (Integer)number;
             uint[] aValues;
             uint[] bValues;
+            uint[] takeTwosComplement(uint[] values)
+            {
+                uint[] outputValues = new uint[values.Length];
+                for (int i = 0; i < values.Length; ++i)
+                    outputValues[i] = ~values[i];
+                for (int i = 0; i < values.Length; ++i)
+                {
+                    uint power = 1;
+                    for (int j = 0; j < 32; ++j)
+                    {
+                        outputValues[i] ^= power;
+                        if ((values[i] & power) != 0)
+                            return outputValues;
+                        power = power << 1;
+                    }
+                }
+                return outputValues;
+            }
             void padValueArrays(Integer shortInteger, Integer longInteger)
             {
                 aValues = new uint[longInteger.Values.Length];
-                shortInteger.Values.CopyTo(aValues, 0);
-                if (shortInteger.Sign < 0)
-                    for (int i = shortInteger.Values.Length; i < longInteger.Values.Length; ++i)
-                        aValues[i] = ~0u;
-                bValues = longInteger.Values;
+                uint[] handleSign(Integer n)
+                {
+                    if (n.Sign < 0)
+                        return takeTwosComplement(n.Values);
+                    return n.Values;
+                }
+                handleSign(shortInteger).CopyTo(aValues, 0);
+                bValues = handleSign(longInteger);
             }
             if (Values.Length < integer.Values.Length)
                 padValueArrays(this, integer);
             else
                 padValueArrays(integer, this);
-            uint[] sum = new uint[aValues.Length + 1];
+            uint[] sum = new uint[aValues.Length];
             bool remainder = false;
             for (int i = 0; i < aValues.Length; ++i)
             {
@@ -234,48 +273,40 @@ namespace Calculator
                 if (integer.Sign < 0)
                 {
                     if (!remainder)
-                        sum[sum.Length - 1] = ~1u;
-                    return new Integer(sum, -1);
+                    {
+                        uint[] sumWithRemainder = new uint[sum.Length + 1];
+                        takeTwosComplement(sum).CopyTo(sumWithRemainder, 0);
+                        sumWithRemainder[sum.Length] = 1;
+                        return new Integer(sumWithRemainder, -1);
+                    }
+                    return new Integer(takeTwosComplement(sum), -1);
                 }
                 if (remainder)
                     return new Integer(sum, 1);
-                return new Integer(sum, -1);
+                return new Integer(takeTwosComplement(sum), -1);
             }
             if (integer.Sign < 0)
             {
                 if (remainder)
                     return new Integer(sum, 1);
-                return new Integer(sum, -1);
+                return new Integer(takeTwosComplement(sum), -1);
             }
             if (remainder)
-                sum[sum.Length - 1] = 1;
-            return new Integer(sum, 1);
-        }
-        static uint[] takeTwosComplement(uint[] values)
-        {
-            uint[] outputValues = new uint[values.Length];
-            for (int i = 0; i < values.Length; ++i)
-                outputValues[i] = ~values[i];
-            for (int i = 0; i < values.Length; ++i)
             {
-                uint power = 1;
-                for (int j = 0; j < 32; ++j)
-                {
-                    outputValues[i] ^= power;
-                    if ((values[i] & power) != 0)
-                        return outputValues;
-                    power = power << 1;
-                }
+                uint[] sumWithRemainder = new uint[sum.Length + 1];
+                sum.CopyTo(sumWithRemainder, 0);
+                sumWithRemainder[sum.Length] = 1;
+                return new Integer(sumWithRemainder, 1);
             }
-            return outputValues;
-        }
+            return new Integer(sum, 1);
+        }        
         public static Integer operator ++(Integer a)
         {
             return (Integer)(a + One);
         }
         public override Number negative()
         {
-            return new Integer(takeTwosComplement(Values), (sbyte)-Sign);
+            return new Integer(Values, (sbyte)-Sign);
         }
         public static Integer operator --(Integer a)
         {
@@ -319,7 +350,7 @@ namespace Calculator
             if (!(number is Integer))
                 return number * this;
             Integer integer = (Integer)number;
-            Integer product = new Integer(0);
+            Integer product = Zero;
             for (int i = 0; i < integer.Values.Length; ++i)
             {
                 uint power = 1;
@@ -330,8 +361,7 @@ namespace Calculator
                     power = power << 1;
                 }
             }
-            if (integer.Sign < 0)
-                return new Integer(product.Values, (sbyte)-product.Sign);
+            product.Sign = (sbyte)(Sign * integer.Sign);
             return product;
         }
         public override Number reciprocal()
@@ -341,61 +371,43 @@ namespace Calculator
         public IntegerDivision euclideanDivideBy(Integer divisor)
         {
             if (divisor.Sign == 0)
-                throw new DivideByZeroException();
-            Integer remainder;
-            if (Sign < 0)
-                remainder = (Integer)negative();
-            else
-                remainder = this;
-            uint[] quotient = new uint[Values.Length];
+                throw new DivideByZeroException();            
             int divisorLeadingDigitPlace = 0;
-            void divideBy(Integer positiveDivisor)
+            uint power = 0b10000000000000000000000000000000;
+            for (int i = 32; i > 0; --i)
             {
-                uint power = 0b10000000000000000000000000000000;
-                for (int i = 32; i > 0; --i)
+                if ((divisor.Values[divisor.Values.Length - 1] & power) != 0)
                 {
-                    if ((positiveDivisor.Values[positiveDivisor.Values.Length - 1] & power) != 0)
+                    divisorLeadingDigitPlace = i;
+                    break;
+                }
+                power = power >> 1;
+            }
+            Integer positiveDivisor = new Integer(divisor.Values, 1);
+            Integer remainder = new Integer(Values, 1);
+            uint[] quotient = new uint[Values.Length];
+            void calculateValue(int valuePlace, int stoppingDigitPlace)
+            {
+                power = 0b10000000000000000000000000000000;
+                for (int i = 32; i >= stoppingDigitPlace; --i)
+                {
+                    Integer shiftedDivisor = positiveDivisor.shiftLeft(valuePlace -
+                        positiveDivisor.Values.Length + 1, i - divisorLeadingDigitPlace);
+                    Integer difference = (Integer)(remainder + shiftedDivisor.negative());
+                    if (difference.Sign >= 0)
                     {
-                        divisorLeadingDigitPlace = i;
-                        break;
+                        quotient[valuePlace] |= power;
+                        remainder = difference;
                     }
                     power = power >> 1;
                 }
-                void calculateValue(int valuePlace, int stoppingDigitPlace)
-                {
-                    power = 0b10000000000000000000000000000000;
-                    for (int i = 32; i >= stoppingDigitPlace; --i)
-                    {
-                        Integer shiftedDivisor = positiveDivisor.shiftLeft(valuePlace -
-                            positiveDivisor.Values.Length + 1, i - divisorLeadingDigitPlace);
-                        Integer difference = (Integer)(remainder + shiftedDivisor.negative());
-                        if (difference.Sign >= 0)
-                        {
-                            quotient[valuePlace] |= power;
-                            remainder = difference;
-                        }
-                        power = power >> 1;
-                    }
-                }
-                for (int i = Values.Length - 1; i >= positiveDivisor.Values.Length; --i)
-                    calculateValue(i, 1);
-                calculateValue(positiveDivisor.Values.Length - 1, divisorLeadingDigitPlace);
             }
+            for (int i = Values.Length - 1; i >= positiveDivisor.Values.Length; --i)
+                calculateValue(i, 1);
+            calculateValue(positiveDivisor.Values.Length - 1, divisorLeadingDigitPlace);
             IntegerDivision division = new IntegerDivision();
-            if (divisor.Sign < 0)
-            {
-                divideBy(new Integer(takeTwosComplement(divisor.Values), 1));
-                division.quotient = new Integer(takeTwosComplement(shiftValuesLeft(quotient, 0,
-                    1 - divisorLeadingDigitPlace)), divisor.Sign);
-            }
-            else
-            {
-                divideBy(divisor);
-                division.quotient =
-                    new Integer(quotient, divisor.Sign).shiftLeft(0, 1 - divisorLeadingDigitPlace);
-            }
-            if (Sign < 0)
-                division.quotient = (Integer)division.quotient.negative();
+            division.quotient = new Integer(quotient,
+                (sbyte)(Sign * divisor.Sign)).shiftLeft(0, 1 - divisorLeadingDigitPlace);
             division.remainder = remainder;
             return division;
         }
@@ -554,22 +566,20 @@ namespace Calculator
         }
         public override string ToString()
         {
-            StringBuilder convertDigits(Integer integer)
+            if (Sign == 0)
+                return "0";
+            StringBuilder output = new StringBuilder();
+            Integer quotient = this;
+            Integer power = new Integer(10);
+            while (quotient.Sign != 0)
             {
-                StringBuilder output = new StringBuilder();
-                Integer power = new Integer(10);
-                while (integer.Sign != 0)
-                {
-                    IntegerDivision division = integer.euclideanDivideBy(power);
-                    integer = division.quotient;
-                    output.Insert(0, division.remainder.Values[0]);
-                }
-                return output;
+                IntegerDivision division = quotient.euclideanDivideBy(power);
+                quotient = division.quotient;
+                output.Insert(0, division.remainder.Values[0]);
             }
             if (Sign < 0)
-                return convertDigits(
-                    new Integer(takeTwosComplement(Values), 1)).Insert(0, '-').ToString();
-            return convertDigits(this).ToString();
+                output.Insert(0, '-');
+            return output.ToString();
         }
         public static Integer getGCD(Integer a, Integer b)
         {
@@ -1535,12 +1545,12 @@ namespace Calculator
         {
             return b * a;
         }
-        struct Division
+        struct PolynomialDivision
         {
             public Polynomial Quotient;
             public Polynomial Remainder;
         }
-        Division divide(Polynomial divisor)
+        PolynomialDivision divide(Polynomial divisor)
         {
             List<Rational> quotient = new List<Rational>();
             List<Rational> remainder = new List<Rational>(Coefficients);
@@ -1554,7 +1564,7 @@ namespace Calculator
                         remainder[remainder.Count - j] = (Rational)(remainder[remainder.Count - j] -
                             quotient[0] * divisor.Coefficients[divisor.Coefficients.Count - j - 1]);
                 }
-            Division division;
+            PolynomialDivision division;
             division.Quotient = new Polynomial(quotient);
             division.Remainder = new Polynomial(remainder);
             return division;
@@ -2050,7 +2060,7 @@ namespace Calculator
                 try
                 {
 #if DEBUG
-                    string input = "1/(2^(1/2)+1)";
+                    string input = "-10";
 #else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
@@ -2070,16 +2080,15 @@ namespace Calculator
                             {
                                 if (c == 'i')
                                 {
-                                    int number = int.Parse(numberCollector.ToString());
                                     numbers.Add(ComplexNumber.create(Integer.Zero,
-                                        new Integer(number)));
+                                        Integer.parse(numberCollector.ToString())));
                                     operations.Add(' ');
                                 }
                                 else if (!"()+-*/^".Contains(c.ToString()))
                                     throw new InvalidUserInput(c + " is an invalid character.");
                                 else
                                 {
-                                    numbers.Add(new Integer(int.Parse(numberCollector.ToString())));
+                                    numbers.Add(Integer.parse(numberCollector.ToString()));
                                     operations.Add(' ');
                                     operations.Add(c);
                                     numbers.Add(null);
@@ -2108,7 +2117,7 @@ namespace Calculator
                     if (lastCharWasDigit)
                     {
                         operations.Add(' ');
-                        numbers.Add(new Integer(int.Parse(numberCollector.ToString())));
+                        numbers.Add(Integer.parse(numberCollector.ToString()));
                     }
                     for (int i = 0; i < operations.Count;)
                     {
