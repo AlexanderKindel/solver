@@ -7,9 +7,25 @@ namespace Calculator
     abstract class Number : IComparable, IEquatable<Number>
     {
         protected abstract Number add(Number number);
+        public static Number operator +(Number a, Number b)
+        {
+            return a.add(b);
+        }
         public abstract Number negative();
+        public static Number operator -(Number a, Number b)
+        {
+            return a.add(b.negative());
+        }
         protected abstract Number multiply(Number number);
+        public static Number operator *(Number a, Number b)
+        {
+            return a.multiply(b);
+        }
         public abstract Number reciprocal();
+        public static Number operator /(Number a, Number b)
+        {
+            return a.multiply(b.reciprocal());
+        }
         public abstract Polynomial getMinimalPolynomial();
         public virtual Integer getDenominatorLCM()
         {
@@ -51,8 +67,8 @@ namespace Calculator
                     IntegerDivision division =
                         exponentFraction.Numerator.euclideanDivideBy(exponentFraction.Denominator);
                     return (this * denominatorLCM).exponentiate(exponent) *
-                        denominatorLCM.exponentiate(Fraction.create((Integer)(exponentFraction.
-                        Denominator - division.remainder), exponentFraction.Denominator)) /
+                        denominatorLCM.exponentiate(Fraction.create(exponentFraction.Denominator -
+                        division.remainder, exponentFraction.Denominator)) /
                         denominatorLCM.exponentiate(division.quotient + Integer.One);
                 }
                 Integer numeratorGCD = getGreatestIntegerFactor();
@@ -64,23 +80,7 @@ namespace Calculator
                 }
             }
             return Exponentiation.create(this, exponent);
-        }
-        public static Number operator +(Number a, Number b)
-        {
-            return a.add(b);
-        }
-        public static Number operator -(Number a, Number b)
-        {
-            return a.add(b.negative());
-        }
-        public static Number operator *(Number a, Number b)
-        {
-            return a.multiply(b);
-        }
-        public static Number operator /(Number a, Number b)
-        {
-            return a.multiply(b.reciprocal());
-        }
+        }          
         protected int getTypeIndex()
         {
             if (this is Integer)
@@ -183,21 +183,18 @@ namespace Calculator
             int startIndex = decimalString.Length - 9;
             while (startIndex >= 0)
             {
-                output = (Integer)(output + multiplier *
-                    new Integer(int.Parse(decimalString.Substring(startIndex, 9))));
-                multiplier = (Integer)(multiplier * multiplierStepSize);
+                output = output + multiplier *
+                    new Integer(int.Parse(decimalString.Substring(startIndex, 9)));
+                multiplier = multiplier * multiplierStepSize;
                 startIndex -= 9;
             }
             if (startIndex > -9)
-                output = (Integer)(output + multiplier *
-                    new Integer(int.Parse(decimalString.Substring(0, startIndex + 9))));
+                output = output + multiplier *
+                    new Integer(int.Parse(decimalString.Substring(0, startIndex + 9)));
             return output;
         }
-        protected override Number add(Number number)
+        public static Integer operator +(Integer a, Integer b)
         {
-            if(!(number is Integer))
-                return number + this;
-            Integer integer = (Integer)number;
             uint[] aValues;
             uint[] bValues;
             uint[] takeTwosComplement(uint[] values)
@@ -221,19 +218,18 @@ namespace Calculator
             void padValueArrays(Integer shortInteger, Integer longInteger)
             {
                 aValues = new uint[longInteger.Values.Length];
-                uint[] handleSign(Integer n)
-                {
-                    if (n.Sign < 0)
-                        return takeTwosComplement(n.Values);
-                    return n.Values;
-                }
-                handleSign(shortInteger).CopyTo(aValues, 0);
-                bValues = handleSign(longInteger);
+                shortInteger.Values.CopyTo(aValues, 0);
+                if (shortInteger.Sign < 0)
+                    aValues = takeTwosComplement(aValues);
+                if (longInteger.Sign < 0)
+                    bValues = takeTwosComplement(longInteger.Values);
+                else
+                bValues = longInteger.Values;
             }
-            if (Values.Length < integer.Values.Length)
-                padValueArrays(this, integer);
+            if (a.Values.Length < b.Values.Length)
+                padValueArrays(a, b);
             else
-                padValueArrays(integer, this);
+                padValueArrays(b, a);
             uint[] sum = new uint[aValues.Length];
             bool remainder = false;
             for (int i = 0; i < aValues.Length; ++i)
@@ -268,9 +264,9 @@ namespace Calculator
                     power = power << 1;
                 }
             }
-            if (Sign < 0)
+            if (a.Sign < 0)
             {
-                if (integer.Sign < 0)
+                if (b.Sign < 0)
                 {
                     if (!remainder)
                     {
@@ -285,7 +281,7 @@ namespace Calculator
                     return new Integer(sum, 1);
                 return new Integer(takeTwosComplement(sum), -1);
             }
-            if (integer.Sign < 0)
+            if (b.Sign < 0)
             {
                 if (remainder)
                     return new Integer(sum, 1);
@@ -295,23 +291,37 @@ namespace Calculator
             {
                 uint[] sumWithRemainder = new uint[sum.Length + 1];
                 sum.CopyTo(sumWithRemainder, 0);
-                sumWithRemainder[sum.Length] = 1;
+                sumWithRemainder[sum.Length] = 1;                
                 return new Integer(sumWithRemainder, 1);
             }
             return new Integer(sum, 1);
-        }        
+        }               
         public static Integer operator ++(Integer a)
         {
-            return (Integer)(a + One);
+            return a + One;
+        }
+        protected override Number add(Number number)
+        {
+            if (number is Integer)
+                return (Integer)number + this;
+            return number + this;
+        }
+        public static Integer operator -(Integer a)
+        {
+            return new Integer(a.Values, (sbyte)-a.Sign);
+        }
+        public static Integer operator -(Integer a, Integer b)
+        {
+            return a + -b;
+        }
+        public static Integer operator --(Integer a)
+        {
+            return a + new Integer(-1);
         }
         public override Number negative()
         {
             return new Integer(Values, (sbyte)-Sign);
-        }
-        public static Integer operator --(Integer a)
-        {
-            return (Integer)(a + new Integer(-1));
-        }
+        }        
         static uint[] shiftValuesLeft(uint[] values, int valuePlaces, int digitPlaces)
         {
             uint[] shiftedValues;
@@ -345,24 +355,27 @@ namespace Calculator
         {
             return new Integer(shiftValuesLeft(Values, valuePlaces, digitPlaces), Sign);
         }
-        protected override Number multiply(Number number)
+        public static Integer operator *(Integer a, Integer b)
         {
-            if (!(number is Integer))
-                return number * this;
-            Integer integer = (Integer)number;
             Integer product = Zero;
-            for (int i = 0; i < integer.Values.Length; ++i)
+            for (int i = 0; i < a.Values.Length; ++i)
             {
                 uint power = 1;
                 for (int j = 0; j < 32; ++j)
                 {
-                    if ((integer.Values[i] & power) != 0)
-                        product = (Integer)(product + shiftLeft(i, j));
+                    if ((a.Values[i] & power) != 0)
+                        product = product + b.shiftLeft(i, j);
                     power = power << 1;
                 }
             }
-            product.Sign = (sbyte)(Sign * integer.Sign);
+            product.Sign = (sbyte)(b.Sign * a.Sign);
             return product;
+        }
+        protected override Number multiply(Number number)
+        {
+            if (number is Integer)
+                return (Integer)number * this;
+            return number * this;
         }
         public override Number reciprocal()
         {
@@ -392,8 +405,8 @@ namespace Calculator
                 for (int i = 32; i >= stoppingDigitPlace; --i)
                 {
                     Integer shiftedDivisor = positiveDivisor.shiftLeft(valuePlace -
-                        positiveDivisor.Values.Length + 1, i - divisorLeadingDigitPlace);
-                    Integer difference = (Integer)(remainder + shiftedDivisor.negative());
+                        positiveDivisor.Values.Length + 1, i - divisorLeadingDigitPlace);                    
+                    Integer difference = remainder - shiftedDivisor;
                     if (difference.Sign >= 0)
                     {
                         quotient[valuePlace] |= power;
@@ -426,7 +439,7 @@ namespace Calculator
                 Dictionary<Integer, Integer> radicandFactors = new Dictionary<Integer, Integer> { };
                 if (radicand.Sign < 0)
                 {
-                    radicand = (Integer)radicand.negative();
+                    radicand = -radicand;
                     radicandFactors.Add(new Integer(-1), One);
                 }
                 Integer factor;
@@ -488,7 +501,7 @@ namespace Calculator
                     Integer two = new Integer(2);
                     if (exponentFraction.Denominator.euclideanDivideBy(two).remainder.Sign == 0)
                         coefficient *= ComplexExponential.create(new Fraction(One,
-                            (Integer)(two * exponentFraction.Denominator)));
+                            two * exponentFraction.Denominator));
                     else
                         coefficient = coefficient.negative();
                 }
@@ -509,7 +522,7 @@ namespace Calculator
             int comparison = base.CompareTo(obj);
             if (comparison != 0)
                 return comparison;
-            return ((Integer)(this - (Integer)obj)).Sign;
+            return (this - (Integer)obj).Sign;
         }
         public override bool Equals(object obj)
         {
@@ -530,13 +543,13 @@ namespace Calculator
         }
         public static bool operator <(Integer a, Integer b)
         {
-            if (((Integer)(a - b)).Sign < 0)
+            if ((a - b).Sign < 0)
                 return true;
             return false;
         }
         public static bool operator >(Integer a, Integer b)
         {
-            if (((Integer)(a - b)).Sign > 0)
+            if ((a - b).Sign > 0)
                 return true;
             return false;
         }
@@ -567,7 +580,7 @@ namespace Calculator
         public override string ToString()
         {
             if (Sign == 0)
-                return "0";
+                return "0";            
             StringBuilder output = new StringBuilder();
             Integer quotient = this;
             Integer power = new Integer(10);
@@ -591,7 +604,7 @@ namespace Calculator
                 a = c;
             }
             if (a.Sign < 0)
-                a = (Integer)a.negative();
+                a = -a;
             return a;
         }
         public static Integer getLCM(Integer a, Integer b)
@@ -632,8 +645,8 @@ namespace Calculator
             denominator = denominator.euclideanDivideBy(GCD).quotient;
             if (denominator.Sign < 0)
             {
-                numerator = (Integer)numerator.negative();
-                denominator = (Integer)denominator.negative();
+                numerator = -numerator;
+                denominator = -denominator;
             }
             if (denominator == Integer.One)
                 return numerator;
@@ -646,14 +659,14 @@ namespace Calculator
             if (number is Fraction)
             {
                 Fraction fraction = (Fraction)number;
-                return create((Integer)(Numerator * fraction.Denominator + fraction.Numerator *
-                    Denominator), (Integer)(Denominator * fraction.Denominator));
+                return create(Numerator * fraction.Denominator + fraction.Numerator * Denominator,
+                    Denominator * fraction.Denominator);
             }
             return number + this;
         }
         public override Number negative()
         {
-            return new Fraction((Integer)(Numerator.negative()), Denominator);
+            return new Fraction(-Numerator, Denominator);
         }
         protected override Number multiply(Number number)
         {
@@ -662,8 +675,7 @@ namespace Calculator
             if (number is Fraction)
             {
                 Fraction fraction = (Fraction)number;
-                return create((Integer)(Numerator * fraction.Numerator),
-                    (Integer)(Denominator * fraction.Denominator));
+                return create(Numerator * fraction.Numerator, Denominator * fraction.Denominator);
             }
             return number * this;
         }
@@ -685,10 +697,10 @@ namespace Calculator
             if (comparison != 0)
                 return comparison;
             Fraction fraction = (Fraction)obj;
-            comparison = ((Integer)(Numerator - fraction.Numerator)).Sign;
+            comparison = (Numerator - fraction.Numerator).Sign;
             if (comparison != 0)
                 return comparison;
-            return ((Integer)(Denominator - fraction.Denominator)).Sign;
+            return (Denominator - fraction.Denominator).Sign;
         }
         public override int GetHashCode()
         {
@@ -824,7 +836,7 @@ namespace Calculator
         }
         public override Number reciprocal()
         {
-            return Base.exponentiate(Fraction.create((Integer)(Index - Integer.One), Index)) / Base;
+            return Base.exponentiate(Fraction.create(Index - Integer.One, Index)) / Base;
         }
         public override Polynomial getMinimalPolynomial()
         {
@@ -920,9 +932,9 @@ namespace Calculator
                 Integer four = new Integer(4);
                 for (int i = 0; i < multiplicityOfTwo; ++i)
                 {
-                    denominator = (Integer)(denominator * two);
+                    denominator = denominator * two;
                     cosine = (cosine * half + half).exponentiate(half);
-                    if (four < (Integer)(three * denominator) && denominator < four)
+                    if (four < three * denominator && denominator < four)
                         cosine = cosine.negative();
                 }
                 Number r = Integer.One;
@@ -936,9 +948,9 @@ namespace Calculator
                 }
                 Number output = ComplexNumber.create(angleMultipleCosine,
                     (Integer.One - angleMultipleCosine * angleMultipleCosine).exponentiate(half));
-                Integer t = (Integer)(four * numerator);
-                if (denominator < t && t < (Integer)(two * denominator) ||
-                    (Integer)(three * denominator) < t && t < (Integer)(four * denominator))
+                Integer t = four * numerator;
+                if (denominator < t && t < two * denominator ||
+                    three * denominator < t && t < four * denominator)
                     return output.negative();
                 return output;
             }
@@ -1649,8 +1661,7 @@ namespace Calculator
                             outputValueDivisors.Add(outputValues[j].getDivisors());
                             int numberOfPositiveDivisors = outputValueDivisors[j].Count;
                             for (int k = 0; k < numberOfPositiveDivisors; ++k)
-                                outputValueDivisors[j].Add(
-                                    (Integer)outputValueDivisors[j][k].negative());
+                                outputValueDivisors[j].Add(-outputValueDivisors[j][k]);
                         }
                         List<List<Integer>> outputCombinations = new List<List<Integer>>();
                         void generateAllCombinations(int outputValueIndex,
@@ -2060,7 +2071,7 @@ namespace Calculator
                 try
                 {
 #if DEBUG
-                    string input = "-10";
+                    string input = "4294967296";
 #else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
@@ -2142,8 +2153,7 @@ namespace Calculator
                     if (expression == null)
                         Console.WriteLine("=\n");
                     else
-                        Console.Write(
-                            "=\n" + evaluateExpression(operations, numbers).ToString() + "\n\n");
+                        Console.Write("=\n" + expression.ToString() + "\n\n");
                 }
                 catch (InvalidUserInput e)
                 {
