@@ -46,14 +46,23 @@ namespace Solver
             {
                 return a.multiply(b.reciprocal());
             }
-            public abstract Polynomial getMinimalPolynomial();
+            Polynomial minimalPolynomial = null;
+            public Polynomial MinimalPolynomial
+            {
+                get
+                {
+                    if (minimalPolynomial == null)
+                        minimalPolynomial = calculateMinimalPolynomial();
+                    return minimalPolynomial;
+                }
+            }
+            protected abstract Polynomial calculateMinimalPolynomial();
             public abstract List<Number> getConjugates();
             protected List<Number> testConjugateCandidates(List<Number> conjugateCandidates)
             {
                 List<Number> conjugates = new List<Number>();
-                Polynomial minimalPolynomial = getMinimalPolynomial();
                 foreach (Number conjugate in conjugateCandidates)
-                    if (conjugate.getMinimalPolynomial().Equals(minimalPolynomial))
+                    if (conjugate.MinimalPolynomial.Equals(MinimalPolynomial))
                         conjugates.Add(conjugate);
                 return conjugates;
             }
@@ -143,8 +152,8 @@ namespace Solver
             }
             public abstract override int GetHashCode();
 
-            //Treats str as the string representation of a numerical constant, and returns the string
-            //representation of the reference object multiplied by that constant.
+            //Treats str as the string representation of a numerical constant, and returns the
+            //string representation of the reference object multiplied by that constant.
             public abstract string insertString(string str);
             public abstract override string ToString();
         }
@@ -154,7 +163,7 @@ namespace Solver
         { }
         abstract class Rational : Factor
         {
-            public override Polynomial getMinimalPolynomial()
+            protected override Polynomial calculateMinimalPolynomial()
             {
                 return new Polynomial(new List<Rational> { (Rational)negative(), One });
             }
@@ -675,6 +684,8 @@ namespace Solver
             {
                 if (denominator.Sign == 0)
                     throw new DivideByZeroException();
+                if (numerator.Sign == 0)
+                    return numerator;
                 Integer GCD = Integer.getGCD(numerator, denominator);
                 numerator = numerator.euclideanDivideBy(GCD).quotient;
                 denominator = denominator.euclideanDivideBy(GCD).quotient;
@@ -873,9 +884,9 @@ namespace Solver
             {
                 return Base.exponentiate(Fraction.create(Index - One, Index)) / Base;
             }
-            public override Polynomial getMinimalPolynomial()
+            protected override Polynomial calculateMinimalPolynomial()
             {
-                Polynomial baseMinimalPolynomial = Base.getMinimalPolynomial();
+                Polynomial baseMinimalPolynomial = Base.MinimalPolynomial;
                 if (baseMinimalPolynomial == null)
                     return null;
                 List<Rational> coefficients =
@@ -911,7 +922,7 @@ namespace Solver
             {
                 return create(Base, Exponent.negative());
             }            
-            public override Polynomial getMinimalPolynomial()
+            protected override Polynomial calculateMinimalPolynomial()
             {
                 return null;
             }
@@ -1048,7 +1059,7 @@ namespace Solver
             {
                 return create(Exponent.negative());
             }
-            public override Polynomial getMinimalPolynomial()
+            protected override Polynomial calculateMinimalPolynomial()
             {
                 if (!(Exponent is Fraction))
                     return null;            
@@ -1190,12 +1201,12 @@ namespace Solver
                     factors.Add((Factor)factor.reciprocal());
                 return create((Rational)Coefficient.reciprocal(), factors);
             }
-            public override Polynomial getMinimalPolynomial()
+            protected override Polynomial calculateMinimalPolynomial()
             {
                 Polynomial[] minimalPolynomials = new Polynomial[Factors.Count];
                 for (int i = 0; i < Factors.Count; ++i)
                 {
-                    Polynomial polynomial = Factors[i].getMinimalPolynomial();
+                    Polynomial polynomial = Factors[i].MinimalPolynomial;
                     if (polynomial == null)
                         return null;
                     minimalPolynomials[i] = polynomial;
@@ -1388,7 +1399,7 @@ namespace Solver
                     numerator *= conjugate;
                 return numerator / (numerator * this);
             }
-            public override Polynomial getMinimalPolynomial()
+            protected override Polynomial calculateMinimalPolynomial()
             {
                 Polynomial[] minimalPolynomials = new Polynomial[Terms.Count];
                 Rational constant;
@@ -1407,7 +1418,7 @@ namespace Solver
                 }
                 for (int i = startIndex; i < Terms.Count; ++i)
                 {
-                    Polynomial polynomial = Terms[i].getMinimalPolynomial();
+                    Polynomial polynomial = Terms[i].MinimalPolynomial;
                     if (polynomial == null)
                         return null;
                     minimalPolynomials[i - startIndex] = polynomial;
@@ -1546,11 +1557,11 @@ namespace Solver
                 Number denominator = Real * Real + Imaginary * Imaginary;
                 return create(Real / denominator, Imaginary.negative() / denominator);
             }
-            public override Polynomial getMinimalPolynomial()
+            protected override Polynomial calculateMinimalPolynomial()
             {
-                MultivariatePolynomial variableForm = new MultivariatePolynomial(new Polynomial[] {
-                    Real.getMinimalPolynomial(), Imaginary.getMinimalPolynomial(),
-                    new Polynomial(new List<Rational> { new Integer(-1), Zero, One })});
+                MultivariatePolynomial variableForm = new MultivariatePolynomial(
+                    new Polynomial[] { Real.MinimalPolynomial, Imaginary.MinimalPolynomial,
+                        new Polynomial(new List<Rational> { One, Zero, One })});
                 variableForm.setCoefficient(One, new int[] { 1, 0, 0 });
                 variableForm.setCoefficient(One, new int[] { 0, 1, 1 });
                 return variableForm.getMinimalPolynomial();
@@ -1789,11 +1800,12 @@ namespace Solver
                         {
                             List<Integer> outputValues = new List<Integer>();
                             List<List<Integer>> outputValueDivisors = new List<List<Integer>>();
-                            outputValues.Add((Integer)evaluateAt(Zero));
+                            outputValues.Add((Integer)integerPolynomial.evaluateAt(Zero));
                             outputValueDivisors.Add(outputValues[0].getDivisors());
                             for (int j = 1; j <= i; ++j)
                             {
-                                outputValues.Add((Integer)evaluateAt(new Integer(j)));
+                                outputValues.Add(
+                                    (Integer)integerPolynomial.evaluateAt(new Integer(j)));
                                 outputValueDivisors.Add(outputValues[j].getDivisors());
                                 int numberOfPositiveDivisors = outputValueDivisors[j].Count;
                                 for (int k = 0; k < numberOfPositiveDivisors; ++k)
@@ -2000,8 +2012,9 @@ namespace Solver
                     augmentationRow.Insert(0, Zero);
                     augmentation[i] = new Polynomial(new List<Rational>(augmentationRow));                
                 }
-                for (int i = 1; i < matrix.Length; ++i)            
+                for (int i = 1; i < matrix.Length; ++i)
                     for (int j = i; j < matrix.Length; ++j)
+                    {
                         if (matrix[i - 1].Coefficients[Coefficients.Length - i].Equals(Zero))
                         {
                             MultivariatePolynomial tempRow = matrix[j];
@@ -2012,7 +2025,7 @@ namespace Solver
                             augmentation[i - 1] = tempAugmentationRow;
                         }
                         else
-                        {                        
+                        {
                             for (int k = i; k < matrix.Length; ++k)
                             {
                                 Rational scalar =
@@ -2023,6 +2036,7 @@ namespace Solver
                             }
                             break;
                         }
+                    }
                 List<Rational> annullingPolynomialCoefficients =
                     augmentation[matrix.Length - 1].Coefficients;
                 annullingPolynomialCoefficients[0] = (Rational)(
@@ -2192,7 +2206,7 @@ namespace Solver
                 try
                 {
 #if DEBUG
-                    string input = "1/(1+2^(1/2))";
+                    string input = "1/(1+2^(1/3))";
 #else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
