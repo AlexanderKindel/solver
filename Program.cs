@@ -934,7 +934,7 @@ namespace Solver
         class ComplexExponential : Factor
         {//Represents e^(tau*i*Exponent).
             public Number Exponent { get; }
-            ComplexExponential(Number exponent)
+            public ComplexExponential(Number exponent)
             {
                 if (exponent is Fraction)
                 {
@@ -1063,12 +1063,31 @@ namespace Solver
             {
                 if (!(Exponent is Fraction))
                     return null;            
-                List<Rational> coefficients = new List<Rational> { new Integer(-1) };
+                List<Rational> coefficients = new List<Rational> { new Integer(-1), One };
+                List<Polynomial> dividends = new List<Polynomial>();
                 Integer index = ((Fraction)Exponent).Denominator;
                 for (Integer i = One; i < index; ++i)
-                    coefficients.Add(Zero);
-                coefficients.Add(One);
-                return new Polynomial(coefficients);
+                {
+                    dividends.Add(new Polynomial(new List<Rational>(coefficients)));
+                    coefficients.Insert(1, Zero);
+                }
+                Polynomial annullingPolynomial = dividends[dividends.Count - 1];
+                dividends.RemoveAt(dividends.Count - 1);
+                List<Polynomial> factors = annullingPolynomial.getFactors();
+                foreach (Polynomial factor in factors)
+                {
+                    bool isDivisor = false;
+                    foreach (Polynomial dividend in dividends)
+                        if ((dividend % factor).Coefficients.Count == 0) 
+                        {
+                            isDivisor = true;
+                            break;
+                        }
+                    if (!isDivisor)
+                        return factor * (Rational)factor.Coefficients[
+                            factor.Coefficients.Count - 1].reciprocal();
+                }
+                throw new Exception("This function should have returned during the loop above.");
             }
             public override List<Number> getConjugates()
             {
@@ -1169,12 +1188,11 @@ namespace Solver
                 if (number is Factor)
                 {
                     List<Factor> factors = new List<Factor>(Factors);
-                    List<Factor> productFactors = new List<Factor>(Factors);
                     for (int i = 0; i < factors.Count; ++i)
                     {
                         Number product = number * factors[i];
-                        productFactors.Add((Factor)number);
-                        if (product != new Product(Coefficient, productFactors))
+                        if (!product.Equals(new Product(Coefficient,
+                            new List<Factor> { (Factor)number, factors[i] })))  
                         {
                             factors.RemoveAt(i);
                             return create(Coefficient, factors) * product;
@@ -1228,7 +1246,8 @@ namespace Solver
                         return null;
                     factorConjugates.Add(conjugates);
                 }
-                List<List<Number>> conjugateCombinations = generateCartesianProduct(factorConjugates);
+                List<List<Number>> conjugateCombinations =
+                    generateCartesianProduct(factorConjugates);
                 List<Number> conjugateCandidates = new List<Number>();
                 foreach (List<Number> combination in conjugateCombinations)
                 {
@@ -1395,7 +1414,7 @@ namespace Solver
                     return new Transcendental(this, new Integer(-1));
                 conjugates.Remove(this);
                 Number numerator = One;
-                foreach(Number conjugate in conjugates)                
+                foreach (Number conjugate in conjugates)                 
                     numerator *= conjugate;
                 return numerator / (numerator * this);
             }
@@ -1442,7 +1461,7 @@ namespace Solver
                     List<Number> conjugates = term.getConjugates();
                     if (conjugates == null)
                         return null;
-                    termConjugates.Add(term.getConjugates());
+                    termConjugates.Add(conjugates);
                 }
                 List<List<Number>> conjugateCombinations = generateCartesianProduct(termConjugates);
                 List<Number> conjugateCandidates = new List<Number>();
@@ -2206,7 +2225,7 @@ namespace Solver
                 try
                 {
 #if DEBUG
-                    string input = "1/(1+2^(1/3))";
+                    string input = "1/(1+2^(1/7))";
 #else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
