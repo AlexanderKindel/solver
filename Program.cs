@@ -80,12 +80,12 @@ namespace Solver
                 {
                     Integer intExponent = (Integer)exponent;
                     if (intExponent.Sign < 0)
-                        return exponentiate(exponent).reciprocal();
+                        return exponentiate(exponent.negative()).reciprocal();
                     Number output = One;
                     Number baseToAPowerOfTwo = this;
                     while (intExponent.Sign > 0)
                     {
-                        IntegerDivision division = intExponent.euclideanDivideBy(new Integer(2)); 
+                        IntegerDivision division = intExponent.euclideanDivideBy(new Integer(2));
                         if (division.remainder == One)
                             output *= baseToAPowerOfTwo;
                         baseToAPowerOfTwo *= baseToAPowerOfTwo;
@@ -119,7 +119,7 @@ namespace Solver
                     }
                 }
                 return Exponentiation.create(this, exponent);
-            }          
+            }
             protected int getTypeIndex()
             {
                 if (this is Integer)
@@ -267,7 +267,7 @@ namespace Solver
                     if (longInteger.Sign < 0)
                         bValues = takeTwosComplement(longInteger.Values);
                     else
-                    bValues = longInteger.Values;
+                        bValues = longInteger.Values;
                 }
                 if (a.Values.Length < b.Values.Length)
                     padValueArrays(a, b);
@@ -334,11 +334,11 @@ namespace Solver
                 {
                     uint[] sumWithRemainder = new uint[sum.Length + 1];
                     sum.CopyTo(sumWithRemainder, 0);
-                    sumWithRemainder[sum.Length] = 1;                
+                    sumWithRemainder[sum.Length] = 1;
                     return new Integer(sumWithRemainder, 1);
                 }
                 return new Integer(sum, 1);
-            }               
+            }
             public static Integer operator ++(Integer a)
             {
                 return a + One;
@@ -364,7 +364,7 @@ namespace Solver
             public override Number negative()
             {
                 return new Integer(Values, (sbyte)-Sign);
-            }        
+            }
             static uint[] shiftValuesLeft(uint[] values, int valuePlaces, int digitPlaces)
             {
                 uint[] shiftedValues;
@@ -427,7 +427,7 @@ namespace Solver
             public IntegerDivision euclideanDivideBy(Integer divisor)
             {
                 if (divisor.Sign == 0)
-                    throw new DivideByZeroException();            
+                    throw new DivideByZeroException();
                 int divisorLeadingDigitPlace = 0;
                 uint power = 0b10000000000000000000000000000000;
                 for (int i = 32; i > 0; --i)
@@ -448,7 +448,7 @@ namespace Solver
                     for (int i = 32; i >= stoppingDigitPlace; --i)
                     {
                         Integer shiftedDivisor = positiveDivisor.shiftLeft(valuePlace -
-                            positiveDivisor.Values.Length + 1, i - divisorLeadingDigitPlace);                    
+                            positiveDivisor.Values.Length + 1, i - divisorLeadingDigitPlace);
                         Integer difference = remainder - shiftedDivisor;
                         if (difference.Sign >= 0)
                         {
@@ -550,7 +550,7 @@ namespace Solver
                             coefficient = coefficient.negative();
                     }
                     List<Factor> factors = new List<Factor>();
-                    foreach (Integer index in termComponents.Keys)               
+                    foreach (Integer index in termComponents.Keys)
                         factors.Add(new Surd(termComponents[index], index));
                     Number output = Product.create(One, factors) * coefficient;
                     return output;
@@ -604,7 +604,7 @@ namespace Solver
             public static bool operator >=(Integer a, Integer b)
             {
                 return !(a < b);
-            }        
+            }
             public override int GetHashCode()
             {
                 uint output = 0;
@@ -624,7 +624,7 @@ namespace Solver
             public override string ToString()
             {
                 if (Sign == 0)
-                    return "0";            
+                    return "0";
                 StringBuilder output = new StringBuilder();
                 Integer quotient = this;
                 Integer power = new Integer(10);
@@ -921,7 +921,7 @@ namespace Solver
             public override Number reciprocal()
             {
                 return create(Base, Exponent.negative());
-            }            
+            }
             protected override Polynomial calculateMinimalPolynomial()
             {
                 return null;
@@ -956,7 +956,7 @@ namespace Solver
                     Fraction exponentFraction = (Fraction)exponent;
                     Integer denominator = exponentFraction.Denominator;
                     Integer numerator =
-                        exponentFraction.Numerator.euclideanDivideBy(denominator).remainder;                
+                        exponentFraction.Numerator.euclideanDivideBy(denominator).remainder;
                     Integer two = new Integer(2);
                     IntegerDivision division = denominator.euclideanDivideBy(two);
                     int multiplicityOfTwo = 0;
@@ -969,16 +969,16 @@ namespace Solver
                     Number cosine;
                     if (denominator == One)
                         cosine = One;
-                    else if (denominator == new Integer(3)) 
+                    else if (denominator == new Integer(3))
                         cosine = new Fraction(new Integer(-1), two);
-                    else if(denominator == new Integer(5))
+                    else if (denominator == new Integer(5))
                         cosine = (new Surd(new Integer(5),
                             new Integer(2)) - One) / new Integer(4);
                     else if (denominator == new Integer(15))
                     {
                         Surd a = new Surd(new Integer(5), two);
                         cosine = (One + a + new Surd(new Integer(30) -
-                            new Integer(6) * a, two)) / new Integer(8);         
+                            new Integer(6) * a, two)) / new Integer(8);
                     }
                     else if (denominator == new Integer(17))
                     {
@@ -992,7 +992,7 @@ namespace Solver
                     else
                         return new ComplexExponential(exponent);
                     Rational half = new Fraction(One, two);
-                    Integer three = new Integer(3); 
+                    Integer three = new Integer(3);
                     Integer four = new Integer(4);
                     for (int i = 0; i < multiplicityOfTwo; ++i)
                     {
@@ -1062,7 +1062,7 @@ namespace Solver
             protected override Polynomial calculateMinimalPolynomial()
             {
                 if (!(Exponent is Fraction))
-                    return null;            
+                    return null;
                 List<Rational> coefficients = new List<Rational> { new Integer(-1), One };
                 List<Polynomial> dividends = new List<Polynomial>();
                 Integer index = ((Fraction)Exponent).Denominator;
@@ -1078,7 +1078,7 @@ namespace Solver
                 {
                     bool isDivisor = false;
                     foreach (Polynomial dividend in dividends)
-                        if ((dividend % factor).Coefficients.Count == 0) 
+                        if ((dividend % factor).Coefficients.Count == 0)
                         {
                             isDivisor = true;
                             break;
@@ -1192,7 +1192,7 @@ namespace Solver
                     {
                         Number product = number * factors[i];
                         if (!product.Equals(new Product(Coefficient,
-                            new List<Factor> { (Factor)number, factors[i] })))  
+                            new List<Factor> { (Factor)number, factors[i] })))
                         {
                             factors.RemoveAt(i);
                             return create(Coefficient, factors) * product;
@@ -1229,12 +1229,13 @@ namespace Solver
                         return null;
                     minimalPolynomials[i] = polynomial;
                 }
-                MultivariatePolynomial variableForm = new MultivariatePolynomial(minimalPolynomials);
+                MultivariatePolynomial variableForm =
+                    new MultivariatePolynomial(minimalPolynomials);
                 int[] indices = new int[minimalPolynomials.Length];
                 for (int i = 0; i < indices.Length; ++i)
                     indices[i] = 1;
                 variableForm.setCoefficient(Coefficient, indices);
-                return variableForm.getMinimalPolynomial();            
+                return variableForm.getMinimalPolynomial();
             }
             public override List<Number> getConjugates()
             {
@@ -1410,11 +1411,11 @@ namespace Solver
             public override Number reciprocal()
             {
                 List<Number> conjugates = getConjugates();
-                if (conjugates == null) 
+                if (conjugates == null)
                     return new Transcendental(this, new Integer(-1));
                 conjugates.Remove(this);
                 Number numerator = One;
-                foreach (Number conjugate in conjugates)                 
+                foreach (Number conjugate in conjugates)
                     numerator *= conjugate;
                 return numerator / (numerator * this);
             }
@@ -1423,7 +1424,7 @@ namespace Solver
                 Polynomial[] minimalPolynomials = new Polynomial[Terms.Count];
                 Rational constant;
                 int startIndex;
-                if (Terms[0] is Rational) 
+                if (Terms[0] is Rational)
                 {
                     constant = (Rational)Terms[0];
                     minimalPolynomials = new Polynomial[Terms.Count - 1];
@@ -1442,7 +1443,8 @@ namespace Solver
                         return null;
                     minimalPolynomials[i - startIndex] = polynomial;
                 }
-                MultivariatePolynomial variableForm = new MultivariatePolynomial(minimalPolynomials);
+                MultivariatePolynomial variableForm =
+                    new MultivariatePolynomial(minimalPolynomials);
                 int[] indices = new int[minimalPolynomials.Length];
                 variableForm.setCoefficient(constant, indices);
                 for (int i = 0; i < indices.Length; ++i)
@@ -1744,7 +1746,8 @@ namespace Solver
             {
                 Rational output = Coefficients[0];
                 for (int i = 1; i < Coefficients.Count; ++i)
-                    output = (Rational)(output + Coefficients[i] * input.exponentiate(new Integer(i)));
+                    output =
+                        (Rational)(output + Coefficients[i] * input.exponentiate(new Integer(i)));
                 return output;
             }
             public Polynomial getDerivative()
@@ -1795,7 +1798,7 @@ namespace Solver
             }
             public List<Polynomial> getFactors()
             {
-                Polynomial integerPolynomial = getIntegerPolynomial();          
+                Polynomial integerPolynomial = getIntegerPolynomial();
                 List<Polynomial> factors = new List<Polynomial>();
                 Polynomial derivative = integerPolynomial.getDerivative();
                 Polynomial a = getGCD(integerPolynomial, derivative);
@@ -1853,7 +1856,7 @@ namespace Solver
                                             new Integer(denominator)));
                                     factorCandidate += new Polynomial(basisPolynomialCoefficients);
                                 }
-                                if ((factor % factorCandidate).Coefficients.Count == 0) 
+                                if ((factor % factorCandidate).Coefficients.Count == 0)
                                 {
                                     if (!irreducibleFactors.Contains(factorCandidate))
                                         irreducibleFactors.Add(factorCandidate);
@@ -1888,11 +1891,11 @@ namespace Solver
         }
         class MultivariatePolynomial
         {//Represents a polynomial whose variables each represent a specific number.
-            Polynomial[] MinimalPolynomials;        
+            Polynomial[] MinimalPolynomials;
             public Rational[] Coefficients { get; }
             public MultivariatePolynomial(Polynomial[] minimalPolynomials)
-            {//The nth minimalPolynomial entry is the minimal polynomial of the number the nth variable
-             //represents.
+            {//The nth minimalPolynomial entry is the minimal polynomial of the number the nth
+             //variable represents.
                 MinimalPolynomials = minimalPolynomials;
                 int numberOfCoefficients = 1;
                 for (int i = 0; i < MinimalPolynomials.Length; ++i)
@@ -1943,7 +1946,7 @@ namespace Solver
                     for (int j = 0; j < b.Coefficients.Length; ++j)
                     {
                         Rational coefficient = (Rational)(a.Coefficients[i] * b.Coefficients[j]);
-                        if (!coefficient.Equals(Zero)) 
+                        if (!coefficient.Equals(Zero))
                             product.Coefficients[i + j] =
                                 (Rational)(a.Coefficients[i] * b.Coefficients[j]);
                     }
@@ -1955,7 +1958,7 @@ namespace Solver
                 MultivariatePolynomial product = new MultivariatePolynomial(a.MinimalPolynomials);
                 for (int i = 0; i < a.Coefficients.Length; ++i)
                     for (int j = 0; j < b.Coefficients.Length; ++j)
-                    {                    
+                    {
                         Rational coefficient = (Rational)(a.Coefficients[i] * b.Coefficients[j]);
                         if (coefficient.Equals(Zero))
                             continue;
@@ -1969,7 +1972,7 @@ namespace Solver
                         {
                             indices[k] += indicesB[k];
                             MultivariatePolynomial termComponent =
-                                new MultivariatePolynomial(a.MinimalPolynomials);                        
+                                new MultivariatePolynomial(a.MinimalPolynomials);
                             if (indices[k] < a.MinimalPolynomials[k].Coefficients.Count - 1)
                             {
                                 termComponentIndices[k] = indices[k];
@@ -1995,7 +1998,7 @@ namespace Solver
                                     termComponentIndices[k] = l;
                                     termComponent.setCoefficient((Rational)a.MinimalPolynomials[k].
                                         Coefficients[l].negative(), termComponentIndices);
-                                }                            
+                                }
                             }
                             productComponent = reductionlessMultiply(productComponent, termComponent);
                             termComponentIndices[k] = 0;
@@ -2016,7 +2019,7 @@ namespace Solver
                 return b * a;
             }
             public Polynomial getMinimalPolynomial()
-            {            
+            {
                 MultivariatePolynomial[] powers = new MultivariatePolynomial[Coefficients.Length];
                 MultivariatePolynomial power = new MultivariatePolynomial(MinimalPolynomials);
                 power.Coefficients[0] = One;
@@ -2025,11 +2028,11 @@ namespace Solver
                 List<Rational> augmentationRow = new List<Rational> { One };
                 for (int i = 0; i < Coefficients.Length; ++i)
                 {
-                    power *= this;                
+                    power *= this;
                     powers[i] = power;
-                    matrix[i] = power;                
+                    matrix[i] = power;
                     augmentationRow.Insert(0, Zero);
-                    augmentation[i] = new Polynomial(new List<Rational>(augmentationRow));                
+                    augmentation[i] = new Polynomial(new List<Rational>(augmentationRow));
                 }
                 for (int i = 1; i < matrix.Length; ++i)
                     for (int j = i; j < matrix.Length; ++j)
@@ -2061,7 +2064,7 @@ namespace Solver
                 annullingPolynomialCoefficients[0] = (Rational)(
                     annullingPolynomialCoefficients[0] - matrix[matrix.Length - 1].Coefficients[0]);
                 Polynomial minimalPolynomial = new Polynomial(annullingPolynomialCoefficients);
-                List<Polynomial> factors = minimalPolynomial.getFactors();            
+                List<Polynomial> factors = minimalPolynomial.getFactors();
                 foreach (Polynomial factor in factors)
                 {
                     MultivariatePolynomial sum = new MultivariatePolynomial(MinimalPolynomials);
@@ -2070,12 +2073,12 @@ namespace Solver
                         sum += factor.Coefficients[i] * powers[i - 1];
                     bool sumIsZero = true;
                     foreach (Rational coefficient in sum.Coefficients)
-                        if (!coefficient.Equals(Zero)) 
+                        if (!coefficient.Equals(Zero))
                         {
                             sumIsZero = false;
                             break;
                         }
-                    if(sumIsZero)
+                    if (sumIsZero)
                     {
                         minimalPolynomial = factor;
                         break;
@@ -2099,7 +2102,7 @@ namespace Solver
                 return output.ToString();
             }
 #endif
-        }    
+        }
         static Number evaluateExpression(List<char> operations, List<Number> numbers)
         {
             for (int i = 0; i < operations.Count;)
