@@ -58,13 +58,14 @@ namespace Solver
             }
             protected abstract Polynomial calculateMinimalPolynomial();
             public abstract List<Number> getConjugates();
-            protected List<Number> testConjugateCandidates(List<Number> conjugateCandidates)
+            protected void removeNonConjugates(List<Number> conjugateCandidates)
             {
-                List<Number> conjugates = new List<Number>();
-                foreach (Number conjugate in conjugateCandidates)
-                    if (conjugate.MinimalPolynomial.Equals(MinimalPolynomial))
-                        conjugates.Add(conjugate);
-                return conjugates;
+                for (int i = 0;
+                    conjugateCandidates.Count > MinimalPolynomial.Coefficients.Count - 1;)
+                    if (!conjugateCandidates[i].MinimalPolynomial.Equals(MinimalPolynomial))
+                        conjugateCandidates.RemoveAt(i);
+                    else
+                        ++i;
             }
             public virtual Integer getDenominatorLCM()
             {
@@ -911,7 +912,8 @@ namespace Solver
                 foreach (Number conjugate in baseConjugates)
                     foreach (Number root in rootsOfUnity)
                         conjugateCandidates.Add(new Surd(conjugate, Index) * root);
-                return testConjugateCandidates(conjugateCandidates);
+                removeNonConjugates(conjugateCandidates);
+                return conjugateCandidates;
             }
         }
         class Transcendental : Exponentiation
@@ -1257,7 +1259,8 @@ namespace Solver
                         conjugate *= number;
                     conjugateCandidates.Add(conjugate);
                 }
-                return testConjugateCandidates(conjugateCandidates);
+                removeNonConjugates(conjugateCandidates);
+                return conjugateCandidates;
             }
             public override Integer getDenominatorLCM()
             {
@@ -1445,13 +1448,12 @@ namespace Solver
                 }
                 MultivariatePolynomial variableForm =
                     new MultivariatePolynomial(minimalPolynomials);
-                int[] indices = new int[minimalPolynomials.Length];
-                variableForm.setCoefficient(indices, constant);
-                for (int i = 0; i < indices.Length; ++i)
+                variableForm.setCoefficient(new int[minimalPolynomials.Length], constant);
+                for (int i = 0; i < minimalPolynomials.Length; ++i)
                 {
+                    int[] indices = new int[minimalPolynomials.Length];
                     indices[i] = 1;
                     variableForm.setCoefficient(indices, One);
-                    indices[i] = 0;
                 }
                 return variableForm.getMinimalPolynomial();
             }
@@ -1474,7 +1476,8 @@ namespace Solver
                         conjugate += number;
                     conjugateCandidates.Add(conjugate);
                 }
-                return testConjugateCandidates(conjugateCandidates);
+                removeNonConjugates(conjugateCandidates);
+                return conjugateCandidates;
             }
             public override Integer getDenominatorLCM()
             {
@@ -1595,7 +1598,8 @@ namespace Solver
                 foreach (Number a in realPartConjugates)
                     foreach (Number b in imaginaryPartConjugates)
                         conjugateCandidates.Add(a + create(Zero, One) * b);
-                return testConjugateCandidates(conjugateCandidates);
+                removeNonConjugates(conjugateCandidates);
+                return conjugateCandidates;
             }
             public override Integer getDenominatorLCM()
             {
@@ -1892,7 +1896,7 @@ namespace Solver
         class MultivariatePolynomial
         {//Represents a polynomial whose variables each represent a specific number.
             Polynomial[] MinimalPolynomials;
-            public Dictionary<int[], Rational> Coefficients { get; private set; }
+            public Dictionary<int[], Rational> Coefficients { get; }
             public MultivariatePolynomial(Polynomial[] minimalPolynomials)
             {//The nth minimalPolynomial entry is the minimal polynomial of the number the nth
              //variable represents.
@@ -1901,28 +1905,38 @@ namespace Solver
             }
             public void setCoefficient(int[] indices, Rational coefficient)
             {//The nth index is the degree with respect to the nth variable of the term being set.
-                if (Coefficients.ContainsKey(indices))
-                    Coefficients[indices] = coefficient;
-                else
-                    Coefficients.Add(indices, coefficient);
+                foreach (int[] keyIndices in Coefficients.Keys)                
+                    if (areEqualByValue(indices, keyIndices))
+                    {
+                        Coefficients[indices] = coefficient;
+                        return;
+                    }                
+                Coefficients.Add(indices, coefficient);
             }
             public static MultivariatePolynomial operator +(MultivariatePolynomial a,
                 MultivariatePolynomial b)
             {
                 MultivariatePolynomial sum = new MultivariatePolynomial(a.MinimalPolynomials);
-                sum.Coefficients = new Dictionary<int[], Rational>(a.Coefficients);
-                foreach (int[] indices in b.Coefficients.Keys)
-                    if (sum.Coefficients.ContainsKey(indices))
-                    {
-                        Rational termSum =
-                            (Rational)(sum.Coefficients[indices] + b.Coefficients[indices]);
-                        if (termSum.Equals(Zero))
-                            sum.Coefficients.Remove(indices);
-                        else
-                            sum.Coefficients[indices] = termSum;
-                    }
-                    else
-                        sum.Coefficients.Add(indices, b.Coefficients[indices]);
+                foreach (int[] indices in a.Coefficients.Keys)
+                    sum.Coefficients.Add(indices, a.Coefficients[indices]);
+                foreach (int[] indicesB in b.Coefficients.Keys)
+                {
+                    bool indicesFound = false;
+                    foreach (int[] indicesA in sum.Coefficients.Keys)                    
+                        if (areEqualByValue(indicesA, indicesB)) 
+                        {
+                            Rational termSum =
+                                (Rational)(sum.Coefficients[indicesA] + b.Coefficients[indicesB]);
+                            if (termSum.Equals(Zero))
+                                sum.Coefficients.Remove(indicesA);
+                            else
+                                sum.Coefficients[indicesA] = termSum;
+                            indicesFound = true;
+                            break;
+                        }                    
+                    if (!indicesFound)
+                        sum.Coefficients.Add(indicesB, b.Coefficients[indicesB]);
+                }
                 return sum;
             }
             static MultivariatePolynomial reductionlessMultiply(MultivariatePolynomial a,
@@ -1933,14 +1947,20 @@ namespace Solver
                 foreach (int[] indicesA in a.Coefficients.Keys)
                     foreach (int[] indicesB in b.Coefficients.Keys)
                     {
-                        int[] productIndices = indicesA;
+                        int[] productIndices = new int[indicesA.Length];
                         for (int i = 0; i < productIndices.Length; ++i)
-                            productIndices[i] += indicesB[i];
-                        if (product.Coefficients.ContainsKey(productIndices))
-                            product.Coefficients[productIndices] =
-                                (Rational)(product.Coefficients[productIndices] +
-                                a.Coefficients[indicesA] * b.Coefficients[indicesB]);
-                        else
+                            productIndices[i] += indicesB[i] + indicesA[i];
+                        bool indicesFound = false;
+                        foreach (int[] keyIndices in product.Coefficients.Keys)                        
+                            if (areEqualByValue(productIndices, keyIndices)) 
+                            {
+                                product.Coefficients[productIndices] =
+                                    (Rational)(product.Coefficients[productIndices] +
+                                    a.Coefficients[indicesA] * b.Coefficients[indicesB]);
+                                indicesFound = true;
+                                break;
+                            }
+                        if (!indicesFound) 
                             product.Coefficients.Add(productIndices,
                                 (Rational)(a.Coefficients[indicesA] * b.Coefficients[indicesB]));
                     }
@@ -2031,33 +2051,23 @@ namespace Solver
                         matrixRow.Add(Zero);
                     foreach (int[] indices in power.Coefficients.Keys)
                     {
-                        int termsPresentIndex = -1;
-                        for (int i = 0; i < termsPresent.Count; ++i) 
-                        {
-                            bool isMatch = true;
-                            for (int j = 0; j < indices.Length; ++j)
-                                if (indices[j] != termsPresent[i][j])
-                                {
-                                    isMatch = false;
-                                    break;
-                                }
-                            if (isMatch)
+                        bool indicesFound = false;
+                        for (int i = 0; i < termsPresent.Count; ++i)                        
+                            if (areEqualByValue(indices, termsPresent[i])) 
                             {
-                                termsPresentIndex = i;
+                                matrixRow[i] = power.Coefficients[indices];
+                                indicesFound = true;
                                 break;
-                            }
-                        }
-                        if (termsPresentIndex >= 0)
-                            matrixRow[termsPresentIndex] = power.Coefficients[indices];
-                        else
+                            }                        
+                        if (!indicesFound)
                         {
                             termsPresent.Add(indices);
                             for (int i = 0; i < matrix.Count; ++i)
                                 matrix[i].Add(Zero);
                             matrixRow.Add(power.Coefficients[indices]);
-                        }
-                        matrix.Add(matrixRow);
+                        }                        
                     }
+                    matrix.Add(matrixRow);
                     if (!matrixRow[0].Equals(Zero))
                         constantIsPresent = true;
                     augmentationRow.Insert(0, Zero);
@@ -2111,6 +2121,13 @@ namespace Solver
                 }
                 return minimalPolynomial * (Rational)minimalPolynomial.Coefficients[
                     minimalPolynomial.Coefficients.Count - 1].reciprocal();
+            }
+            static bool areEqualByValue(int[] a, int[] b)
+            {
+                for (int i = 0; i < a.Length; ++i)
+                    if (a[i] != b[i])                    
+                        return false;
+                return true;
             }
 #if DEBUG
             public override string ToString()
