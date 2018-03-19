@@ -363,17 +363,24 @@ namespace Solver
                 return new Integer(Values, (sbyte)-Sign);
             }
             static uint[] shiftValuesLeft(uint[] values, int valuePlaces, int digitPlaces)
-            {
+            {//Negative valuePlaces and digitPlaces values shift to the right. Left shifts preserve
+             //all digits by adding extra uints, while right shifts truncate the rightmost digits.
                 uint[] shiftedValues;
+                int smallestValuePlace;
+                if (valuePlaces < 0)
+                    smallestValuePlace = -valuePlaces;
+                else
+                    smallestValuePlace = 0;
                 if (digitPlaces == 0)
                 {
                     shiftedValues = new uint[values.Length + valuePlaces];
-                    values.CopyTo(shiftedValues, valuePlaces);
+                    for (int i = smallestValuePlace; i < values.Length; ++i)
+                        shiftedValues[valuePlaces + i] = values[i];
                 }
                 else if (digitPlaces > 0)
                 {
                     shiftedValues = new uint[values.Length + valuePlaces + 1];
-                    for (int i = 0; i < values.Length; ++i)
+                    for (int i = smallestValuePlace; i < values.Length; ++i)
                     {
                         shiftedValues[valuePlaces + i] += values[i] << digitPlaces;
                         shiftedValues[valuePlaces + i + 1] += values[i] >> 32 - digitPlaces;
@@ -382,7 +389,7 @@ namespace Solver
                 else
                 {
                     shiftedValues = new uint[values.Length + valuePlaces];
-                    for (int i = 0; i < values.Length; ++i)
+                    for (int i = smallestValuePlace; i < values.Length; ++i)
                     {
                         if (valuePlaces + i - 1 >= 0)
                             shiftedValues[valuePlaces + i - 1] += values[i] << 32 + digitPlaces;
@@ -425,6 +432,15 @@ namespace Solver
             {
                 if (divisor.Sign == 0)
                     throw new DivideByZeroException();
+                IntegerDivision division = new IntegerDivision();
+                division.remainder = new Integer(Values, 1);
+                if (divisor.Values.Length > Values.Length ||
+                    (divisor.Values.Length == Values.Length &&
+                    divisor.Values[divisor.Values.Length - 1] > Values[Values.Length - 1])) 
+                {
+                    division.quotient = Zero;
+                    return division;
+                }
                 int divisorLeadingDigitPlace = 0;
                 uint power = 0b10000000000000000000000000000000;
                 for (int i = 32; i > 0; --i)
@@ -436,8 +452,7 @@ namespace Solver
                     }
                     power = power >> 1;
                 }
-                Integer positiveDivisor = new Integer(divisor.Values, 1);
-                Integer remainder = new Integer(Values, 1);
+                Integer positiveDivisor = new Integer(divisor.Values, 1);                
                 uint[] quotient = new uint[Values.Length];
                 void calculateValue(int valuePlace, int stoppingDigitPlace)
                 {
@@ -446,22 +461,20 @@ namespace Solver
                     {
                         Integer shiftedDivisor = positiveDivisor.shiftLeft(valuePlace -
                             positiveDivisor.Values.Length + 1, i - divisorLeadingDigitPlace);
-                        Integer difference = remainder - shiftedDivisor;
+                        Integer difference = division.remainder - shiftedDivisor;
                         if (difference.Sign >= 0)
                         {
                             quotient[valuePlace] |= power;
-                            remainder = difference;
+                            division.remainder = difference;
                         }
                         power = power >> 1;
                     }
                 }
                 for (int i = Values.Length - 1; i >= positiveDivisor.Values.Length; --i)
                     calculateValue(i, 1);
-                calculateValue(positiveDivisor.Values.Length - 1, divisorLeadingDigitPlace);
-                IntegerDivision division = new IntegerDivision();
-                division.quotient = new Integer(quotient,
-                    (sbyte)(Sign * divisor.Sign)).shiftLeft(0, 1 - divisorLeadingDigitPlace);
-                division.remainder = remainder;
+                calculateValue(positiveDivisor.Values.Length - 1, divisorLeadingDigitPlace);                
+                division.quotient = new Integer(quotient, (sbyte)(Sign * divisor.Sign)).shiftLeft(
+                    1 - positiveDivisor.Values.Length, 1 - divisorLeadingDigitPlace);
                 return division;
             }
             protected override Polynomial calculateMinimalPolynomial()
