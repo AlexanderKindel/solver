@@ -6,8 +6,23 @@ namespace Solver
 {
     class Solver
     {
-        static List<List<T>> generateCartesianProduct<T>(List<List<T>> sets)
+        delegate T multiplier<T>(T a, T b);
+        static T integerExponentiate<T>(multiplier<T> multiply, T unit, T expBase, Integer exponent)
         {
+            T output = unit;
+            T baseToAPowerOfTwo = expBase;
+            while (exponent.Sign > 0)
+            {
+                IntegerDivision division = exponent.euclideanDivideBy(new Integer(2));
+                if (division.remainder == One)
+                    output = multiply(output, baseToAPowerOfTwo);
+                baseToAPowerOfTwo = multiply(baseToAPowerOfTwo, baseToAPowerOfTwo);
+                exponent = division.quotient;
+            }
+            return output;
+        }
+        static List<List<T>> generateCartesianProduct<T>(List<List<T>> sets)
+        {            
             List<List<T>> elements = new List<List<T>>();
             void generateElements(int setIndex, List<T> element)
             {
@@ -79,20 +94,11 @@ namespace Solver
             {
                 if (exponent is Integer)
                 {
-                    Integer intExponent = (Integer)exponent;
-                    if (intExponent.Sign < 0)
+                    Integer integerExponent = (Integer)exponent;
+                    if (integerExponent.Sign < 0)
                         return exponentiate(exponent.negative()).reciprocal();
-                    Number output = One;
-                    Number baseToAPowerOfTwo = this;
-                    while (intExponent.Sign > 0)
-                    {
-                        IntegerDivision division = intExponent.euclideanDivideBy(new Integer(2));
-                        if (division.remainder == One)
-                            output *= baseToAPowerOfTwo;
-                        baseToAPowerOfTwo *= baseToAPowerOfTwo;
-                        intExponent = division.quotient;
-                    }
-                    return output;
+                    return integerExponentiate(delegate (Number a, Number b) { return a * b; },
+                        One, this, integerExponent);
                 }
                 Integer exponentIntegerFactor = exponent.getGreatestIntegerFactor();
                 if (exponentIntegerFactor > One)
@@ -362,6 +368,10 @@ namespace Solver
             {
                 return new Integer(Values, (sbyte)-Sign);
             }
+            public Integer magnitude()
+            {
+                return new Integer(Values, 1);
+            }
             static uint[] shiftValuesLeft(uint[] values, int valuePlaces, int digitPlaces)
             {//Negative valuePlaces and digitPlaces values shift to the right. Left shifts preserve
              //all digits by adding extra uints, while right shifts truncate the rightmost digits.
@@ -475,6 +485,8 @@ namespace Solver
                 calculateValue(positiveDivisor.Values.Length - 1, divisorLeadingDigitPlace);                
                 division.quotient = new Integer(quotient, (sbyte)(Sign * divisor.Sign)).shiftLeft(
                     1 - positiveDivisor.Values.Length, 1 - divisorLeadingDigitPlace);
+                if (Sign < 0 && division.remainder.Sign != 0) 
+                    division.remainder = positiveDivisor - division.remainder;
                 return division;
             }
             protected override Polynomial calculateMinimalPolynomial()
@@ -601,15 +613,11 @@ namespace Solver
             }
             public static bool operator <(Integer a, Integer b)
             {
-                if ((a - b).Sign < 0)
-                    return true;
-                return false;
+                return (a - b).Sign < 0;
             }
             public static bool operator >(Integer a, Integer b)
             {
-                if ((a - b).Sign > 0)
-                    return true;
-                return false;
+                return (a - b).Sign > 0;
             }
             public static bool operator <=(Integer a, Integer b)
             {
@@ -661,9 +669,7 @@ namespace Solver
                     b = a.euclideanDivideBy(b).remainder;
                     a = c;
                 }
-                if (a.Sign < 0)
-                    a = -a;
-                return a;
+                return a.magnitude();
             }
             public static Integer getGCD(List<Integer> list)
             {
@@ -690,6 +696,16 @@ namespace Solver
                 }
                 divisors.Add(x);
                 return divisors;
+            }
+            public Integer thisChooseK(Integer k)
+            {
+                Integer numerator = One;
+                for (Integer i = this - k + One; i <= this; ++i)
+                    numerator *= i;
+                Integer denominator = One;
+                for (Integer i = new Integer(2); i <= k; ++i)
+                    denominator *= i;
+                return (Integer)(numerator / denominator);
             }
         }
         class Fraction : Rational
@@ -1667,16 +1683,29 @@ namespace Solver
                 return output.ToString();
             }
         }
+        static List<Integer> primes = new List<Integer> { new Integer(2), new Integer(3) };
         class Polynomial : IComparable
         {
             //The index of the coefficient represents the degree of its term.
             public List<Integer> Coefficients { get; }
+            Integer Characteristic = Zero;
             public Polynomial(List<Integer> coefficients)
             {
-                while (coefficients.Count != 0 &&
-                    coefficients[coefficients.Count - 1].Equals(Zero))
+                while (coefficients.Count != 0 && coefficients[coefficients.Count - 1].Equals(Zero))
                     coefficients.RemoveAt(coefficients.Count - 1);
                 Coefficients = coefficients;
+            }
+            public Polynomial(List<Integer> coefficients, Integer characteristic)
+            {
+                Coefficients = new List<Integer>();
+                Characteristic = characteristic;
+                if (!Characteristic.Equals(Zero))
+                    foreach (Integer coefficient in coefficients)
+                        Coefficients.Add(coefficient.euclideanDivideBy(characteristic).remainder);
+                else
+                    Coefficients = coefficients;
+                while (Coefficients.Count != 0 && Coefficients[Coefficients.Count - 1].Equals(Zero))
+                    Coefficients.RemoveAt(Coefficients.Count - 1);
             }
             public static Polynomial operator +(Polynomial a, Polynomial b)
             {
@@ -1685,14 +1714,14 @@ namespace Solver
                 List<Integer> output = a.Coefficients;
                 for (int i = 0; i < b.Coefficients.Count; ++i)
                     output[i] = output[i] + b.Coefficients[i];
-                return new Polynomial(output);
+                return new Polynomial(output, a.Characteristic);
             }
             public Polynomial negative()
             {
                 List<Integer> output = new List<Integer>();
                 foreach (Integer coefficient in Coefficients)
                     output.Add(-coefficient);
-                return new Polynomial(output);
+                return new Polynomial(output, Characteristic);
             }
             public static Polynomial operator -(Polynomial a, Polynomial b)
             {
@@ -1705,14 +1734,14 @@ namespace Solver
                     output.Add(Zero);
                 for (int i = 0; i < a.Coefficients.Count; ++i)
                     for (int j = 0; j < b.Coefficients.Count; ++j)
-                        output[i + j] = output[i + j] + a.Coefficients[i] * b.Coefficients[j];
-                return new Polynomial(output);
+                        output[i + j] += a.Coefficients[i] * b.Coefficients[j];
+                return new Polynomial(output, a.Characteristic);
+            }            
+            public static Polynomial operator *(Polynomial a, Integer b)
+            {
+                return a * new Polynomial(new List<Integer> { b });
             }
             public static Polynomial operator *(Integer a, Polynomial b)
-            {
-                return new Polynomial(new List<Integer> { a }) * b;
-            }
-            public static Polynomial operator *(Polynomial a, Integer b)
             {
                 return b * a;
             }
@@ -1721,16 +1750,23 @@ namespace Solver
                 public Polynomial Quotient;
                 public Polynomial Remainder;
             }
+            delegate Number Divider(Integer a, Integer b);
             PolynomialDivision divideBy(Polynomial divisor)
             {
+                Divider divide;
+                if (Characteristic == Zero)
+                    divide = delegate (Integer a, Integer b) { return a / b; };
+                else
+                    divide = delegate (Integer a, Integer b) {
+                        return a * b.exponentiate(Characteristic - new Integer(2)); };
                 PolynomialDivision division;
                 List<Integer> quotient = new List<Integer>();
                 List<Integer> remainder = new List<Integer>(Coefficients);
                 if (divisor.Coefficients.Count <= Coefficients.Count)
                     for (int i = 0; i <= Coefficients.Count - divisor.Coefficients.Count; ++i)
                     {
-                        Number quotientCoefficient = remainder[remainder.Count - 1] /
-                            divisor.Coefficients[divisor.Coefficients.Count - 1];
+                        Number quotientCoefficient = divide(remainder[remainder.Count - 1],
+                            divisor.Coefficients[divisor.Coefficients.Count - 1]);
                         if (!(quotientCoefficient is Integer))
                         {
                             division.Quotient = null;
@@ -1744,8 +1780,8 @@ namespace Solver
                                 remainder[remainder.Count - j] - quotient[0] *
                                 divisor.Coefficients[divisor.Coefficients.Count - j - 1];
                     }
-                division.Quotient = new Polynomial(quotient);
-                division.Remainder = new Polynomial(remainder);
+                division.Quotient = new Polynomial(quotient, Characteristic);
+                division.Remainder = new Polynomial(remainder, Characteristic);
                 return division;
             }
             public static Polynomial operator /(Polynomial a, Polynomial b)
@@ -1755,6 +1791,11 @@ namespace Solver
             public static Polynomial operator %(Polynomial a, Polynomial b)
             {
                 return a.divideBy(b).Remainder;
+            }
+            public Polynomial exponentiate(Integer exponent)
+            {
+                return integerExponentiate(delegate (Polynomial A, Polynomial B) { return A * B; },
+                    new Polynomial(new List<Integer> { One }, Characteristic), this, exponent);
             }
             public Integer evaluateAt(Integer input)
             {
@@ -1769,7 +1810,14 @@ namespace Solver
                 List<Integer> derivativeCoefficients = new List<Integer>();
                 for (int i = 1; i < Coefficients.Count; ++i)
                     derivativeCoefficients.Add(Coefficients[i] * new Integer(i));
-                return new Polynomial(derivativeCoefficients);
+                return new Polynomial(derivativeCoefficients, Characteristic);
+            }
+            Integer reduceToPrimitivePart()
+            {//Returns the content used in the reduction.
+                Integer content = Integer.getGCD(Coefficients);
+                for (int i = 0; i < Coefficients.Count; ++i)
+                    Coefficients[i] = (Integer)(Coefficients[i] / content);
+                return content;
             }
             public virtual int CompareTo(object obj)
             {
@@ -1799,35 +1847,29 @@ namespace Solver
             public bool Equals(Polynomial polynomial)
             {
                 return CompareTo(polynomial) == 0;
-            }
-            public static Polynomial getGCD(Polynomial a, Polynomial b)
+            }            
+            static Polynomial getGCD(Polynomial a, Polynomial b)
             {
                 Polynomial A;
                 Polynomial B;
                 if (b.Coefficients.Count > a.Coefficients.Count)
                 {
-                    A = new Polynomial(new List<Integer>(b.Coefficients));
-                    B = new Polynomial(new List<Integer>(a.Coefficients));
+                    A = new Polynomial(new List<Integer>(b.Coefficients), b.Characteristic);
+                    B = new Polynomial(new List<Integer>(a.Coefficients), a.Characteristic);
                 }
                 else
                 {
-                    A = new Polynomial(new List<Integer>(a.Coefficients));
-                    B = new Polynomial(new List<Integer>(b.Coefficients));
+                    A = new Polynomial(new List<Integer>(a.Coefficients), a.Characteristic);
+                    B = new Polynomial(new List<Integer>(b.Coefficients), b.Characteristic);
                 }
                 if (b.Coefficients.Count == 0)
                     return a;
-                Integer contentA = Integer.getGCD(A.Coefficients);
-                Integer contentB = Integer.getGCD(B.Coefficients);
-                Integer d = Integer.getGCD(contentA, contentB);
-                for (int i = 0; i < A.Coefficients.Count; ++i)
-                    A.Coefficients[i] = (Integer)(A.Coefficients[i] / contentA);
-                for (int i = 0; i < B.Coefficients.Count; ++i)
-                    B.Coefficients[i] = (Integer)(B.Coefficients[i] / contentB);
+                Integer d = Integer.getGCD(A.reduceToPrimitivePart(), B.reduceToPrimitivePart());
                 Integer g = One;
                 Number h = One;
                 Integer degree = new Integer(A.Coefficients.Count - B.Coefficients.Count);
-                Polynomial remainder = ((Integer)B.Coefficients[
-                    B.Coefficients.Count - 1].exponentiate(degree + One) * A) % B;
+                Polynomial remainder = ((Integer)B.Coefficients[B.Coefficients.Count - 1].
+                    exponentiate(degree + One) * A).divideBy(B).Remainder;
                 while (remainder.Coefficients.Count > 1)
                 {
                     A = B;
@@ -1838,19 +1880,104 @@ namespace Solver
                     g = A.Coefficients[A.Coefficients.Count - 1];
                     h = h.exponentiate(One - degree) * g.exponentiate(degree);
                     degree = new Integer(A.Coefficients.Count - B.Coefficients.Count);
-                    remainder = ((Integer)B.Coefficients[
-                        B.Coefficients.Count - 1].exponentiate(degree + One) * A) % B;
+                    remainder = ((Integer)B.Coefficients[B.Coefficients.Count - 1].exponentiate(
+                        degree + One) * A).divideBy(B).Remainder;
                 }
                 if (remainder.Coefficients.Count == 1)
-                    return new Polynomial(new List<Integer> { d });
-                contentB = Integer.getGCD(B.Coefficients);
-                for (int i = 0; i < B.Coefficients.Count; ++i)
-                    B.Coefficients[i] = (Integer)(B.Coefficients[i] / contentB);
+                    return new Polynomial(new List<Integer> { d }, a.Characteristic);
+                B.reduceToPrimitivePart();
                 return d * B;
             }
             public List<Polynomial> getFactors()
             {
-                List<Polynomial> factors = new List<Polynomial>();
+                List<Polynomial> irreducibleFactors = new List<Polynomial>();
+                if (Characteristic != Zero)
+                {//Assumes *this is square-free, which is currently admissible because the only time
+                 //getFactors() is called on a Polynomial over a field of nonzero characteristic is
+                 //by itself, when called on Polynomial over the integers, and the Polynomial
+                 //produced in that context is guaranteed to be square-free.
+                    Dictionary<int, Polynomial> distinctDegreeFactors =
+                        new Dictionary<int, Polynomial>();
+                    Polynomial V = this;
+                    Polynomial W = new Polynomial(new List<Integer> { Zero, One }, Characteristic);
+                    int d = 0;
+                    while (d < (Coefficients.Count + 1) / 2)
+                    {
+                        ++d;
+                        W = W.exponentiate(Characteristic).divideBy(this).Remainder;
+                        Polynomial degreeDFactorProduct =
+                            getGCD(W - new Polynomial(new List<Integer> { Zero, One }), V);
+                        if (degreeDFactorProduct.Coefficients.Count > 1)
+                        {
+                            distinctDegreeFactors.Add(d, degreeDFactorProduct);
+                            V = V.divideBy(degreeDFactorProduct).Quotient;
+                            W = W.divideBy(V).Remainder;
+                        }
+                    }
+                    void CZSplit(Polynomial factorProduct, int degree)
+                    {
+                        if ((factorProduct.Coefficients.Count - 1) / degree == 1)
+                        {
+                            irreducibleFactors.Add(factorProduct);
+                            return;
+                        }
+                        Polynomial B;
+                        if (Characteristic == new Integer(2))
+                        {
+                            Polynomial T =
+                                new Polynomial(new List<Integer> { Zero, One }, Characteristic);
+                            Polynomial C =
+                                new Polynomial(new List<Integer>(T.Coefficients), Characteristic);
+                            for (int j = 1; j < degree; ++j)
+                                C = T + (C * C).divideBy(factorProduct).Remainder;
+                            B = getGCD(factorProduct, C);
+                            while (B.Coefficients.Count < 2 ||
+                                B.Coefficients.Count == factorProduct.Coefficients.Count)
+                            {
+                                T *= new Polynomial(new List<Integer> { Zero, Zero, One },
+                                    Characteristic);
+                                C = new Polynomial(new List<Integer>(T.Coefficients),
+                                    Characteristic);
+                                for (int j = 1; j < degree; ++j)
+                                    C = T + (C * C).divideBy(factorProduct).Remainder;
+                                B = getGCD(factorProduct, C);
+                            }
+                        }
+                        else
+                        {
+                            List<Integer> coefficients = new List<Integer>();
+                            Integer p = Characteristic - One;
+                            for (int j = 1; j < 2 * degree; ++j)
+                                coefficients.Add(p);
+                            coefficients.Add(One);
+                            Integer power = (Integer)((Characteristic.exponentiate(
+                                new Integer(degree)) - One) / new Integer(2));
+                            B = getGCD(factorProduct, new Polynomial(new List<Integer>(
+                                coefficients), Characteristic).exponentiate(power) -
+                                new Polynomial(new List<Integer> { One }, Characteristic));
+                            while (B.Coefficients.Count < 2 ||
+                                B.Coefficients.Count == factorProduct.Coefficients.Count)
+                            {
+                                int j = coefficients.Count - 2;
+                                while (coefficients[j] == Zero)
+                                {
+                                    coefficients[j] = p;
+                                    --j;
+                                }
+                                --coefficients[j];
+                                B = getGCD(factorProduct, new Polynomial(new List<Integer>(
+                                    coefficients), Characteristic).exponentiate(power) -
+                                    new Polynomial(new List<Integer> { One }, Characteristic));
+                            }
+                        }
+                        CZSplit(B, degree);
+                        CZSplit(factorProduct.divideBy(B).Quotient, degree);
+                    }
+                    foreach (int degree in distinctDegreeFactors.Keys)
+                        CZSplit(distinctDegreeFactors[degree], degree);
+                    return irreducibleFactors;
+                }
+                List<Polynomial> squarefreeFactors = new List<Polynomial>();
                 Polynomial derivative = getDerivative();
                 Polynomial a = getGCD(this, derivative);
                 Polynomial b = this / a;
@@ -1859,101 +1986,230 @@ namespace Solver
                     || b.Coefficients[0].Equals(new Integer(-1)))))
                 {
                     a = getGCD(b, c);
-                    if (!factors.Contains(a))
-                        factors.Add(a);
+                    if (!squarefreeFactors.Contains(a))
+                        squarefreeFactors.Add(a);
                     b = b / a;
                     c = c / a - b.getDerivative();
                 }
-                List<Polynomial> irreducibleFactors = new List<Polynomial>();
-                void attemptFactorization()
+                List<Polynomial> splitFactor(Polynomial factor)
                 {
-                    foreach (Polynomial factor in factors)
+                    Polynomial moddedFactor;
+                    int i = 0;
+                    while (true)
                     {
-                        for (int i = 1; i < (factor.Coefficients.Count + 1) / 2; ++i)
+                        if (i == primes.Count)
                         {
-                            List<Integer> outputValues = new List<Integer>();
-                            List<List<Integer>> outputValueDivisors = new List<List<Integer>>();
-                            outputValues.Add(evaluateAt(Zero));
-                            outputValueDivisors.Add(outputValues[0].getDivisors());
-                            for (int j = 1; j <= i; ++j)
+                            Integer primeCandidate = primes[primes.Count - 1] + new Integer(2);
+                            while (true)
                             {
-                                outputValues.Add(evaluateAt(new Integer(j)));
-                                outputValueDivisors.Add(outputValues[j].getDivisors());
-                                int numberOfPositiveDivisors = outputValueDivisors[j].Count;
-                                for (int k = 0; k < numberOfPositiveDivisors; ++k)
-                                    outputValueDivisors[j].Add(-outputValueDivisors[j][k]);
-                            }
-                            List<List<Integer>> divisorCombinations =
-                                generateCartesianProduct(outputValueDivisors);
-                            Polynomial basisElementTemplate =
-                                new Polynomial(new List<Integer> { One });
-                            for (int j = 0; j <= i; ++j)
-                                basisElementTemplate *= new Polynomial(
-                                    new List<Integer> { new Integer(-j), One });
-                            foreach (List<Integer> combination in divisorCombinations)
-                            {
-                                List<Number> factorCoefficients = new List<Number>();
-                                for (int j = 0; j < combination.Count; ++j)
-                                    factorCoefficients.Add(Zero);
-                                for (int j = 0; j < combination.Count; ++j)
-                                {
-                                    Polynomial numerator = combination[j] * basisElementTemplate /
-                                        new Polynomial(new List<Integer> { new Integer(-j), One });
-                                    Integer denominator;
-                                    int difference = combination.Count - j;
-                                    if (difference % 2 == 0)
-                                        denominator = One;
-                                    else
-                                        denominator = -One;
-                                    void generateFactorialExpression(int small, int big)
+                                bool isDivisible = false;
+                                for (int j = 0; primes[j] <=
+                                    primeCandidate.euclideanDivideBy(new Integer(2)).quotient; ++j)
+                                    if (primeCandidate.euclideanDivideBy(
+                                        primes[j]).remainder.Equals(Zero))
                                     {
-                                        for (int k = 2; k <= small; ++k)
-                                            denominator *= new Integer(2 * k);
-                                        for (int k = small + 1; k <= big; ++k)
-                                            denominator *= new Integer(k);
+                                        isDivisible = true;
+                                        break;
                                     }
-                                    if (j <= difference)
-                                        generateFactorialExpression(j, difference);
-                                    else
-                                        generateFactorialExpression(difference, j);
-                                    for (int k = 0; k < numerator.Coefficients.Count; ++k)
-                                        factorCoefficients[k] +=
-                                            numerator.Coefficients[k] / denominator;
-                                }
-                                Integer LCM = One;
-                                foreach (Number coefficient in factorCoefficients)
-                                    LCM = Integer.getLCM(LCM, coefficient.getDenominatorLCM());
-                                List<Integer> integerCoefficients = new List<Integer>();
-                                foreach (Number coefficient in factorCoefficients)
-                                    integerCoefficients.Add((Integer)(coefficient * LCM));
-                                List<Integer> reducedCoefficients = new List<Integer>();
-                                Integer content = Integer.getGCD(integerCoefficients);
-                                foreach (Integer coefficient in integerCoefficients)
-                                    reducedCoefficients.Add((Integer)(coefficient / content));
-                                Polynomial factorCandidate = new Polynomial(reducedCoefficients);
-                                PolynomialDivision division = factor.divideBy(factorCandidate);
-                                if (division.Remainder != null &&
-                                    division.Remainder.Coefficients.Count == 0) 
-                                {
-                                    if (!irreducibleFactors.Contains(factorCandidate))
-                                        irreducibleFactors.Add(factorCandidate);
-                                    factors.Remove(factor);
-                                    Polynomial reducedFactor = division.Quotient;
-                                    if (!factors.Contains(reducedFactor))
-                                        factors.Add(reducedFactor);
-                                    return;
-                                }
+                                if (!isDivisible)
+                                    break;
+                                primeCandidate += new Integer(2);
                             }
+                            primes.Add(primeCandidate);
                         }
-                        if (!irreducibleFactors.Contains(factor))
-                            irreducibleFactors.Add(factor);
-                        factors.Remove(factor);
-                        return;
+                        moddedFactor = new Polynomial(factor.Coefficients, primes[i]);
+                        Polynomial GCD = getGCD(factor, factor.getDerivative());
+                        if (GCD.Coefficients.Count == 1 && GCD.Coefficients[0] == One)
+                        {
+                            Integer leadingCoefficientInverse = (Integer)
+                                moddedFactor.Coefficients[moddedFactor.Coefficients.Count -
+                                1].exponentiate(moddedFactor.Characteristic - new Integer(2));
+                            for (int j = 0; j < moddedFactor.Coefficients.Count; ++j)
+                                moddedFactor.Coefficients[j] *= leadingCoefficientInverse;
+                            break;
+                        }
+                        ++i;
                     }
+                    List<Polynomial> irreducibleModdedFactors = moddedFactor.getFactors();
+                    Integer bound = Zero;
+                    foreach (Integer coefficient in factor.Coefficients)
+                        bound += coefficient * coefficient;
+                    Integer squareRoot = One;
+                    while (squareRoot * squareRoot < bound)
+                        ++squareRoot;
+                    Integer factorDegree = new Integer(factor.Coefficients.Count - 1);
+                    Integer k = factorDegree.euclideanDivideBy(new Integer(4)).quotient;
+                    bound = (squareRoot * factorDegree.thisChooseK(k) +
+                        factor.Coefficients[factor.Coefficients.Count - 1].magnitude() *
+                        factorDegree.thisChooseK(k - One)) * new Integer(2) *
+                        factor.Coefficients[factor.Coefficients.Count - 1].magnitude();
+                    Integer e = One;
+                    Integer characteristicPower = moddedFactor.Characteristic;
+                    while (characteristicPower < bound)
+                    {
+                        ++e;
+                        characteristicPower *= moddedFactor.Characteristic;
+                    }
+                    List<Polynomial> liftedFactors = new List<Polynomial>();
+                    Polynomial productOfUnliftedFactors =
+                        new Polynomial(factor.Coefficients, moddedFactor.Characteristic);
+                    for (int j = 0; j < irreducibleModdedFactors.Count - 1; ++j)
+                    {
+                        productOfUnliftedFactors /= irreducibleModdedFactors[j];
+                        Integer characteristicExponent = Zero;
+                        Integer characteristicToPower = One;
+                        Polynomial A = irreducibleModdedFactors[j];
+                        Polynomial B = productOfUnliftedFactors;
+                        A.Characteristic = Zero;
+                        B.Characteristic = Zero;
+                        while (characteristicExponent < e)
+                        {                            
+                            ++characteristicExponent;
+                            characteristicToPower *= moddedFactor.Characteristic;
+                            Polynomial ACoefficient = new Polynomial(new List<Integer> { One },
+                                moddedFactor.Characteristic);
+                            Polynomial GCD = A;
+                            Polynomial BCoefficient =
+                                new Polynomial(new List<Integer>(), moddedFactor.Characteristic);
+                            Polynomial Y = B;
+                            PolynomialDivision division;
+                            while (Y.Coefficients.Count > 0)
+                            {
+                                division = GCD.divideBy(Y);
+                                Polynomial T = ACoefficient - BCoefficient * division.Quotient;
+                                ACoefficient = BCoefficient;
+                                GCD = Y;
+                                BCoefficient = T;
+                                Y = division.Remainder;
+                            }
+                            BCoefficient = (GCD - A * ACoefficient) / productOfUnliftedFactors;
+                            List<Integer> fCoefficients = (factor - A * B).Coefficients;
+                            for (int l = 0; l < fCoefficients.Count; ++l)
+                                fCoefficients[l] =
+                                    (Integer)(fCoefficients[l] / characteristicToPower);
+                            Polynomial f =
+                                new Polynomial(fCoefficients, moddedFactor.Characteristic);
+                            division = (BCoefficient * f).divideBy(A);
+                            division.Quotient.Characteristic = Zero;
+                            division.Remainder.Characteristic = Zero;
+                            A += characteristicToPower * division.Remainder;
+                            B += characteristicToPower * (ACoefficient * f + B * division.Quotient);
+                        }
+                        liftedFactors.Add(A);
+                    }
+                    liftedFactors.Add(productOfUnliftedFactors);
+                    List<Polynomial> factorSplit = new List<Polynomial>();
+                    int d = 1;
+                    List<int> testFactorCombination(int elementsToAdd,
+                        int indexOfPreviousElement, List<int> combinationIndices)
+                    {
+                        if (elementsToAdd == 0) 
+                        {
+                            List<int> finalizedCombinationIndices;
+                            Polynomial V = new Polynomial(new List<Integer> {
+                                factor.Coefficients[factor.Coefficients.Count - 1] });
+                            if (2 * combinationIndices.Count >= Coefficients.Count)
+                            {
+                                finalizedCombinationIndices = new List<int>();
+                                for (int j = liftedFactors.Count - 1; j >= 0; --j)
+                                    if (j == combinationIndices[combinationIndices.Count - 1])
+                                        combinationIndices.RemoveAt(combinationIndices.Count - 1);
+                                    else
+                                        finalizedCombinationIndices.Add(j);
+                            }
+                            else
+                                finalizedCombinationIndices = combinationIndices;
+                            foreach (int index in finalizedCombinationIndices)
+                                V *= liftedFactors[index];
+                            Integer two = new Integer(2);
+                            for (int j = 0; j < V.Coefficients.Count; ++j)
+                            {
+                                Integer remainder = V.Coefficients[j].euclideanDivideBy(
+                                    characteristicPower).remainder;
+                                if (remainder * two <= characteristicPower)
+                                    V.Coefficients[j] = remainder;
+                                else
+                                    V.Coefficients[j] = remainder - characteristicPower;
+                            }
+                            PolynomialDivision division = factor.divideBy(V);
+                            if (division.Remainder.Coefficients.Count == 0)
+                            {
+                                while (division.Remainder.Coefficients.Count == 0) 
+                                {
+                                    factor = division.Quotient;
+                                    division = factor.divideBy(V);
+                                }
+                                V.reduceToPrimitivePart();
+                                factorSplit.Add(V);
+                                return finalizedCombinationIndices;
+                            }
+                            return new List<int>();
+                        }
+                        for (int j = indexOfPreviousElement + 1;
+                            j < liftedFactors.Count - elementsToAdd; ++j)
+                        {
+                            List<int> enlargedCombinationIndices =
+                                new List<int>(combinationIndices);
+                            enlargedCombinationIndices.Add(j);
+                            enlargedCombinationIndices = testFactorCombination(elementsToAdd - 1,
+                                j, enlargedCombinationIndices);
+                            if (enlargedCombinationIndices.Count != 0)
+                                return enlargedCombinationIndices;
+                        }
+                        return new List<int>();
+                    }
+                    List<int> factorsToRemove;
+                    while (2 * d < liftedFactors.Count)   
+                    {
+                        factorsToRemove = testFactorCombination(d, -1, new List<int>());
+                        while (factorsToRemove.Count != 0)
+                        {
+                            foreach (int index in factorsToRemove)
+                                liftedFactors.RemoveAt(index);
+                            factorsToRemove = testFactorCombination(d, -1, new List<int>());
+                        }
+                        ++d;
+                    }
+                    if (2 * d == liftedFactors.Count)
+                    {
+                        factorsToRemove = testFactorCombination(d, 0, new List<int> { 0 });
+                        foreach (int index in factorsToRemove)
+                            liftedFactors.RemoveAt(index);
+                    }
+                    Polynomial finalFactor = new Polynomial(new List<Integer> { One });
+                    foreach (Polynomial liftedFactor in liftedFactors)
+                        finalFactor *= liftedFactor;
+                    if (finalFactor.Coefficients.Count > 1)
+                    {
+                        finalFactor.reduceToPrimitivePart();
+                        factorSplit.Add(finalFactor);
+                    }
+                    return factorSplit;
                 }
-                while (factors.Count > 0)
-                    attemptFactorization();
-                irreducibleFactors.Sort();
+                foreach (Polynomial factor in squarefreeFactors)
+                {
+                    Polynomial X = new Polynomial(new List<Integer> { Zero, One });
+                    if (factor.Coefficients[0].Equals(Zero))
+                    {
+                        irreducibleFactors.Add(X);
+                        factor.Coefficients.RemoveAt(0);
+                        while (factor.Coefficients[0].Equals(Zero))
+                            factor.Coefficients.RemoveAt(0);
+                    }
+                    if (factor.Coefficients[0].magnitude() <
+                        factor.Coefficients[factor.Coefficients.Count - 1].magnitude())
+                    {
+                        factor.Coefficients.Reverse();
+                        List<Polynomial> splitFactors = splitFactor(factor);
+                        for (int i = 0; i < splitFactors.Count; ++i)
+                        {
+                            splitFactors[i].Coefficients.Reverse();
+                            irreducibleFactors.Add(splitFactors[i]);
+                        }
+                    }
+                    else
+                        irreducibleFactors.AddRange(splitFactor(factor));
+                }
                 return irreducibleFactors;
             }
 #if DEBUG
@@ -2170,13 +2426,11 @@ namespace Solver
                                 Integer scalarB =
                                     matrix[k][matrix.Count - i].getGreatestIntegerFactor() *
                                     matrix[i - 1][matrix.Count - i].getDenominatorLCM();
-                                Rational scalar =
-                                    (Rational)(matrix[k][matrix.Count - i] /
-                                    matrix[i - 1][matrix.Count - i].negative());
                                 for (int l = 0; l < matrix.Count; ++l)
                                     matrix[k][l] = (Rational)(
                                         matrix[k][l] * scalarA - matrix[i - 1][l] * scalarB);
-                                augmentation[k] = augmentation[k] * scalarA - augmentation[i - 1] * scalarB;
+                                augmentation[k] =
+                                    augmentation[k] * scalarA - augmentation[i - 1] * scalarB;
                             }
                             break;
                         }
@@ -2349,7 +2603,7 @@ namespace Solver
                 try
                 {
 #if DEBUG
-                    string input = "1/(1+2^(1/3))";
+                    string input = "1/(1+2^(1/2))";
 #else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
