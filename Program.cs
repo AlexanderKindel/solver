@@ -101,7 +101,7 @@ namespace Solver
                         One, this, integerExponent);
                 }
                 Integer exponentIntegerFactor = exponent.getGreatestIntegerFactor();
-                if (exponentIntegerFactor > One)
+                if (!exponentIntegerFactor.Equals(One))
                     return exponentiate(exponentIntegerFactor).exponentiate(
                         exponent / exponentIntegerFactor);
                 if (exponent is Fraction)
@@ -110,11 +110,12 @@ namespace Solver
                     Integer denominatorLCM = getDenominatorLCM();
                     if (denominatorLCM != One)
                     {
-                        IntegerDivision division =
-                            exponentFraction.Numerator.euclideanDivideBy(exponentFraction.Denominator);
+                        IntegerDivision division = exponentFraction.Numerator.euclideanDivideBy(
+                            exponentFraction.Denominator);
                         return (this * denominatorLCM).exponentiate(exponent) *
-                            denominatorLCM.exponentiate(Fraction.create(exponentFraction.Denominator -
-                            division.remainder, exponentFraction.Denominator)) /
+                            denominatorLCM.exponentiate(
+                            Fraction.create(exponentFraction.Denominator - division.remainder,
+                            exponentFraction.Denominator)) /
                             denominatorLCM.exponentiate(division.quotient + One);
                     }
                     Integer numeratorGCD = getGreatestIntegerFactor();
@@ -446,7 +447,7 @@ namespace Solver
                 division.remainder = new Integer(Values, 1);
                 if (divisor.Values.Length > Values.Length ||
                     (divisor.Values.Length == Values.Length &&
-                    divisor.Values[divisor.Values.Length - 1] > Values[Values.Length - 1])) 
+                    divisor.Values[divisor.Values.Length - 1] > Values[Values.Length - 1]))
                 {
                     division.quotient = Zero;
                     return division;
@@ -462,7 +463,7 @@ namespace Solver
                     }
                     power = power >> 1;
                 }
-                Integer positiveDivisor = new Integer(divisor.Values, 1);                
+                Integer positiveDivisor = new Integer(divisor.Values, 1);
                 uint[] quotient = new uint[Values.Length];
                 void calculateValue(int valuePlace, int stoppingDigitPlace)
                 {
@@ -482,10 +483,10 @@ namespace Solver
                 }
                 for (int i = Values.Length - 1; i >= positiveDivisor.Values.Length; --i)
                     calculateValue(i, 1);
-                calculateValue(positiveDivisor.Values.Length - 1, divisorLeadingDigitPlace);                
+                calculateValue(positiveDivisor.Values.Length - 1, divisorLeadingDigitPlace);
                 division.quotient = new Integer(quotient, (sbyte)(Sign * divisor.Sign)).shiftLeft(
                     1 - positiveDivisor.Values.Length, 1 - divisorLeadingDigitPlace);
-                if (Sign < 0 && division.remainder.Sign != 0) 
+                if (Sign < 0 && division.remainder.Sign != 0)
                     division.remainder = positiveDivisor - division.remainder;
                 return division;
             }
@@ -498,7 +499,7 @@ namespace Solver
                 if (Sign == 0)
                     return Zero;
                 Integer exponentIntegerFactor = exponent.getGreatestIntegerFactor();
-                if (exponentIntegerFactor > One)
+                if (!exponentIntegerFactor.Equals(One))
                     return base.exponentiate(exponentIntegerFactor).exponentiate(
                         exponent / exponentIntegerFactor);
                 if (exponent is Fraction)
@@ -506,7 +507,7 @@ namespace Solver
                     Fraction exponentFraction = (Fraction)exponent;
                     Integer radicand = this;
                     Dictionary<Integer, Integer> radicandFactors =
-                        new Dictionary<Integer, Integer> { };
+                        new Dictionary<Integer, Integer>();
                     if (radicand.Sign < 0)
                     {
                         radicand = -radicand;
@@ -1487,7 +1488,8 @@ namespace Solver
                 }
                 MultivariatePolynomial variableForm =
                     new MultivariatePolynomial(minimalPolynomials);
-                variableForm.setCoefficient(new int[minimalPolynomials.Length], constant);
+                if (!constant.Equals(Zero))
+                    variableForm.setCoefficient(new int[minimalPolynomials.Length], constant);
                 for (int i = 0; i < minimalPolynomials.Length; ++i)
                 {
                     int[] indices = new int[minimalPolynomials.Length];
@@ -1696,12 +1698,14 @@ namespace Solver
                 Coefficients = coefficients;
             }
             public Polynomial(List<Integer> coefficients, Integer characteristic)
-            {
-                Coefficients = new List<Integer>();
+            {                
                 Characteristic = characteristic;
                 if (!Characteristic.Equals(Zero))
+                {
+                    Coefficients = new List<Integer>();
                     foreach (Integer coefficient in coefficients)
                         Coefficients.Add(coefficient.euclideanDivideBy(characteristic).remainder);
+                }
                 else
                     Coefficients = coefficients;
                 while (Coefficients.Count != 0 && Coefficients[Coefficients.Count - 1].Equals(Zero))
@@ -2018,7 +2022,7 @@ namespace Solver
                             primes.Add(primeCandidate);
                         }
                         moddedFactor = new Polynomial(factor.Coefficients, primes[i]);
-                        Polynomial GCD = getGCD(factor, factor.getDerivative());
+                        Polynomial GCD = getGCD(moddedFactor, moddedFactor.getDerivative());
                         if (GCD.Coefficients.Count == 1 && GCD.Coefficients[0] == One)
                         {
                             Integer leadingCoefficientInverse = (Integer)
@@ -2418,20 +2422,21 @@ namespace Solver
                         }
                         else
                         {
-                            for (int k = i; k < matrix.Count; ++k)
-                            {
-                                Integer scalarA =
-                                    matrix[k][matrix.Count - i].getDenominatorLCM() *
-                                    matrix[i - 1][matrix.Count - i].getGreatestIntegerFactor();
-                                Integer scalarB =
-                                    matrix[k][matrix.Count - i].getGreatestIntegerFactor() *
-                                    matrix[i - 1][matrix.Count - i].getDenominatorLCM();
-                                for (int l = 0; l < matrix.Count; ++l)
-                                    matrix[k][l] = (Rational)(
-                                        matrix[k][l] * scalarA - matrix[i - 1][l] * scalarB);
-                                augmentation[k] =
-                                    augmentation[k] * scalarA - augmentation[i - 1] * scalarB;
-                            }
+                            for (int k = i; k < matrix.Count; ++k)                            
+                                if (!matrix[k][matrix.Count - i].Equals(Zero))
+                                {
+                                    Integer scalarA =
+                                        matrix[k][matrix.Count - i].getDenominatorLCM() *
+                                        matrix[i - 1][matrix.Count - i].getGreatestIntegerFactor();
+                                    Integer scalarB =
+                                        matrix[k][matrix.Count - i].getGreatestIntegerFactor() *
+                                        matrix[i - 1][matrix.Count - i].getDenominatorLCM();
+                                    for (int l = 0; l < matrix.Count; ++l)
+                                        matrix[k][l] = (Rational)(
+                                            matrix[k][l] * scalarA - matrix[i - 1][l] * scalarB);
+                                    augmentation[k] =
+                                        augmentation[k] * scalarA - augmentation[i - 1] * scalarB;
+                                }                            
                             break;
                         }
                     }
