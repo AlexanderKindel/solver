@@ -108,16 +108,10 @@ namespace Solver
                 {
                     Fraction exponentFraction = (Fraction)exponent;
                     Integer denominatorLCM = getDenominatorLCM();
-                    if (denominatorLCM != One)
-                    {
-                        IntegerDivision division = exponentFraction.Numerator.euclideanDivideBy(
-                            exponentFraction.Denominator);
+                    if (denominatorLCM != One)                    
                         return (this * denominatorLCM).exponentiate(exponent) *
-                            denominatorLCM.exponentiate(
-                            Fraction.create(exponentFraction.Denominator - division.remainder,
-                            exponentFraction.Denominator)) /
-                            denominatorLCM.exponentiate(division.quotient + One);
-                    }
+                            denominatorLCM.exponentiate(new Fraction(exponentFraction.Denominator - One,
+                            exponentFraction.Denominator)) / denominatorLCM;                    
                     Integer numeratorGCD = getGreatestIntegerFactor();
                     if (numeratorGCD != One)
                     {
