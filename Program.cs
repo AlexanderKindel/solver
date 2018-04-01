@@ -6,22 +6,22 @@ namespace Solver
 {
     class Solver
     {
-        delegate T multiplier<T>(T a, T b);
-        static T integerExponentiate<T>(multiplier<T> multiply, T unit, T expBase, Integer exponent)
+        delegate T Multiplier<T>(T a, T b);
+        static T IntegerExponentiate<T>(Multiplier<T> multiply, T unit, T expBase, Integer exponent)
         {
             T output = unit;
             T baseToAPowerOfTwo = expBase;
             while (exponent.Sign > 0)
             {
-                IntegerDivision division = exponent.euclideanDivideBy(new Integer(2));
-                if (division.remainder == One)
+                IntegerDivision division = exponent.EuclideanDivideBy(new Integer(2));
+                if (division.Remainder == One)
                     output = multiply(output, baseToAPowerOfTwo);
                 baseToAPowerOfTwo = multiply(baseToAPowerOfTwo, baseToAPowerOfTwo);
-                exponent = division.quotient;
+                exponent = division.Quotient;
             }
             return output;
         }
-        static List<List<T>> generateCartesianProduct<T>(List<List<T>> sets)
+        static List<List<T>> GenerateCartesianProduct<T>(List<List<T>> sets)
         {            
             List<List<T>> elements = new List<List<T>>();
             void generateElements(int setIndex, List<T> element)
@@ -41,25 +41,25 @@ namespace Solver
         }
         abstract class Number : IComparable, IEquatable<Number>
         {
-            protected abstract Number add(Number number);
+            protected abstract Number Add(Number number);
             public static Number operator +(Number a, Number b)
             {
-                return a.add(b);
+                return a.Add(b);
             }
-            public abstract Number negative();
+            public abstract Number Negative();
             public static Number operator -(Number a, Number b)
             {
-                return a.add(b.negative());
+                return a.Add(b.Negative());
             }
-            protected abstract Number multiply(Number number);
+            protected abstract Number Multiply(Number number);
             public static Number operator *(Number a, Number b)
             {
-                return a.multiply(b);
+                return a.Multiply(b);
             }
-            public abstract Number reciprocal();
+            public abstract Number Reciprocal();
             public static Number operator /(Number a, Number b)
             {
-                return a.multiply(b.reciprocal());
+                return a.Multiply(b.Reciprocal());
             }
             Polynomial minimalPolynomial = null;
             public Polynomial MinimalPolynomial
@@ -67,13 +67,13 @@ namespace Solver
                 get
                 {
                     if (minimalPolynomial == null)
-                        minimalPolynomial = calculateMinimalPolynomial();
+                        minimalPolynomial = CalculateMinimalPolynomial();
                     return minimalPolynomial;
                 }
             }
-            protected abstract Polynomial calculateMinimalPolynomial();
-            public abstract List<Number> getConjugates();
-            protected void removeNonConjugates(List<Number> conjugateCandidates)
+            protected abstract Polynomial CalculateMinimalPolynomial();
+            public abstract List<Number> GetConjugates();
+            protected void RemoveNonConjugates(List<Number> conjugateCandidates)
             {
                 for (int i = 0;
                     conjugateCandidates.Count > MinimalPolynomial.Coefficients.Count - 1;)
@@ -82,47 +82,47 @@ namespace Solver
                     else
                         ++i;
             }
-            public virtual Integer getDenominatorLCM()
+            public virtual Integer GetDenominatorLCM()
             {
                 return One;
             }
-            public virtual Integer getGreatestIntegerFactor()
+            public virtual Integer GetGreatestIntegerFactor()
             {
                 return One;
             }
-            public virtual Number exponentiate(Number exponent)
+            public virtual Number Exponentiate(Number exponent)
             {
                 if (exponent is Integer)
                 {
                     Integer integerExponent = (Integer)exponent;
                     if (integerExponent.Sign < 0)
-                        return exponentiate(exponent.negative()).reciprocal();
-                    return integerExponentiate(delegate (Number a, Number b) { return a * b; },
+                        return Exponentiate(exponent.Negative()).Reciprocal();
+                    return IntegerExponentiate(delegate (Number a, Number b) { return a * b; },
                         One, this, integerExponent);
                 }
-                Integer exponentIntegerFactor = exponent.getGreatestIntegerFactor();
+                Integer exponentIntegerFactor = exponent.GetGreatestIntegerFactor();
                 if (!exponentIntegerFactor.Equals(One))
-                    return exponentiate(exponentIntegerFactor).exponentiate(
+                    return Exponentiate(exponentIntegerFactor).Exponentiate(
                         exponent / exponentIntegerFactor);
                 if (exponent is Fraction)
                 {
                     Fraction exponentFraction = (Fraction)exponent;
-                    Integer denominatorLCM = getDenominatorLCM();
+                    Integer denominatorLCM = GetDenominatorLCM();
                     if (denominatorLCM != One)                    
-                        return (this * denominatorLCM).exponentiate(exponent) *
-                            denominatorLCM.exponentiate(new Fraction(exponentFraction.Denominator - One,
+                        return (this * denominatorLCM).Exponentiate(exponent) *
+                            denominatorLCM.Exponentiate(new Fraction(exponentFraction.Denominator - One,
                             exponentFraction.Denominator)) / denominatorLCM;                    
-                    Integer numeratorGCD = getGreatestIntegerFactor();
+                    Integer numeratorGCD = GetGreatestIntegerFactor();
                     if (numeratorGCD != One)
                     {
-                        Number factor = numeratorGCD.exponentiate(exponent);
+                        Number factor = numeratorGCD.Exponentiate(exponent);
                         if (!(factor is Exponentiation))
-                            return (this / numeratorGCD).exponentiate(exponent) * factor;
+                            return (this / numeratorGCD).Exponentiate(exponent) * factor;
                     }
                 }
-                return Exponentiation.create(this, exponent);
+                return Exponentiation.Create(this, exponent);
             }
-            protected int getTypeIndex()
+            protected int GetTypeIndex()
             {
                 if (this is Integer)
                     return 1;
@@ -142,7 +142,7 @@ namespace Solver
             }
             public virtual int CompareTo(object obj)
             {
-                return getTypeIndex() - ((Number)obj).getTypeIndex();
+                return GetTypeIndex() - ((Number)obj).GetTypeIndex();
             }
             public override bool Equals(object obj)
             {
@@ -156,7 +156,7 @@ namespace Solver
 
             //Treats str as the string representation of a numerical constant, and returns the
             //string representation of the reference object multiplied by that constant.
-            public abstract string insertString(string str);
+            public abstract string InsertString(string str);
             public abstract override string ToString();
         }
         abstract class Term : Number
@@ -165,15 +165,15 @@ namespace Solver
         { }
         abstract class Rational : Factor
         {            
-            public override List<Number> getConjugates()
+            public override List<Number> GetConjugates()
             {
                 return new List<Number> { this };
             }
         }
         struct IntegerDivision
         {
-            public Integer quotient;
-            public Integer remainder;
+            public Integer Quotient;
+            public Integer Remainder;
         }
         static Integer Zero = new Integer(0);
         static Integer One = new Integer(1);
@@ -216,7 +216,7 @@ namespace Solver
                     Values = new uint[] { (uint)-value };
                 }
             }
-            public static Integer parse(string decimalString)
+            public static Integer Parse(string decimalString)
             {
                 Integer output = Zero;
                 Integer multiplier = One;
@@ -341,7 +341,7 @@ namespace Solver
             {
                 return a + One;
             }
-            protected override Number add(Number number)
+            protected override Number Add(Number number)
             {
                 if (number is Integer)
                     return (Integer)number + this;
@@ -359,15 +359,18 @@ namespace Solver
             {
                 return a + new Integer(-1);
             }
-            public override Number negative()
+            public override Number Negative()
             {
                 return new Integer(Values, (sbyte)-Sign);
             }
-            public Integer magnitude()
+            public Integer Magnitude()
             {
-                return new Integer(Values, 1);
+                if (Sign < 0)
+                    return new Integer(Values, 1);
+                else
+                    return this;
             }
-            static uint[] shiftValuesLeft(uint[] values, int valuePlaces, int digitPlaces)
+            static uint[] ShiftValuesLeft(uint[] values, int valuePlaces, int digitPlaces)
             {//Negative valuePlaces and digitPlaces values shift to the right. Left shifts preserve
              //all digits by adding extra uints, while right shifts truncate the rightmost digits.
                 uint[] shiftedValues;
@@ -403,9 +406,9 @@ namespace Solver
                 }
                 return shiftedValues;
             }
-            Integer shiftLeft(int valuePlaces, int digitPlaces)
+            Integer ShiftLeft(int valuePlaces, int digitPlaces)
             {
-                return new Integer(shiftValuesLeft(Values, valuePlaces, digitPlaces), Sign);
+                return new Integer(ShiftValuesLeft(Values, valuePlaces, digitPlaces), Sign);
             }
             public static Integer operator *(Integer a, Integer b)
             {
@@ -416,36 +419,37 @@ namespace Solver
                     for (int j = 0; j < 32; ++j)
                     {
                         if ((a.Values[i] & power) != 0)
-                            product = product + b.shiftLeft(i, j);
+                            product = product + b.ShiftLeft(i, j);
                         power = power << 1;
                     }
                 }
                 product.Sign = (sbyte)(b.Sign * a.Sign);
                 return product;
             }
-            protected override Number multiply(Number number)
+            protected override Number Multiply(Number number)
             {
                 if (number is Integer)
                     return (Integer)number * this;
                 return number * this;
             }
-            public override Number reciprocal()
+            public override Number Reciprocal()
             {
-                return Fraction.create(One, this);
+                return Fraction.Create(One, this);
             }
-            public IntegerDivision euclideanDivideBy(Integer divisor)
+            public IntegerDivision EuclideanDivideBy(Integer divisor)
             {
                 if (divisor.Sign == 0)
                     throw new DivideByZeroException();
                 IntegerDivision division = new IntegerDivision();
-                division.remainder = new Integer(Values, 1);
                 if (divisor.Values.Length > Values.Length ||
                     (divisor.Values.Length == Values.Length &&
                     divisor.Values[divisor.Values.Length - 1] > Values[Values.Length - 1]))
                 {
-                    division.quotient = Zero;
+                    division.Quotient = Zero;
+                    division.Remainder = this;
                     return division;
                 }
+                division.Remainder = new Integer(Values, 1);
                 int divisorLeadingDigitPlace = 0;
                 uint power = 0b10000000000000000000000000000000;
                 for (int i = 32; i > 0; --i)
@@ -464,13 +468,13 @@ namespace Solver
                     power = 0b10000000000000000000000000000000;
                     for (int i = 32; i >= stoppingDigitPlace; --i)
                     {
-                        Integer shiftedDivisor = positiveDivisor.shiftLeft(valuePlace -
+                        Integer shiftedDivisor = positiveDivisor.ShiftLeft(valuePlace -
                             positiveDivisor.Values.Length + 1, i - divisorLeadingDigitPlace);
-                        Integer difference = division.remainder - shiftedDivisor;
+                        Integer difference = division.Remainder - shiftedDivisor;
                         if (difference.Sign >= 0)
                         {
                             quotient[valuePlace] |= power;
-                            division.remainder = difference;
+                            division.Remainder = difference;
                         }
                         power = power >> 1;
                     }
@@ -478,22 +482,23 @@ namespace Solver
                 for (int i = Values.Length - 1; i >= positiveDivisor.Values.Length; --i)
                     calculateValue(i, 1);
                 calculateValue(positiveDivisor.Values.Length - 1, divisorLeadingDigitPlace);
-                division.quotient = new Integer(quotient, (sbyte)(Sign * divisor.Sign)).shiftLeft(
+                division.Quotient = new Integer(quotient, (sbyte)(Sign * divisor.Sign)).ShiftLeft(
                     1 - positiveDivisor.Values.Length, 1 - divisorLeadingDigitPlace);
-                division.remainder.Sign = Sign;
+                if (division.Remainder.Sign != 0)
+                    division.Remainder.Sign = Sign;
                 return division;
             }
-            protected override Polynomial calculateMinimalPolynomial()
+            protected override Polynomial CalculateMinimalPolynomial()
             {
                 return new Polynomial(new List<Integer> { -this, One });
             }
-            public override Number exponentiate(Number exponent)
+            public override Number Exponentiate(Number exponent)
             {
                 if (Sign == 0)
                     return Zero;
-                Integer exponentIntegerFactor = exponent.getGreatestIntegerFactor();
+                Integer exponentIntegerFactor = exponent.GetGreatestIntegerFactor();
                 if (!exponentIntegerFactor.Equals(One))
-                    return base.exponentiate(exponentIntegerFactor).exponentiate(
+                    return base.Exponentiate(exponentIntegerFactor).Exponentiate(
                         exponent / exponentIntegerFactor);
                 if (exponent is Fraction)
                 {
@@ -508,17 +513,17 @@ namespace Solver
                     }
                     Integer factor;
                     for (Integer i = new Integer(2);
-                        i <= radicand.euclideanDivideBy(new Integer(2)).quotient;)
+                        i <= radicand.EuclideanDivideBy(new Integer(2)).Quotient;)
                     {
-                        IntegerDivision division = radicand.euclideanDivideBy(i);
-                        if (division.remainder.Sign == 0)
+                        IntegerDivision division = radicand.EuclideanDivideBy(i);
+                        if (division.Remainder.Sign == 0)
                         {
                             factor = i;
                             if (radicandFactors.ContainsKey(factor))
                                 ++radicandFactors[factor];
                             else
                                 radicandFactors.Add(factor, One);
-                            radicand = division.quotient;
+                            radicand = division.Quotient;
                         }
                         else
                             ++i;
@@ -528,7 +533,7 @@ namespace Solver
                         ++radicandFactors[factor];
                     else
                         radicandFactors.Add(factor, One);
-                    List<Integer> exponentDivisors = exponentFraction.Denominator.getDivisors();
+                    List<Integer> exponentDivisors = exponentFraction.Denominator.GetDivisors();
                     Dictionary<Integer, Number> termComponents = new Dictionary<Integer, Number>();
                     termComponents.Add(One, One);
                     termComponents.Add(exponentFraction.Denominator, One);
@@ -541,10 +546,10 @@ namespace Solver
                                 if (!termComponents.ContainsKey(index))
                                     termComponents.Add(index, One);
                                 IntegerDivision division =
-                                    radicandFactors[n].euclideanDivideBy(exponentDivisors[i]);
-                                for (Integer j = Zero; j < division.quotient; ++j)
+                                    radicandFactors[n].EuclideanDivideBy(exponentDivisors[i]);
+                                for (Integer j = Zero; j < division.Quotient; ++j)
                                     termComponents[index] = termComponents[index] * n;
-                                for (Integer j = Zero; j < division.remainder; ++j)
+                                for (Integer j = Zero; j < division.Remainder; ++j)
                                     termComponents[exponentFraction.Denominator] =
                                         termComponents[exponentFraction.Denominator] * n;
                                 break;
@@ -561,23 +566,23 @@ namespace Solver
                             termComponents.Remove(exponentFraction.Denominator);
                         else
                             termComponents[exponentFraction.Denominator] =
-                                termComponents[exponentFraction.Denominator].negative();
+                                termComponents[exponentFraction.Denominator].Negative();
                         Integer two = new Integer(2);
-                        if (exponentFraction.Denominator.euclideanDivideBy(two).remainder.Sign == 0)
-                            coefficient *= ComplexExponential.create(new Fraction(One,
+                        if (exponentFraction.Denominator.EuclideanDivideBy(two).Remainder.Sign == 0)
+                            coefficient *= ComplexExponential.Create(new Fraction(One,
                                 two * exponentFraction.Denominator));
                         else
-                            coefficient = coefficient.negative();
+                            coefficient = coefficient.Negative();
                     }
                     List<Factor> factors = new List<Factor>();
                     foreach (Integer index in termComponents.Keys)
                         factors.Add(new Surd(termComponents[index], index));
-                    Number output = Product.create(One, factors) * coefficient;
+                    Number output = Product.Create(One, factors) * coefficient;
                     return output;
                 }
-                return base.exponentiate(exponent);
+                return base.Exponentiate(exponent);
             }
-            public override Integer getGreatestIntegerFactor()
+            public override Integer GetGreatestIntegerFactor()
             {
                 return this;
             }
@@ -628,7 +633,7 @@ namespace Solver
                     output = output ^ value;
                 return (int)(output * Sign);
             }
-            public override String insertString(String str)
+            public override String InsertString(String str)
             {
                 if (this != One)
                     if (this == new Integer(-1))
@@ -646,52 +651,52 @@ namespace Solver
                 Integer power = new Integer(10);
                 while (quotient.Sign != 0)
                 {
-                    IntegerDivision division = quotient.euclideanDivideBy(power);
-                    quotient = division.quotient;
-                    output.Insert(0, division.remainder.Values[0]);
+                    IntegerDivision division = quotient.EuclideanDivideBy(power);
+                    quotient = division.Quotient;
+                    output.Insert(0, division.Remainder.Values[0]);
                 }
                 if (Sign < 0)
                     output.Insert(0, '-');
                 return output.ToString();
             }
-            public static Integer getGCD(Integer a, Integer b)
+            public static Integer GetGCD(Integer a, Integer b)
             {
                 Integer c;
                 while (b.Sign != 0)
                 {
                     c = b;
-                    b = a.euclideanDivideBy(b).remainder;
+                    b = a.EuclideanDivideBy(b).Remainder;
                     a = c;
                 }
-                return a.magnitude();
+                return a.Magnitude();
             }
-            public static Integer getGCD(List<Integer> list)
+            public static Integer GetGCD(List<Integer> list)
             {
                 Integer GCD = list[0];
                 for (int i = 1; i < list.Count; ++i)
-                    GCD = getGCD(GCD, list[i]);
+                    GCD = GetGCD(GCD, list[i]);
                 return GCD;
             }
-            public static Integer getLCM(Integer a, Integer b)
+            public static Integer GetLCM(Integer a, Integer b)
             {
-                return (Integer)(a / getGCD(a, b) * b);
+                return (Integer)(a / GetGCD(a, b) * b);
             }
-            public List<Integer> getDivisors()
+            public List<Integer> GetDivisors()
             {
                 Integer x = this;
                 List<Integer> divisors = new List<Integer>();
                 Integer divisor = One;
-                Integer half = x.euclideanDivideBy(new Integer(2)).quotient;
+                Integer half = x.EuclideanDivideBy(new Integer(2)).Quotient;
                 while (divisor <= half)
                 {
-                    if (x.euclideanDivideBy(divisor).remainder.Sign == 0)
+                    if (x.EuclideanDivideBy(divisor).Remainder.Sign == 0)
                         divisors.Add(divisor);
                     ++divisor;
                 }
                 divisors.Add(x);
                 return divisors;
             }
-            public Integer thisChooseK(Integer k)
+            public Integer ThisChooseK(Integer k)
             {
                 Integer numerator = One;
                 for (Integer i = this - k + One; i <= this; ++i)
@@ -711,15 +716,15 @@ namespace Solver
                 Numerator = numerator;
                 Denominator = denominator;
             }
-            public static Rational create(Integer numerator, Integer denominator)
+            public static Rational Create(Integer numerator, Integer denominator)
             {
                 if (denominator.Sign == 0)
                     throw new DivideByZeroException();
                 if (numerator.Sign == 0)
                     return numerator;
-                Integer GCD = Integer.getGCD(numerator, denominator);
-                numerator = numerator.euclideanDivideBy(GCD).quotient;
-                denominator = denominator.euclideanDivideBy(GCD).quotient;
+                Integer GCD = Integer.GetGCD(numerator, denominator);
+                numerator = numerator.EuclideanDivideBy(GCD).Quotient;
+                denominator = denominator.EuclideanDivideBy(GCD).Quotient;
                 if (denominator.Sign < 0)
                 {
                     numerator = -numerator;
@@ -729,46 +734,46 @@ namespace Solver
                     return numerator;
                 return new Fraction(numerator, denominator);
             }
-            protected override Number add(Number number)
+            protected override Number Add(Number number)
             {
                 if (number is Integer)
-                    return create((Integer)(Numerator + number * Denominator), Denominator);
+                    return Create((Integer)(Numerator + number * Denominator), Denominator);
                 if (number is Fraction)
                 {
                     Fraction fraction = (Fraction)number;
-                    return create(Numerator * fraction.Denominator + fraction.Numerator * Denominator,
+                    return Create(Numerator * fraction.Denominator + fraction.Numerator * Denominator,
                         Denominator * fraction.Denominator);
                 }
                 return number + this;
             }
-            public override Number negative()
+            public override Number Negative()
             {
                 return new Fraction(-Numerator, Denominator);
             }
-            protected override Number multiply(Number number)
+            protected override Number Multiply(Number number)
             {
                 if (number is Integer)
-                    return create((Integer)(Numerator * number), Denominator);
+                    return Create((Integer)(Numerator * number), Denominator);
                 if (number is Fraction)
                 {
                     Fraction fraction = (Fraction)number;
-                    return create(Numerator * fraction.Numerator, Denominator * fraction.Denominator);
+                    return Create(Numerator * fraction.Numerator, Denominator * fraction.Denominator);
                 }
                 return number * this;
             }
-            public override Number reciprocal()
+            public override Number Reciprocal()
             {
-                return create(Denominator, Numerator);
+                return Create(Denominator, Numerator);
             }
-            protected override Polynomial calculateMinimalPolynomial()
+            protected override Polynomial CalculateMinimalPolynomial()
             {
                 return new Polynomial(new List<Integer> { -Numerator, Denominator });
             }
-            public override Integer getDenominatorLCM()
+            public override Integer GetDenominatorLCM()
             {
                 return Denominator;
             }
-            public override Integer getGreatestIntegerFactor()
+            public override Integer GetGreatestIntegerFactor()
             {
                 return Numerator;
             }
@@ -787,9 +792,9 @@ namespace Solver
             {
                 return Numerator.GetHashCode() ^ Denominator.GetHashCode();
             }
-            public override String insertString(String str)
+            public override String InsertString(String str)
             {
-                return Numerator.insertString(str) + "/" + Denominator;
+                return Numerator.InsertString(str) + "/" + Denominator;
             }
             public override String ToString()
             {
@@ -805,7 +810,7 @@ namespace Solver
                 Base = expBase;
                 Exponent = exponent;
             }
-            public static Factor create(Number expBase, Number exponent)
+            public static Factor Create(Number expBase, Number exponent)
             {
                 if (exponent is Fraction)
                 {
@@ -815,7 +820,7 @@ namespace Solver
                 }
                 return new Transcendental(expBase, exponent);
             }
-            protected override Number add(Number number)
+            protected override Number Add(Number number)
             {
                 if (number is Integer)
                 {
@@ -830,40 +835,40 @@ namespace Solver
                 {
                     Exponentiation exponentiation = (Exponentiation)number;
                     if (CompareTo(exponentiation) == 0)
-                        return Product.create(new Integer(2), new List<Factor> { this });
-                    if (CompareTo(exponentiation.negative()) == 0)
+                        return Product.Create(new Integer(2), new List<Factor> { this });
+                    if (CompareTo(exponentiation.Negative()) == 0)
                         return Zero;
                     return new Sum(new List<Term> { this, exponentiation });
                 }
                 return number + this;
             }
-            public override Number negative()
+            public override Number Negative()
             {
-                return Product.create(new Integer(-1), new List<Factor> { this });
+                return Product.Create(new Integer(-1), new List<Factor> { this });
             }
-            protected override Number multiply(Number number)
+            protected override Number Multiply(Number number)
             {
                 if (number is Rational)
-                    return Product.create((Rational)number, new List<Factor> { this });
+                    return Product.Create((Rational)number, new List<Factor> { this });
                 if (number is Exponentiation)
                 {
                     Exponentiation exponentiation = (Exponentiation)number;
                     if (Base.Equals(exponentiation.Base))
-                        return Base.exponentiate(Exponent + exponentiation.Exponent);
+                        return Base.Exponentiate(Exponent + exponentiation.Exponent);
                     if (Exponent.Equals(exponentiation.Exponent))
                     {
                         Number outputBase = Base * exponentiation.Base;
                         if (outputBase is Exponentiation)
-                            return create(((Exponentiation)outputBase).Base, Exponent * Exponent);
-                        return (outputBase).exponentiate(Exponent);
+                            return Create(((Exponentiation)outputBase).Base, Exponent * Exponent);
+                        return (outputBase).Exponentiate(Exponent);
                     }
-                    return Product.create(One, new List<Factor> { this, exponentiation });
+                    return Product.Create(One, new List<Factor> { this, exponentiation });
                 }
                 return number * this;
             }
-            public override Number exponentiate(Number exponent)
+            public override Number Exponentiate(Number exponent)
             {
-                return Base.exponentiate(Exponent * exponent);
+                return Base.Exponentiate(Exponent * exponent);
             }
             public override int CompareTo(object obj)
             {
@@ -880,7 +885,7 @@ namespace Solver
             {
                 return Base.GetHashCode() ^ Exponent.GetHashCode();
             }
-            public override String insertString(String str)
+            public override String InsertString(String str)
             {
                 return ToString() + '*' + str;
             }
@@ -904,22 +909,22 @@ namespace Solver
             {
                 Index = index;
             }
-            protected override Number multiply(Number number)
+            protected override Number Multiply(Number number)
             {
                 if (number is Surd)
                 {
                     Surd surd = (Surd)number;
-                    Integer indexLCM = Integer.getLCM(Index, surd.Index);
-                    return (Base.exponentiate(indexLCM / Index) * surd.Base.exponentiate(indexLCM /
-                        surd.Index)).exponentiate(Fraction.create(One, indexLCM));
+                    Integer indexLCM = Integer.GetLCM(Index, surd.Index);
+                    return (Base.Exponentiate(indexLCM / Index) * surd.Base.Exponentiate(indexLCM /
+                        surd.Index)).Exponentiate(Fraction.Create(One, indexLCM));
                 }
-                return base.multiply(number);
+                return base.Multiply(number);
             }
-            public override Number reciprocal()
+            public override Number Reciprocal()
             {
-                return Base.exponentiate(Fraction.create(Index - One, Index)) / Base;
+                return Base.Exponentiate(Fraction.Create(Index - One, Index)) / Base;
             }
-            protected override Polynomial calculateMinimalPolynomial()
+            protected override Polynomial CalculateMinimalPolynomial()
             {
                 Polynomial baseMinimalPolynomial = Base.MinimalPolynomial;
                 if (baseMinimalPolynomial == null)
@@ -934,19 +939,19 @@ namespace Solver
                 }
                 return new Polynomial(coefficients);
             }
-            public override List<Number> getConjugates()
+            public override List<Number> GetConjugates()
             {
-                List<Number> baseConjugates = Base.getConjugates();
+                List<Number> baseConjugates = Base.GetConjugates();
                 if (baseConjugates == null)
                     return null;
                 List<Number> rootsOfUnity = new List<Number>();
                 for (Integer i = Zero; i < Index; ++i)
-                    rootsOfUnity.Add(ComplexExponential.create(Fraction.create(i, Index)));
+                    rootsOfUnity.Add(ComplexExponential.Create(Fraction.Create(i, Index)));
                 List<Number> conjugateCandidates = new List<Number>();
                 foreach (Number conjugate in baseConjugates)
                     foreach (Number root in rootsOfUnity)
                         conjugateCandidates.Add(new Surd(conjugate, Index) * root);
-                removeNonConjugates(conjugateCandidates);
+                RemoveNonConjugates(conjugateCandidates);
                 return conjugateCandidates;
             }
         }
@@ -954,15 +959,15 @@ namespace Solver
         {
             public Transcendental(Number expBase, Number exponent) : base(expBase, exponent)
             { }
-            public override Number reciprocal()
+            public override Number Reciprocal()
             {
-                return create(Base, Exponent.negative());
+                return Create(Base, Exponent.Negative());
             }
-            protected override Polynomial calculateMinimalPolynomial()
+            protected override Polynomial CalculateMinimalPolynomial()
             {
                 return null;
             }
-            public override List<Number> getConjugates()
+            public override List<Number> GetConjugates()
             {
                 return null;
             }
@@ -975,15 +980,15 @@ namespace Solver
                 if (exponent is Fraction)
                 {
                     Fraction exponentFraction = (Fraction)exponent;
-                    Exponent = exponentFraction - exponentFraction.Numerator.euclideanDivideBy(
-                        exponentFraction.Denominator).quotient;
+                    Exponent = exponentFraction - exponentFraction.Numerator.EuclideanDivideBy(
+                        exponentFraction.Denominator).Quotient;
                     if (exponentFraction.Numerator.Sign < 0)
                         Exponent += One;
                 }
                 else
                     Exponent = exponent;
             }
-            public static Number create(Number exponent)
+            public static Number Create(Number exponent)
             {
                 if (exponent is Integer)
                     return One;
@@ -992,14 +997,14 @@ namespace Solver
                     Fraction exponentFraction = (Fraction)exponent;
                     Integer denominator = exponentFraction.Denominator;
                     Integer numerator =
-                        exponentFraction.Numerator.euclideanDivideBy(denominator).remainder;
+                        exponentFraction.Numerator.EuclideanDivideBy(denominator).Remainder;
                     Integer two = new Integer(2);
-                    IntegerDivision division = denominator.euclideanDivideBy(two);
+                    IntegerDivision division = denominator.EuclideanDivideBy(two);
                     int multiplicityOfTwo = 0;
-                    while (division.remainder.Sign == 0)
+                    while (division.Remainder.Sign == 0)
                     {
-                        denominator = division.quotient;
-                        division = denominator.euclideanDivideBy(two);
+                        denominator = division.Quotient;
+                        division = denominator.EuclideanDivideBy(two);
                         ++multiplicityOfTwo;
                     }
                     Number cosine;
@@ -1033,9 +1038,9 @@ namespace Solver
                     for (int i = 0; i < multiplicityOfTwo; ++i)
                     {
                         denominator = denominator * two;
-                        cosine = (cosine * half + half).exponentiate(half);
+                        cosine = (cosine * half + half).Exponentiate(half);
                         if (four < three * denominator && denominator < four)
-                            cosine = cosine.negative();
+                            cosine = cosine.Negative();
                     }
                     Number r = One;
                     Number s = cosine;
@@ -1046,17 +1051,17 @@ namespace Solver
                         r = s;
                         s = angleMultipleCosine;
                     }
-                    Number output = ComplexNumber.create(angleMultipleCosine,
-                        (One - angleMultipleCosine * angleMultipleCosine).exponentiate(half));
+                    Number output = ComplexNumber.Create(angleMultipleCosine,
+                        (One - angleMultipleCosine * angleMultipleCosine).Exponentiate(half));
                     Integer t = four * numerator;
                     if (denominator < t && t < two * denominator ||
                         three * denominator < t && t < four * denominator)
-                        return output.negative();
+                        return output.Negative();
                     return output;
                 }
                 return new ComplexExponential(exponent);
             }
-            protected override Number add(Number number)
+            protected override Number Add(Number number)
             {
                 if (number is Integer)
                 {
@@ -1071,31 +1076,31 @@ namespace Solver
                 {
                     Number exponent = ((ComplexExponential)number).Exponent;
                     if (Exponent.CompareTo(exponent) == 0)
-                        return Product.create(new Integer(2), new List<Factor> { this });
+                        return Product.Create(new Integer(2), new List<Factor> { this });
                 }
                 return number + this;
             }
-            public override Number negative()
+            public override Number Negative()
             {
-                return Product.create(new Integer(-1), new List<Factor> { this });
+                return Product.Create(new Integer(-1), new List<Factor> { this });
             }
-            protected override Number multiply(Number number)
+            protected override Number Multiply(Number number)
             {
                 if (number is Integer)
-                    return Product.create((Integer)number, new List<Factor> { this });
+                    return Product.Create((Integer)number, new List<Factor> { this });
                 if (number is Fraction)
-                    return Product.create((Fraction)number, new List<Factor> { this, });
+                    return Product.Create((Fraction)number, new List<Factor> { this, });
                 if (number is Exponentiation)
-                    return Product.create(One, new List<Factor> { this, (Factor)number });
+                    return Product.Create(One, new List<Factor> { this, (Factor)number });
                 if (number is ComplexExponential)
-                    return create(Exponent + ((ComplexExponential)number).Exponent);
+                    return Create(Exponent + ((ComplexExponential)number).Exponent);
                 return number * this;
             }
-            public override Number reciprocal()
+            public override Number Reciprocal()
             {
-                return create(Exponent.negative());
+                return Create(Exponent.Negative());
             }
-            protected override Polynomial calculateMinimalPolynomial()
+            protected override Polynomial CalculateMinimalPolynomial()
             {
                 if (!(Exponent is Fraction))
                     return null;
@@ -1109,7 +1114,7 @@ namespace Solver
                 }
                 Polynomial annullingPolynomial = dividends[dividends.Count - 1];
                 dividends.RemoveAt(dividends.Count - 1);
-                List<Polynomial> factors = annullingPolynomial.getFactors();
+                List<Polynomial> factors = annullingPolynomial.GetFactors();
                 foreach (Polynomial factor in factors)
                 {
                     bool isDivisor = false;
@@ -1124,19 +1129,19 @@ namespace Solver
                 }
                 throw new Exception("This function should have returned during the loop above.");
             }
-            public override List<Number> getConjugates()
+            public override List<Number> GetConjugates()
             {
                 if (!(Exponent is Fraction))
                     return null;
                 List<Number> conjugates = new List<Number>();
                 Integer index = ((Fraction)Exponent).Denominator;
                 for (Integer i = Zero; i < index; ++i)
-                    conjugates.Add(create(Fraction.create(i, index)));
+                    conjugates.Add(Create(Fraction.Create(i, index)));
                 return conjugates;
             }
-            public override Number exponentiate(Number exponent)
+            public override Number Exponentiate(Number exponent)
             {
-                return create(exponent * exponent);
+                return Create(exponent * exponent);
             }
             public override int CompareTo(object obj)
             {
@@ -1149,14 +1154,14 @@ namespace Solver
             {
                 return Exponent.GetHashCode();
             }
-            public override string insertString(string str)
+            public override string InsertString(string str)
             {
                 return ToString() + '*' + str;
             }
             public override string ToString()
             {
-                Number exponentWith_i = Exponent * ComplexNumber.create(Zero, One);
-                return "e^(" + exponentWith_i.insertString("tau") + ')';
+                Number exponentWith_i = Exponent * ComplexNumber.Create(Zero, One);
+                return "e^(" + exponentWith_i.InsertString("tau") + ')';
             }
         }
         class Product : Term
@@ -1169,7 +1174,7 @@ namespace Solver
                 Factors = factors;
                 Factors.Sort();
             }
-            public static Term create(Rational coefficient, List<Factor> factors)
+            public static Term Create(Rational coefficient, List<Factor> factors)
             {
                 if (coefficient is Integer)
                 {
@@ -1183,7 +1188,7 @@ namespace Solver
                     return coefficient;
                 return new Product(coefficient, factors);
             }
-            protected override Number add(Number number)
+            protected override Number Add(Number number)
             {
                 if (number is Integer)
                 {
@@ -1195,7 +1200,7 @@ namespace Solver
                 if (number is Factor)
                 {
                     if (Factors.Count == 1 && number.Equals(Factors[0]))
-                        return create((Rational)(Coefficient + One), Factors);
+                        return Create((Rational)(Coefficient + One), Factors);
                     return new Sum(new List<Term> { this, (Term)number });
                 }
                 if (number is Product)
@@ -1206,20 +1211,20 @@ namespace Solver
                         for (int i = 0; i < Factors.Count; ++i)
                             if (Factors[i].CompareTo(product.Factors[i]) != 0)
                                 return new Sum(new List<Term> { this, product });
-                        return create((Rational)(Coefficient + product.Coefficient), Factors);
+                        return Create((Rational)(Coefficient + product.Coefficient), Factors);
                     }
                     return new Sum(new List<Term> { this, product });
                 }
                 return number + this;
             }
-            public override Number negative()
+            public override Number Negative()
             {
-                return create((Rational)Coefficient.negative(), Factors);
+                return Create((Rational)Coefficient.Negative(), Factors);
             }
-            protected override Number multiply(Number number)
+            protected override Number Multiply(Number number)
             {
                 if (number is Rational)
-                    return create((Rational)(Coefficient * number), Factors);
+                    return Create((Rational)(Coefficient * number), Factors);
                 if (number is Factor)
                 {
                     List<Factor> factors = new List<Factor>(Factors);
@@ -1230,11 +1235,11 @@ namespace Solver
                             new List<Factor> { (Factor)number, factors[i] })))
                         {
                             factors.RemoveAt(i);
-                            return create(Coefficient, factors) * product;
+                            return Create(Coefficient, factors) * product;
                         }
                     }
                     factors.Add((Factor)number);
-                    return create(Coefficient, factors);
+                    return Create(Coefficient, factors);
                 }
                 if (number is Product)
                 {
@@ -1247,14 +1252,14 @@ namespace Solver
                 }
                 return number * this;
             }
-            public override Number reciprocal()
+            public override Number Reciprocal()
             {
                 List<Factor> factors = new List<Factor>();
                 foreach (Factor factor in Factors)
-                    factors.Add((Factor)factor.reciprocal());
-                return create((Rational)Coefficient.reciprocal(), factors);
+                    factors.Add((Factor)factor.Reciprocal());
+                return Create((Rational)Coefficient.Reciprocal(), factors);
             }
-            protected override Polynomial calculateMinimalPolynomial()
+            protected override Polynomial CalculateMinimalPolynomial()
             {
                 Polynomial[] minimalPolynomials = new Polynomial[Factors.Count];
                 for (int i = 0; i < Factors.Count; ++i)
@@ -1269,21 +1274,21 @@ namespace Solver
                 int[] indices = new int[minimalPolynomials.Length];
                 for (int i = 0; i < indices.Length; ++i)
                     indices[i] = 1;
-                variableForm.setCoefficient(indices, Coefficient);
-                return variableForm.getMinimalPolynomial();
+                variableForm.SetCoefficient(indices, Coefficient);
+                return variableForm.GetMinimalPolynomial();
             }
-            public override List<Number> getConjugates()
+            public override List<Number> GetConjugates()
             {
                 List<List<Number>> factorConjugates = new List<List<Number>>();
                 foreach (Factor factor in Factors)
                 {
-                    List<Number> conjugates = factor.getConjugates();
+                    List<Number> conjugates = factor.GetConjugates();
                     if (conjugates == null)
                         return null;
                     factorConjugates.Add(conjugates);
                 }
                 List<List<Number>> conjugateCombinations =
-                    generateCartesianProduct(factorConjugates);
+                    GenerateCartesianProduct(factorConjugates);
                 List<Number> conjugateCandidates = new List<Number>();
                 foreach (List<Number> combination in conjugateCombinations)
                 {
@@ -1292,22 +1297,22 @@ namespace Solver
                         conjugate *= number;
                     conjugateCandidates.Add(conjugate);
                 }
-                removeNonConjugates(conjugateCandidates);
+                RemoveNonConjugates(conjugateCandidates);
                 return conjugateCandidates;
             }
-            public override Integer getDenominatorLCM()
+            public override Integer GetDenominatorLCM()
             {
-                return Coefficient.getDenominatorLCM();
+                return Coefficient.GetDenominatorLCM();
             }
-            public override Integer getGreatestIntegerFactor()
+            public override Integer GetGreatestIntegerFactor()
             {
-                return Coefficient.getGreatestIntegerFactor();
+                return Coefficient.GetGreatestIntegerFactor();
             }
-            public override Number exponentiate(Number exponent)
+            public override Number Exponentiate(Number exponent)
             {
-                Number output = Coefficient.exponentiate(exponent);
+                Number output = Coefficient.Exponentiate(exponent);
                 foreach (Factor factor in Factors)
-                    output *= factor.exponentiate(exponent);
+                    output *= factor.Exponentiate(exponent);
                 return output;
             }
             public override int CompareTo(object obj)
@@ -1337,14 +1342,14 @@ namespace Solver
                     output = output ^ factor.GetHashCode();
                 return output;
             }
-            StringBuilder formatFactors()
+            StringBuilder FormatFactors()
             {
                 StringBuilder output = new StringBuilder(Factors[0].ToString());
                 for (int i = 1; i < Factors.Count; ++i)
                     output.Append('*' + Factors[i].ToString());
                 return output;
             }
-            string addCoefficient(StringBuilder factors)
+            string AddCoefficient(StringBuilder factors)
             {
                 Integer numerator;
                 if (Coefficient is Integer)
@@ -1368,15 +1373,15 @@ namespace Solver
                 }
                 return factors.ToString();
             }
-            public override string insertString(string str)
+            public override string InsertString(string str)
             {
-                StringBuilder output = formatFactors().Append('*' + str);
-                return addCoefficient(output);
+                StringBuilder output = FormatFactors().Append('*' + str);
+                return AddCoefficient(output);
             }
             public override string ToString()
             {
-                StringBuilder output = formatFactors();
-                return addCoefficient(output);
+                StringBuilder output = FormatFactors();
+                return AddCoefficient(output);
             }
         }
         class Sum : Number
@@ -1387,7 +1392,7 @@ namespace Solver
                 terms.Sort();
                 Terms = terms;
             }
-            protected override Number add(Number number)
+            protected override Number Add(Number number)
             {
                 if (number is Term)
                 {
@@ -1416,14 +1421,14 @@ namespace Solver
                 }
                 return number + this;
             }
-            public override Number negative()
+            public override Number Negative()
             {
                 List<Term> terms = new List<Term>();
                 foreach (Term term in Terms)
-                    terms.Add((Term)term.negative());
+                    terms.Add((Term)term.Negative());
                 return new Sum(terms);
             }
-            protected override Number multiply(Number number)
+            protected override Number Multiply(Number number)
             {
                 List<Term> terms = new List<Term>();
                 if (number is Term)
@@ -1444,9 +1449,9 @@ namespace Solver
                 }
                 return number * this;
             }
-            public override Number reciprocal()
+            public override Number Reciprocal()
             {
-                List<Number> conjugates = getConjugates();
+                List<Number> conjugates = GetConjugates();
                 if (conjugates == null)
                     return new Transcendental(this, new Integer(-1));
                 conjugates.Remove(this);
@@ -1455,7 +1460,7 @@ namespace Solver
                     numerator *= conjugate;
                 return numerator / (numerator * this);
             }
-            protected override Polynomial calculateMinimalPolynomial()
+            protected override Polynomial CalculateMinimalPolynomial()
             {
                 Polynomial[] minimalPolynomials = new Polynomial[Terms.Count];
                 Rational constant;
@@ -1482,26 +1487,26 @@ namespace Solver
                 MultivariatePolynomial variableForm =
                     new MultivariatePolynomial(minimalPolynomials);
                 if (!constant.Equals(Zero))
-                    variableForm.setCoefficient(new int[minimalPolynomials.Length], constant);
+                    variableForm.SetCoefficient(new int[minimalPolynomials.Length], constant);
                 for (int i = 0; i < minimalPolynomials.Length; ++i)
                 {
                     int[] indices = new int[minimalPolynomials.Length];
                     indices[i] = 1;
-                    variableForm.setCoefficient(indices, One);
+                    variableForm.SetCoefficient(indices, One);
                 }
-                return variableForm.getMinimalPolynomial();
+                return variableForm.GetMinimalPolynomial();
             }
-            public override List<Number> getConjugates()
+            public override List<Number> GetConjugates()
             {
                 List<List<Number>> termConjugates = new List<List<Number>>();
                 foreach (Term term in Terms)
                 {
-                    List<Number> conjugates = term.getConjugates();
+                    List<Number> conjugates = term.GetConjugates();
                     if (conjugates == null)
                         return null;
                     termConjugates.Add(conjugates);
                 }
-                List<List<Number>> conjugateCombinations = generateCartesianProduct(termConjugates);
+                List<List<Number>> conjugateCombinations = GenerateCartesianProduct(termConjugates);
                 List<Number> conjugateCandidates = new List<Number>();
                 foreach (List<Number> combination in conjugateCombinations)
                 {
@@ -1510,21 +1515,21 @@ namespace Solver
                         conjugate += number;
                     conjugateCandidates.Add(conjugate);
                 }
-                removeNonConjugates(conjugateCandidates);
+                RemoveNonConjugates(conjugateCandidates);
                 return conjugateCandidates;
             }
-            public override Integer getDenominatorLCM()
+            public override Integer GetDenominatorLCM()
             {
                 Integer LCM = One;
                 foreach (Term term in Terms)
-                    LCM = Integer.getLCM(LCM, term.getDenominatorLCM());
+                    LCM = Integer.GetLCM(LCM, term.GetDenominatorLCM());
                 return LCM;
             }
-            public override Integer getGreatestIntegerFactor()
+            public override Integer GetGreatestIntegerFactor()
             {
-                Integer GCD = Terms[0].getGreatestIntegerFactor();
+                Integer GCD = Terms[0].GetGreatestIntegerFactor();
                 for (int i = 1; i < Terms.Count; ++i)
-                    GCD = Integer.getGCD(GCD, Terms[i].getGreatestIntegerFactor());
+                    GCD = Integer.GetGCD(GCD, Terms[i].GetGreatestIntegerFactor());
                 return GCD;
             }
             public override int CompareTo(object obj)
@@ -1551,7 +1556,7 @@ namespace Solver
                     output = output ^ term.GetHashCode();
                 return output;
             }
-            public override string insertString(string str)
+            public override string InsertString(string str)
             {
                 return '(' + ToString() + ')' + str;
             }
@@ -1577,7 +1582,7 @@ namespace Solver
                 Real = real;
                 Imaginary = imaginary;
             }
-            public static Number create(Number real, Number imaginary)
+            public static Number Create(Number real, Number imaginary)
             {
                 if (imaginary is Integer)
                 {
@@ -1587,62 +1592,62 @@ namespace Solver
                 }
                 return new ComplexNumber(real, imaginary);
             }
-            protected override Number add(Number number)
+            protected override Number Add(Number number)
             {
                 if (number is ComplexNumber)
                 {
                     ComplexNumber complexNumber = (ComplexNumber)number;
-                    return create(Real + complexNumber.Real, Imaginary + complexNumber.Imaginary);
+                    return Create(Real + complexNumber.Real, Imaginary + complexNumber.Imaginary);
                 }
-                return create(Real + number, Imaginary);
+                return Create(Real + number, Imaginary);
             }
-            public override Number negative()
+            public override Number Negative()
             {
-                return create(Real.negative(), Imaginary.negative());
+                return Create(Real.Negative(), Imaginary.Negative());
             }
-            protected override Number multiply(Number number)
+            protected override Number Multiply(Number number)
             {
                 if (number is ComplexNumber)
                 {
                     ComplexNumber complexNumber = (ComplexNumber)number;
-                    return create(Real * complexNumber.Real - Imaginary * complexNumber.Imaginary,
+                    return Create(Real * complexNumber.Real - Imaginary * complexNumber.Imaginary,
                         Real * complexNumber.Imaginary + Imaginary * complexNumber.Real);
                 }
-                return create(Real * number, Imaginary * number);
+                return Create(Real * number, Imaginary * number);
             }
-            public override Number reciprocal()
+            public override Number Reciprocal()
             {
                 Number denominator = Real * Real + Imaginary * Imaginary;
-                return create(Real / denominator, Imaginary.negative() / denominator);
+                return Create(Real / denominator, Imaginary.Negative() / denominator);
             }
-            protected override Polynomial calculateMinimalPolynomial()
+            protected override Polynomial CalculateMinimalPolynomial()
             {
                 MultivariatePolynomial variableForm = new MultivariatePolynomial(
                     new Polynomial[] { Real.MinimalPolynomial, Imaginary.MinimalPolynomial,
                         new Polynomial(new List<Integer> { One, Zero, One })});
-                variableForm.setCoefficient(new int[] { 1, 0, 0 }, One);
-                variableForm.setCoefficient(new int[] { 0, 1, 1 }, One);
-                return variableForm.getMinimalPolynomial();
+                variableForm.SetCoefficient(new int[] { 1, 0, 0 }, One);
+                variableForm.SetCoefficient(new int[] { 0, 1, 1 }, One);
+                return variableForm.GetMinimalPolynomial();
             }
-            public override List<Number> getConjugates()
+            public override List<Number> GetConjugates()
             {
-                List<Number> realPartConjugates = Real.getConjugates();
-                List<Number> imaginaryPartConjugates = Imaginary.getConjugates();
+                List<Number> realPartConjugates = Real.GetConjugates();
+                List<Number> imaginaryPartConjugates = Imaginary.GetConjugates();
                 List<Number> conjugateCandidates = new List<Number>();
                 foreach (Number a in realPartConjugates)
                     foreach (Number b in imaginaryPartConjugates)
-                        conjugateCandidates.Add(a + create(Zero, One) * b);
-                removeNonConjugates(conjugateCandidates);
+                        conjugateCandidates.Add(a + Create(Zero, One) * b);
+                RemoveNonConjugates(conjugateCandidates);
                 return conjugateCandidates;
             }
-            public override Integer getDenominatorLCM()
+            public override Integer GetDenominatorLCM()
             {
-                return Integer.getLCM(Real.getDenominatorLCM(), Imaginary.getDenominatorLCM());
+                return Integer.GetLCM(Real.GetDenominatorLCM(), Imaginary.GetDenominatorLCM());
             }
-            public override Integer getGreatestIntegerFactor()
+            public override Integer GetGreatestIntegerFactor()
             {
-                return Integer.getGCD(Real.getGreatestIntegerFactor(),
-                    Imaginary.getGreatestIntegerFactor());
+                return Integer.GetGCD(Real.GetGreatestIntegerFactor(),
+                    Imaginary.GetGreatestIntegerFactor());
             }
             public override int CompareTo(object obj)
             {
@@ -1659,16 +1664,16 @@ namespace Solver
             {
                 return Real.GetHashCode() ^ Imaginary.GetHashCode();
             }
-            public override string insertString(string str)
+            public override string InsertString(string str)
             {
                 if (Real is Integer && ((Integer)Real).Sign == 0)
-                    return Imaginary.insertString("i*" + str);
+                    return Imaginary.InsertString("i*" + str);
                 return '(' + ToString() + ')' + str;
             }
             public override string ToString()
             {
                 StringBuilder output =
-                    new StringBuilder(Imaginary.insertString("i").ToString());
+                    new StringBuilder(Imaginary.InsertString("i").ToString());
                 if (!(Real is Integer && ((Integer)Real).Sign == 0))
                 {
                     if (output[0] != '-')
@@ -1678,7 +1683,7 @@ namespace Solver
                 return output.ToString();
             }
         }
-        static List<Integer> primes = new List<Integer> { new Integer(2), new Integer(3) };
+        static List<Integer> Primes = new List<Integer> { new Integer(2), new Integer(3) };
         class Polynomial : IComparable
         {
             //The index of the coefficient represents the degree of its term.
@@ -1696,8 +1701,13 @@ namespace Solver
                 if (!Characteristic.Equals(Zero))
                 {
                     Coefficients = new List<Integer>();
-                    foreach (Integer coefficient in coefficients)
-                        Coefficients.Add(coefficient.euclideanDivideBy(characteristic).remainder);
+                    foreach (Integer coefficient in coefficients)                    
+                        if (coefficient.Sign < 0)
+                            Coefficients.Add(coefficient.EuclideanDivideBy(
+                                characteristic).Remainder + characteristic);
+                        else
+                            Coefficients.Add(coefficient.EuclideanDivideBy(
+                                characteristic).Remainder);                    
                 }
                 else
                     Coefficients = coefficients;
@@ -1713,7 +1723,7 @@ namespace Solver
                     output[i] = output[i] + b.Coefficients[i];
                 return new Polynomial(output, a.Characteristic);
             }
-            public Polynomial negative()
+            public Polynomial Negative()
             {
                 List<Integer> output = new List<Integer>();
                 foreach (Integer coefficient in Coefficients)
@@ -1722,7 +1732,7 @@ namespace Solver
             }
             public static Polynomial operator -(Polynomial a, Polynomial b)
             {
-                return a + b.negative();
+                return a + b.Negative();
             }
             public static Polynomial operator *(Polynomial a, Polynomial b)
             {
@@ -1748,14 +1758,14 @@ namespace Solver
                 public Polynomial Remainder;
             }
             delegate Number Divider(Integer a, Integer b);
-            PolynomialDivision divideBy(Polynomial divisor)
+            PolynomialDivision DivideBy(Polynomial divisor)
             {
                 Divider divide;
                 if (Characteristic == Zero)
                     divide = delegate (Integer a, Integer b) { return a / b; };
                 else
                     divide = delegate (Integer a, Integer b) {
-                        return a * b.exponentiate(Characteristic - new Integer(2)); };
+                        return a * b.Exponentiate(Characteristic - new Integer(2)); };
                 PolynomialDivision division;
                 List<Integer> quotient = new List<Integer>();
                 List<Integer> remainder = new List<Integer>(Coefficients);
@@ -1783,35 +1793,27 @@ namespace Solver
             }
             public static Polynomial operator /(Polynomial a, Polynomial b)
             {
-                return a.divideBy(b).Quotient;
+                return a.DivideBy(b).Quotient;
             }
             public static Polynomial operator %(Polynomial a, Polynomial b)
             {
-                return a.divideBy(b).Remainder;
+                return a.DivideBy(b).Remainder;
             }
-            public Polynomial exponentiate(Integer exponent)
+            public Polynomial Exponentiate(Integer exponent)
             {
-                return integerExponentiate(delegate (Polynomial A, Polynomial B) { return A * B; },
+                return IntegerExponentiate(delegate (Polynomial A, Polynomial B) { return A * B; },
                     new Polynomial(new List<Integer> { One }, Characteristic), this, exponent);
             }
-            public Integer evaluateAt(Integer input)
-            {
-                Integer output = Coefficients[0];
-                for (int i = 1; i < Coefficients.Count; ++i)
-                    output =
-                        (Integer)(output + Coefficients[i] * input.exponentiate(new Integer(i)));
-                return output;
-            }
-            public Polynomial getDerivative()
+            public Polynomial GetDerivative()
             {
                 List<Integer> derivativeCoefficients = new List<Integer>();
                 for (int i = 1; i < Coefficients.Count; ++i)
                     derivativeCoefficients.Add(Coefficients[i] * new Integer(i));
                 return new Polynomial(derivativeCoefficients, Characteristic);
             }
-            Integer reduceToPrimitivePart()
+            Integer ReduceToPrimitivePart()
             {//Returns the content used in the reduction.
-                Integer content = Integer.getGCD(Coefficients);
+                Integer content = Integer.GetGCD(Coefficients);
                 for (int i = 0; i < Coefficients.Count; ++i)
                     Coefficients[i] = (Integer)(Coefficients[i] / content);
                 return content;
@@ -1845,7 +1847,7 @@ namespace Solver
             {
                 return CompareTo(polynomial) == 0;
             }            
-            static Polynomial getGCD(Polynomial a, Polynomial b)
+            static Polynomial GetGCD(Polynomial a, Polynomial b)
             {
                 Polynomial A;
                 Polynomial B;
@@ -1861,31 +1863,31 @@ namespace Solver
                 }
                 if (b.Coefficients.Count == 0)
                     return a;
-                Integer d = Integer.getGCD(A.reduceToPrimitivePart(), B.reduceToPrimitivePart());
+                Integer d = Integer.GetGCD(A.ReduceToPrimitivePart(), B.ReduceToPrimitivePart());
                 Integer g = One;
                 Number h = One;
                 Integer degree = new Integer(A.Coefficients.Count - B.Coefficients.Count);
                 Polynomial remainder = ((Integer)B.Coefficients[B.Coefficients.Count - 1].
-                    exponentiate(degree + One) * A).divideBy(B).Remainder;
+                    Exponentiate(degree + One) * A).DivideBy(B).Remainder;
                 while (remainder.Coefficients.Count > 1)
                 {
                     A = B;
-                    Number divisor = (g * h).exponentiate(degree);
+                    Number divisor = (g * h).Exponentiate(degree);
                     B = remainder;
                     for (int i = 0; i < B.Coefficients.Count; ++i)
                         B.Coefficients[i] = (Integer)(B.Coefficients[i] / divisor);
                     g = A.Coefficients[A.Coefficients.Count - 1];
-                    h = h.exponentiate(One - degree) * g.exponentiate(degree);
+                    h = h.Exponentiate(One - degree) * g.Exponentiate(degree);
                     degree = new Integer(A.Coefficients.Count - B.Coefficients.Count);
-                    remainder = ((Integer)B.Coefficients[B.Coefficients.Count - 1].exponentiate(
-                        degree + One) * A).divideBy(B).Remainder;
+                    remainder = ((Integer)B.Coefficients[B.Coefficients.Count - 1].Exponentiate(
+                        degree + One) * A).DivideBy(B).Remainder;
                 }
                 if (remainder.Coefficients.Count == 1)
                     return new Polynomial(new List<Integer> { d }, a.Characteristic);
-                B.reduceToPrimitivePart();
+                B.ReduceToPrimitivePart();
                 return d * B;
             }
-            public List<Polynomial> getFactors()
+            public List<Polynomial> GetFactors()
             {
                 List<Polynomial> irreducibleFactors = new List<Polynomial>();
                 if (Characteristic != Zero)
@@ -1901,14 +1903,14 @@ namespace Solver
                     while (d < (Coefficients.Count + 1) / 2)
                     {
                         ++d;
-                        W = W.exponentiate(Characteristic).divideBy(this).Remainder;
+                        W = W.Exponentiate(Characteristic).DivideBy(this).Remainder;
                         Polynomial degreeDFactorProduct =
-                            getGCD(W - new Polynomial(new List<Integer> { Zero, One }), V);
+                            GetGCD(W - new Polynomial(new List<Integer> { Zero, One }), V);
                         if (degreeDFactorProduct.Coefficients.Count > 1)
                         {
                             distinctDegreeFactors.Add(d, degreeDFactorProduct);
-                            V = V.divideBy(degreeDFactorProduct).Quotient;
-                            W = W.divideBy(V).Remainder;
+                            V = V.DivideBy(degreeDFactorProduct).Quotient;
+                            W = W.DivideBy(V).Remainder;
                         }
                     }
                     void CZSplit(Polynomial factorProduct, int degree)
@@ -1926,8 +1928,8 @@ namespace Solver
                             Polynomial C =
                                 new Polynomial(new List<Integer>(T.Coefficients), Characteristic);
                             for (int j = 1; j < degree; ++j)
-                                C = T + (C * C).divideBy(factorProduct).Remainder;
-                            B = getGCD(factorProduct, C);
+                                C = T + (C * C).DivideBy(factorProduct).Remainder;
+                            B = GetGCD(factorProduct, C);
                             while (B.Coefficients.Count < 2 ||
                                 B.Coefficients.Count == factorProduct.Coefficients.Count)
                             {
@@ -1936,8 +1938,8 @@ namespace Solver
                                 C = new Polynomial(new List<Integer>(T.Coefficients),
                                     Characteristic);
                                 for (int j = 1; j < degree; ++j)
-                                    C = T + (C * C).divideBy(factorProduct).Remainder;
-                                B = getGCD(factorProduct, C);
+                                    C = T + (C * C).DivideBy(factorProduct).Remainder;
+                                B = GetGCD(factorProduct, C);
                             }
                         }
                         else
@@ -1947,10 +1949,10 @@ namespace Solver
                             for (int j = 1; j < 2 * degree; ++j)
                                 coefficients.Add(p);
                             coefficients.Add(One);
-                            Integer power = (Integer)((Characteristic.exponentiate(
+                            Integer power = (Integer)((Characteristic.Exponentiate(
                                 new Integer(degree)) - One) / new Integer(2));
-                            B = getGCD(factorProduct, new Polynomial(new List<Integer>(
-                                coefficients), Characteristic).exponentiate(power) -
+                            B = GetGCD(factorProduct, new Polynomial(new List<Integer>(
+                                coefficients), Characteristic).Exponentiate(power) -
                                 new Polynomial(new List<Integer> { One }, Characteristic));
                             while (B.Coefficients.Count < 2 ||
                                 B.Coefficients.Count == factorProduct.Coefficients.Count)
@@ -1962,31 +1964,31 @@ namespace Solver
                                     --j;
                                 }
                                 --coefficients[j];
-                                B = getGCD(factorProduct, new Polynomial(new List<Integer>(
-                                    coefficients), Characteristic).exponentiate(power) -
+                                B = GetGCD(factorProduct, new Polynomial(new List<Integer>(
+                                    coefficients), Characteristic).Exponentiate(power) -
                                     new Polynomial(new List<Integer> { One }, Characteristic));
                             }
                         }
                         CZSplit(B, degree);
-                        CZSplit(factorProduct.divideBy(B).Quotient, degree);
+                        CZSplit(factorProduct.DivideBy(B).Quotient, degree);
                     }
                     foreach (int degree in distinctDegreeFactors.Keys)
                         CZSplit(distinctDegreeFactors[degree], degree);
                     return irreducibleFactors;
                 }
                 List<Polynomial> squarefreeFactors = new List<Polynomial>();
-                Polynomial derivative = getDerivative();
-                Polynomial a = getGCD(this, derivative);
+                Polynomial derivative = GetDerivative();
+                Polynomial a = GetGCD(this, derivative);
                 Polynomial b = this / a;
-                Polynomial c = derivative / a - b.getDerivative();
+                Polynomial c = derivative / a - b.GetDerivative();
                 while (!(b.Coefficients.Count == 1 && (b.Coefficients[0].Equals(One)
                     || b.Coefficients[0].Equals(new Integer(-1)))))
                 {
-                    a = getGCD(b, c);
+                    a = GetGCD(b, c);
                     if (!squarefreeFactors.Contains(a))
                         squarefreeFactors.Add(a);
                     b = b / a;
-                    c = c / a - b.getDerivative();
+                    c = c / a - b.GetDerivative();
                 }
                 List<Polynomial> splitFactor(Polynomial factor)
                 {
@@ -1994,16 +1996,16 @@ namespace Solver
                     int i = 0;
                     while (true)
                     {
-                        if (i == primes.Count)
+                        if (i == Primes.Count)
                         {
-                            Integer primeCandidate = primes[primes.Count - 1] + new Integer(2);
+                            Integer primeCandidate = Primes[Primes.Count - 1] + new Integer(2);
                             while (true)
                             {
                                 bool isDivisible = false;
-                                for (int j = 0; primes[j] <=
-                                    primeCandidate.euclideanDivideBy(new Integer(2)).quotient; ++j)
-                                    if (primeCandidate.euclideanDivideBy(
-                                        primes[j]).remainder.Equals(Zero))
+                                for (int j = 0; Primes[j] <=
+                                    primeCandidate.EuclideanDivideBy(new Integer(2)).Quotient; ++j)
+                                    if (primeCandidate.EuclideanDivideBy(
+                                        Primes[j]).Remainder.Equals(Zero))
                                     {
                                         isDivisible = true;
                                         break;
@@ -2012,22 +2014,22 @@ namespace Solver
                                     break;
                                 primeCandidate += new Integer(2);
                             }
-                            primes.Add(primeCandidate);
+                            Primes.Add(primeCandidate);
                         }
-                        moddedFactor = new Polynomial(factor.Coefficients, primes[i]);
-                        Polynomial GCD = getGCD(moddedFactor, moddedFactor.getDerivative());
+                        moddedFactor = new Polynomial(factor.Coefficients, Primes[i]);
+                        Polynomial GCD = GetGCD(moddedFactor, moddedFactor.GetDerivative());
                         if (GCD.Coefficients.Count == 1 && GCD.Coefficients[0] == One)
                         {
                             Integer leadingCoefficientInverse = (Integer)
                                 moddedFactor.Coefficients[moddedFactor.Coefficients.Count -
-                                1].exponentiate(moddedFactor.Characteristic - new Integer(2));
+                                1].Exponentiate(moddedFactor.Characteristic - new Integer(2));
                             for (int j = 0; j < moddedFactor.Coefficients.Count; ++j)
                                 moddedFactor.Coefficients[j] *= leadingCoefficientInverse;
                             break;
                         }
                         ++i;
                     }
-                    List<Polynomial> irreducibleModdedFactors = moddedFactor.getFactors();
+                    List<Polynomial> irreducibleModdedFactors = moddedFactor.GetFactors();
                     Integer bound = Zero;
                     foreach (Integer coefficient in factor.Coefficients)
                         bound += coefficient * coefficient;
@@ -2035,11 +2037,11 @@ namespace Solver
                     while (squareRoot * squareRoot < bound)
                         ++squareRoot;
                     Integer factorDegree = new Integer(factor.Coefficients.Count - 1);
-                    Integer k = factorDegree.euclideanDivideBy(new Integer(4)).quotient;
-                    bound = (squareRoot * factorDegree.thisChooseK(k) +
-                        factor.Coefficients[factor.Coefficients.Count - 1].magnitude() *
-                        factorDegree.thisChooseK(k - One)) * new Integer(2) *
-                        factor.Coefficients[factor.Coefficients.Count - 1].magnitude();
+                    Integer k = factorDegree.EuclideanDivideBy(new Integer(4)).Quotient;
+                    bound = (squareRoot * factorDegree.ThisChooseK(k) +
+                        factor.Coefficients[factor.Coefficients.Count - 1].Magnitude() *
+                        factorDegree.ThisChooseK(k - One)) * new Integer(2) *
+                        factor.Coefficients[factor.Coefficients.Count - 1].Magnitude();
                     Integer e = One;
                     Integer characteristicPower = moddedFactor.Characteristic;
                     while (characteristicPower < bound)
@@ -2072,7 +2074,7 @@ namespace Solver
                             PolynomialDivision division;
                             while (Y.Coefficients.Count > 0)
                             {
-                                division = GCD.divideBy(Y);
+                                division = GCD.DivideBy(Y);
                                 Polynomial T = ACoefficient - BCoefficient * division.Quotient;
                                 ACoefficient = BCoefficient;
                                 GCD = Y;
@@ -2086,7 +2088,7 @@ namespace Solver
                                     (Integer)(fCoefficients[l] / characteristicToPower);
                             Polynomial f =
                                 new Polynomial(fCoefficients, moddedFactor.Characteristic);
-                            division = (BCoefficient * f).divideBy(A);
+                            division = (BCoefficient * f).DivideBy(A);
                             division.Quotient.Characteristic = Zero;
                             division.Remainder.Characteristic = Zero;
                             A += characteristicToPower * division.Remainder;
@@ -2121,22 +2123,22 @@ namespace Solver
                             Integer two = new Integer(2);
                             for (int j = 0; j < V.Coefficients.Count; ++j)
                             {
-                                Integer remainder = V.Coefficients[j].euclideanDivideBy(
-                                    characteristicPower).remainder;
+                                Integer remainder = V.Coefficients[j].EuclideanDivideBy(
+                                    characteristicPower).Remainder;
                                 if (remainder * two <= characteristicPower)
                                     V.Coefficients[j] = remainder;
                                 else
                                     V.Coefficients[j] = remainder - characteristicPower;
                             }
-                            PolynomialDivision division = factor.divideBy(V);
+                            PolynomialDivision division = factor.DivideBy(V);
                             if (division.Remainder.Coefficients.Count == 0)
                             {
                                 while (division.Remainder.Coefficients.Count == 0) 
                                 {
                                     factor = division.Quotient;
-                                    division = factor.divideBy(V);
+                                    division = factor.DivideBy(V);
                                 }
-                                V.reduceToPrimitivePart();
+                                V.ReduceToPrimitivePart();
                                 factorSplit.Add(V);
                                 return finalizedCombinationIndices;
                             }
@@ -2178,7 +2180,7 @@ namespace Solver
                         finalFactor *= liftedFactor;
                     if (finalFactor.Coefficients.Count > 1)
                     {
-                        finalFactor.reduceToPrimitivePart();
+                        finalFactor.ReduceToPrimitivePart();
                         factorSplit.Add(finalFactor);
                     }
                     return factorSplit;
@@ -2193,8 +2195,8 @@ namespace Solver
                         while (factor.Coefficients[0].Equals(Zero))
                             factor.Coefficients.RemoveAt(0);
                     }
-                    if (factor.Coefficients[0].magnitude() <
-                        factor.Coefficients[factor.Coefficients.Count - 1].magnitude())
+                    if (factor.Coefficients[0].Magnitude() <
+                        factor.Coefficients[factor.Coefficients.Count - 1].Magnitude())
                     {
                         factor.Coefficients.Reverse();
                         List<Polynomial> splitFactors = splitFactor(factor);
@@ -2229,10 +2231,10 @@ namespace Solver
                 MinimalPolynomials = minimalPolynomials;
                 Coefficients = new Dictionary<int[], Rational>();
             }
-            public void setCoefficient(int[] indices, Rational coefficient)
+            public void SetCoefficient(int[] indices, Rational coefficient)
             {//The nth index is the degree with respect to the nth variable of the term being set.
                 foreach (int[] keyIndices in Coefficients.Keys)
-                    if (areEqualByValue(indices, keyIndices))
+                    if (AreEqualByValue(indices, keyIndices))
                     {
                         Coefficients[indices] = coefficient;
                         return;
@@ -2249,7 +2251,7 @@ namespace Solver
                 {
                     bool indicesFound = false;
                     foreach (int[] indicesA in sum.Coefficients.Keys)
-                        if (areEqualByValue(indicesA, indicesB))
+                        if (AreEqualByValue(indicesA, indicesB))
                         {
                             Rational termSum =
                                 (Rational)(sum.Coefficients[indicesA] + b.Coefficients[indicesB]);
@@ -2265,7 +2267,7 @@ namespace Solver
                 }
                 return sum;
             }
-            static MultivariatePolynomial reductionlessMultiply(MultivariatePolynomial a,
+            static MultivariatePolynomial ReductionlessMultiply(MultivariatePolynomial a,
                 MultivariatePolynomial b)
             {
                 MultivariatePolynomial product =
@@ -2278,7 +2280,7 @@ namespace Solver
                             productIndices[i] += indicesB[i] + indicesA[i];
                         bool indicesFound = false;
                         foreach (int[] keyIndices in product.Coefficients.Keys)
-                            if (areEqualByValue(productIndices, keyIndices))
+                            if (AreEqualByValue(productIndices, keyIndices))
                             {
                                 product.Coefficients[productIndices] =
                                     (Rational)(product.Coefficients[productIndices] +
@@ -2323,8 +2325,8 @@ namespace Solver
                                     termComponentIndices[i] = index;
                                     MultivariatePolynomial reducedDegreeFactor =
                                         new MultivariatePolynomial(a.MinimalPolynomials);
-                                    reducedDegreeFactor.setCoefficient(termComponentIndices, One);
-                                    productComponent = reductionlessMultiply(productComponent,
+                                    reducedDegreeFactor.SetCoefficient(termComponentIndices, One);
+                                    productComponent = ReductionlessMultiply(productComponent,
                                         reducedDegreeFactor);
                                 }
                                 for (int j = 0; j < a.MinimalPolynomials[i].Coefficients.Count - 1;
@@ -2337,11 +2339,11 @@ namespace Solver
                                     termComponent.Coefficients[termComponentIndices] =
                                         (Rational)(a.MinimalPolynomials[i].Coefficients[j] /
                                         a.MinimalPolynomials[i].Coefficients[
-                                        a.MinimalPolynomials[i].Coefficients.Count - 1].negative());
+                                        a.MinimalPolynomials[i].Coefficients.Count - 1].Negative());
                                 }
                             }
                             productComponent =
-                                reductionlessMultiply(productComponent, termComponent);
+                                ReductionlessMultiply(productComponent, termComponent);
                         }
                         product += productComponent;
                     }
@@ -2360,7 +2362,7 @@ namespace Solver
             {
                 return b * a;
             }
-            public Polynomial getMinimalPolynomial()
+            public Polynomial GetMinimalPolynomial()
             {
                 List<MultivariatePolynomial> powers = new List<MultivariatePolynomial>();
                 MultivariatePolynomial power = new MultivariatePolynomial(MinimalPolynomials);
@@ -2381,7 +2383,7 @@ namespace Solver
                     {
                         bool indicesFound = false;
                         for (int i = 0; i < termsPresent.Count; ++i)
-                            if (areEqualByValue(indices, termsPresent[i]))
+                            if (AreEqualByValue(indices, termsPresent[i]))
                             {
                                 matrixRow[i] = power.Coefficients[indices];
                                 indicesFound = true;
@@ -2419,11 +2421,11 @@ namespace Solver
                                 if (!matrix[k][matrix.Count - i].Equals(Zero))
                                 {
                                     Integer scalarA =
-                                        matrix[k][matrix.Count - i].getDenominatorLCM() *
-                                        matrix[i - 1][matrix.Count - i].getGreatestIntegerFactor();
+                                        matrix[k][matrix.Count - i].GetDenominatorLCM() *
+                                        matrix[i - 1][matrix.Count - i].GetGreatestIntegerFactor();
                                     Integer scalarB =
-                                        matrix[k][matrix.Count - i].getGreatestIntegerFactor() *
-                                        matrix[i - 1][matrix.Count - i].getDenominatorLCM();
+                                        matrix[k][matrix.Count - i].GetGreatestIntegerFactor() *
+                                        matrix[i - 1][matrix.Count - i].GetDenominatorLCM();
                                     for (int l = 0; l < matrix.Count; ++l)
                                         matrix[k][l] = (Rational)(
                                             matrix[k][l] * scalarA - matrix[i - 1][l] * scalarB);
@@ -2437,11 +2439,11 @@ namespace Solver
                     augmentation[matrix.Count - 1].Coefficients;
                 for (int i = 0; i < annullingPolynomialCoefficients.Count; ++i)
                     annullingPolynomialCoefficients[i] *=
-                        matrix[matrix.Count - 1][0].getDenominatorLCM();
+                        matrix[matrix.Count - 1][0].GetDenominatorLCM();
                 annullingPolynomialCoefficients[0] -=
-                    matrix[matrix.Count - 1][0].getGreatestIntegerFactor();
+                    matrix[matrix.Count - 1][0].GetGreatestIntegerFactor();
                 Polynomial minimalPolynomial = new Polynomial(annullingPolynomialCoefficients);
-                List<Polynomial> factors = minimalPolynomial.getFactors();
+                List<Polynomial> factors = minimalPolynomial.GetFactors();
                 foreach (Polynomial factor in factors)
                 {
                     MultivariatePolynomial sum = new MultivariatePolynomial(MinimalPolynomials);
@@ -2457,7 +2459,7 @@ namespace Solver
                 }
                 return minimalPolynomial;
             }
-            static bool areEqualByValue(int[] a, int[] b)
+            static bool AreEqualByValue(int[] a, int[] b)
             {
                 for (int i = 0; i < a.Length; ++i)
                     if (a[i] != b[i])
@@ -2479,7 +2481,7 @@ namespace Solver
             }
 #endif
         }
-        static Number evaluateExpression(List<char> operations, List<Number> numbers)
+        static Number EvaluateExpression(List<char> operations, List<Number> numbers)
         {
             for (int i = 0; i < operations.Count;)
             {
@@ -2504,7 +2506,7 @@ namespace Solver
                             throw new InvalidUserInput("Unmatched parentheses.");
                         }
                     }
-                    numbers[i] = evaluateExpression(operations.GetRange(i + 1, matchingParenIndex -
+                    numbers[i] = EvaluateExpression(operations.GetRange(i + 1, matchingParenIndex -
                         i - 1), numbers.GetRange(i + 1, matchingParenIndex - i - 1));
                     operations[i] = ' ';
                     numbers.RemoveRange(i + 1, matchingParenIndex - i);
@@ -2532,7 +2534,7 @@ namespace Solver
                         {
                             if (numbers[i + 1] != null)
                             {
-                                numbers[i + 1] = numbers[i + 1].negative();
+                                numbers[i + 1] = numbers[i + 1].Negative();
                                 numbers.RemoveAt(i);
                                 operations.RemoveAt(i);
                             }
@@ -2561,7 +2563,7 @@ namespace Solver
                 {
                     if (operations[i] == '^')
                     {
-                        numbers[i - 1] = numbers[i - 1].exponentiate(numbers[i + 1]);
+                        numbers[i - 1] = numbers[i - 1].Exponentiate(numbers[i + 1]);
                         numbers.RemoveRange(i, 2);
                         operations.RemoveRange(i, 2);
                     }
@@ -2623,7 +2625,7 @@ namespace Solver
                 try
                 {
 #if DEBUG
-                    string input = "++7";
+                    string input = "1/(1+2^(1/2))";
 #else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
@@ -2643,15 +2645,15 @@ namespace Solver
                             {
                                 if (c == 'i')
                                 {
-                                    numbers.Add(ComplexNumber.create(Zero,
-                                        Integer.parse(numberCollector.ToString())));
+                                    numbers.Add(ComplexNumber.Create(Zero,
+                                        Integer.Parse(numberCollector.ToString())));
                                     operations.Add(' ');
                                 }
                                 else if (!"()+-*/^".Contains(c.ToString()))
                                     throw new InvalidUserInput(c + " is an invalid character.");
                                 else
                                 {
-                                    numbers.Add(Integer.parse(numberCollector.ToString()));
+                                    numbers.Add(Integer.Parse(numberCollector.ToString()));
                                     operations.Add(' ');
                                     operations.Add(c);
                                     numbers.Add(null);
@@ -2666,7 +2668,7 @@ namespace Solver
                         }
                         else if (c == 'i')
                         {
-                            numbers.Add(ComplexNumber.create(Zero, One));
+                            numbers.Add(ComplexNumber.Create(Zero, One));
                             operations.Add(' ');
                         }
                         else if (!"()+-*/^".Contains(c.ToString()))
@@ -2680,7 +2682,7 @@ namespace Solver
                     if (lastCharWasDigit)
                     {
                         operations.Add(' ');
-                        numbers.Add(Integer.parse(numberCollector.ToString()));
+                        numbers.Add(Integer.Parse(numberCollector.ToString()));
                     }
                     for (int i = 0; i < operations.Count;)
                     {
@@ -2701,7 +2703,7 @@ namespace Solver
                         else
                             ++i;
                     }
-                    Number expression = evaluateExpression(operations, numbers);
+                    Number expression = EvaluateExpression(operations, numbers);
                     if (expression == null)
                         Console.WriteLine("=\n");
                     else
