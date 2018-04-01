@@ -480,8 +480,7 @@ namespace Solver
                 calculateValue(positiveDivisor.Values.Length - 1, divisorLeadingDigitPlace);
                 division.quotient = new Integer(quotient, (sbyte)(Sign * divisor.Sign)).shiftLeft(
                     1 - positiveDivisor.Values.Length, 1 - divisorLeadingDigitPlace);
-                if (Sign < 0 && division.remainder.Sign != 0)
-                    division.remainder = positiveDivisor - division.remainder;
+                division.remainder.Sign = Sign;
                 return division;
             }
             protected override Polynomial calculateMinimalPolynomial()
@@ -2434,10 +2433,13 @@ namespace Solver
                             break;
                         }
                     }
-                List<Integer> annullingPolynomialCoefficients = augmentation[matrix.Count - 1].Coefficients;
+                List<Integer> annullingPolynomialCoefficients =
+                    augmentation[matrix.Count - 1].Coefficients;
                 for (int i = 0; i < annullingPolynomialCoefficients.Count; ++i)
-                    annullingPolynomialCoefficients[i] *= matrix[matrix.Count - 1][0].getDenominatorLCM();
-                annullingPolynomialCoefficients[0] -= matrix[matrix.Count - 1][0].getGreatestIntegerFactor();
+                    annullingPolynomialCoefficients[i] *=
+                        matrix[matrix.Count - 1][0].getDenominatorLCM();
+                annullingPolynomialCoefficients[0] -=
+                    matrix[matrix.Count - 1][0].getGreatestIntegerFactor();
                 Polynomial minimalPolynomial = new Polynomial(annullingPolynomialCoefficients);
                 List<Polynomial> factors = minimalPolynomial.getFactors();
                 foreach (Polynomial factor in factors)
@@ -2511,31 +2513,50 @@ namespace Solver
                 else
                     ++i;
             }
-            for (int i = 0; i < operations.Count;)
-            {
-                if (i == 0 || numbers[i - 1] == null)
-                {
-                    if (operations[i] == '+')
-                    {
-                        numbers[i] = One;
-                        numbers.Insert(i + 1, null);
-                        operations[i] = ' ';
-                        operations.Insert(i + 1, '*');
-                    }
-                    else if (operations[i] == '-')
-                    {
-                        numbers[i] = new Integer(-1);
-                        numbers.Insert(i + 1, null);
-                        operations[i] = ' ';
-                        operations.Insert(i + 1, '*');
-                    }
-                    ++i;
-                }
-                else
-                    ++i;
-            }
             try
             {
+                for (int i = 0; i < operations.Count;)
+                {
+                    if (i == 0 || numbers[i - 1] == null)
+                    {
+                        if (operations[i] == '+')
+                            if (numbers[i + 1] != null || operations[i + 1] == '+' ||
+                                operations[i + 1] == '-')
+                            {
+                                numbers.RemoveAt(i);
+                                operations.RemoveAt(i);
+                            }
+                            else
+                                throw new InvalidUserInput("Operator missing operand.");
+                        else if (operations[i] == '-')
+                        {
+                            if (numbers[i + 1] != null)
+                            {
+                                numbers[i + 1] = numbers[i + 1].negative();
+                                numbers.RemoveAt(i);
+                                operations.RemoveAt(i);
+                            }
+                            else if (operations[i + 1] == '+') 
+                            {
+                                operations[i + 1] = '-';
+                                numbers.RemoveAt(i);
+                                operations.RemoveAt(i);
+                            }
+                            else if(operations[i + 1] == '-')
+                            {
+                                operations[i + 1] = '+';
+                                numbers.RemoveAt(i);
+                                operations.RemoveAt(i);
+                            }
+                            else
+                                throw new InvalidUserInput("Operator missing operand.");
+                        }
+                        else
+                            ++i;
+                    }
+                    else
+                        ++i;
+                }
                 for (int i = 0; i < operations.Count;)
                 {
                     if (operations[i] == '^')
@@ -2602,7 +2623,7 @@ namespace Solver
                 try
                 {
 #if DEBUG
-                    string input = "1/(1+2^(1/2))";
+                    string input = "++7";
 #else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
