@@ -2106,19 +2106,16 @@ namespace Solver
                     List<Polynomial> liftedFactors = new List<Polynomial>();
                     Polynomial productOfUnliftedFactors =
                         new Polynomial(factor.Coefficients, moddedFactor.Characteristic);
+                    Polynomial B = null;
                     for (int j = 0; j < irreducibleModdedFactors.Count - 1; ++j)
                     {
                         productOfUnliftedFactors /= irreducibleModdedFactors[j];
-                        Integer characteristicExponent = Zero;
-                        Integer characteristicToPower = One;
+                        Integer characteristicExponent = One;
+                        Integer characteristicToPower = moddedFactor.Characteristic;
                         Polynomial A = irreducibleModdedFactors[j];
-                        Polynomial B = productOfUnliftedFactors;
+                        B = productOfUnliftedFactors;
                         while (characteristicExponent < e)
                         {                            
-                            ++characteristicExponent;
-                            characteristicToPower *= moddedFactor.Characteristic;
-                            A.Characteristic = characteristicToPower;
-                            B.Characteristic = characteristicToPower;
                             ExtendedGCDInfo<Polynomial> extendedGCD = ExtendedGCD(A, B);
                             Integer reciprocal = extendedGCD.GCD.Coefficients[0].Reciprocal(
                                 moddedFactor.Characteristic);
@@ -2134,17 +2131,37 @@ namespace Solver
                                 new Polynomial(fCoefficients, moddedFactor.Characteristic);
                             Division<Polynomial> division =
                                 (extendedGCD.BCoefficient * f).EuclideanDivideBy(A);
+                            Polynomial T = extendedGCD.ACoefficient * f + B * division.Quotient;
+                            T.Characteristic = Zero;
                             division.Quotient.Characteristic = Zero;
                             division.Remainder.Characteristic = Zero;
                             A += characteristicToPower * division.Remainder;
-                            B += characteristicToPower *
-                                (extendedGCD.ACoefficient * f + B * division.Quotient);                            
+                            B += characteristicToPower * T;
+                            ++characteristicExponent;
+                            characteristicToPower *= moddedFactor.Characteristic;
+                            A = new Polynomial(A.Coefficients, characteristicToPower);
+                            B = new Polynomial(B.Coefficients, characteristicToPower);
                         }
+                        A.Characteristic = Zero;
                         liftedFactors.Add(A);
                     }
-                    liftedFactors.Add(productOfUnliftedFactors);
+                    B.Characteristic = Zero;
+                    liftedFactors.Add(B);
                     List<Polynomial> factorSplit = new List<Polynomial>();
                     int d = 1;
+                    Integer two = new Integer(2);
+                    void BoundCoefficients(Polynomial polynomial)
+                    {
+                        for (int j = 0; j < polynomial.Coefficients.Count; ++j)
+                        {
+                            Integer remainder = polynomial.Coefficients[j].EuclideanDivideBy(
+                                characteristicPower).Remainder;
+                            if (remainder * two <= characteristicPower)
+                                polynomial.Coefficients[j] = remainder;
+                            else
+                                polynomial.Coefficients[j] = remainder - characteristicPower;
+                        }
+                    }
                     List<int> testFactorCombination(int elementsToAdd,
                         int indexOfPreviousElement, List<int> combinationIndices)
                     {
@@ -2166,16 +2183,7 @@ namespace Solver
                                 finalizedCombinationIndices = combinationIndices;
                             foreach (int index in finalizedCombinationIndices)
                                 V *= liftedFactors[index];
-                            Integer two = new Integer(2);
-                            for (int j = 0; j < V.Coefficients.Count; ++j)
-                            {
-                                Integer remainder = V.Coefficients[j].EuclideanDivideBy(
-                                    characteristicPower).Remainder;
-                                if (remainder * two <= characteristicPower)
-                                    V.Coefficients[j] = remainder;
-                                else
-                                    V.Coefficients[j] = remainder - characteristicPower;
-                            }
+                            BoundCoefficients(V);
                             Division<Polynomial> division = factor.EuclideanDivideBy(V);
                             if (division.Remainder.Coefficients.Count == 0)
                             {
@@ -2226,6 +2234,7 @@ namespace Solver
                         finalFactor *= liftedFactor;
                     if (finalFactor.Coefficients.Count > 1)
                     {
+                        BoundCoefficients(finalFactor);
                         finalFactor.ReduceToPrimitivePart();
                         factorSplit.Add(finalFactor);
                     }
@@ -2670,7 +2679,7 @@ namespace Solver
                 try
                 {
 #if DEBUG
-                    string input = "1/(1+2^(1/2))";
+                    string input = "1/(1+2^(1/3))";
 #else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
