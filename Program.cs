@@ -249,7 +249,7 @@ namespace Solver
         {
             uint[] Values;
             public sbyte Sign { get; private set; }
-            Integer(uint[] values, sbyte sign)
+            public Integer(uint[] values, sbyte sign)
             {
                 int lastNonzeroValueIndex = 0;
                 for (int i = values.Length - 1; i >= 0; --i)
@@ -309,7 +309,52 @@ namespace Solver
             public static Integer operator +(Integer a, Integer b)
             {
                 uint[] aValues;
-                uint[] bValues;
+                uint[] bValues;                
+                uint[] sumValues;
+                void calculateValues()
+                {
+                    for (int i = 0; i < aValues.Length; ++i)
+                    {
+                        if ((aValues[i] & 0x80000000) != 0)
+                        {
+                            aValues[i] -= 0x80000000;
+                            if ((bValues[i] & 0x80000000) != 0)
+                            {
+                                bValues[i] -= 0x80000000;
+                                sumValues[i] += aValues[i] + bValues[i];
+                                sumValues[i + 1] += 1;
+                            }
+                            else
+                            {
+                                sumValues[i] += aValues[i] + bValues[i];
+                                if ((sumValues[i] & 0x80000000) != 0)
+                                {
+                                    sumValues[i] -= 0x80000000;
+                                    sumValues[i + 1] += 1;
+                                }
+                                else
+                                    sumValues[i] += 0x80000000;
+                            }
+                        }
+                        else
+                        {
+                            if ((bValues[i] & 0x80000000) != 0)
+                            {
+                                bValues[i] -= 0x80000000;
+                                sumValues[i] += aValues[i] + bValues[i];
+                                if ((sumValues[i] & 0x80000000) != 0)
+                                {
+                                    sumValues[i] -= 0x80000000;
+                                    sumValues[i + 1] += 1;
+                                }
+                                else
+                                    sumValues[i] += 0x80000000;
+                            }
+                            else
+                                sumValues[i] += aValues[i] + bValues[i];
+                        }
+                    }
+                }                
                 uint[] takeTwosComplement(uint[] values)
                 {
                     uint[] outputValues = new uint[values.Length];
@@ -328,86 +373,38 @@ namespace Solver
                     }
                     return outputValues;
                 }
-                void padValueArrays(Integer shortInteger, Integer longInteger)
+                aValues = new uint[Math.Max(a.Values.Length, b.Values.Length)];
+                a.Values.CopyTo(aValues, 0);
+                bValues = new uint[aValues.Length];
+                b.Values.CopyTo(bValues, 0);
+                sumValues = new uint[aValues.Length + 1];
+                Integer handleSingleNegativeCase()
                 {
-                    aValues = new uint[longInteger.Values.Length];
-                    shortInteger.Values.CopyTo(aValues, 0);
-                    if (shortInteger.Sign < 0)
-                        aValues = takeTwosComplement(aValues);
-                    if (longInteger.Sign < 0)
-                        bValues = takeTwosComplement(longInteger.Values);
-                    else
-                        bValues = longInteger.Values;
-                }
-                if (a.Values.Length < b.Values.Length)
-                    padValueArrays(a, b);
-                else
-                    padValueArrays(b, a);
-                uint[] sum = new uint[aValues.Length];
-                bool remainder = false;
-                for (int i = 0; i < aValues.Length; ++i)
-                {
-                    uint power = 1;
-                    for (int j = 0; j < 32; ++j)
-                    {
-                        bool aDigitIsZero = (aValues[i] & power) == 0;
-                        bool bDigitIsZero = (bValues[i] & power) == 0;
-                        if (remainder)
-                        {
-                            if (aDigitIsZero)
-                            {
-                                if (bDigitIsZero)
-                                {
-                                    sum[i] |= power;
-                                    remainder = false;
-                                }
-                            }
-                            else if (!bDigitIsZero)
-                                sum[i] |= power;
-                        }
-                        else if (!aDigitIsZero)
-                        {
-                            if (!bDigitIsZero)
-                                remainder = true;
-                            else
-                                sum[i] |= power;
-                        }
-                        else if (!bDigitIsZero)
-                            sum[i] |= power;
-                        power = power << 1;
-                    }
+                    sumValues[aValues.Length] = 0xffffffff;
+                    calculateValues();
+                    if (sumValues[aValues.Length] == 0)
+                        return new Integer(sumValues, 1);
+                    return new Integer(takeTwosComplement(sumValues), -1);
                 }
                 if (a.Sign < 0)
                 {
+                    aValues = takeTwosComplement(aValues);
                     if (b.Sign < 0)
                     {
-                        if (!remainder)
-                        {
-                            uint[] sumWithRemainder = new uint[sum.Length + 1];
-                            takeTwosComplement(sum).CopyTo(sumWithRemainder, 0);
-                            sumWithRemainder[sum.Length] = 1;
-                            return new Integer(sumWithRemainder, -1);
-                        }
-                        return new Integer(takeTwosComplement(sum), -1);
+                        bValues = takeTwosComplement(bValues);
+                        sumValues[aValues.Length] = 0xfffffffe;
+                        calculateValues();
+                        return new Integer(takeTwosComplement(sumValues), -1);
                     }
-                    if (remainder)
-                        return new Integer(sum, 1);
-                    return new Integer(takeTwosComplement(sum), -1);
+                    return handleSingleNegativeCase();
                 }
                 if (b.Sign < 0)
                 {
-                    if (remainder)
-                        return new Integer(sum, 1);
-                    return new Integer(takeTwosComplement(sum), -1);
+                    bValues = takeTwosComplement(bValues);
+                    return handleSingleNegativeCase();
                 }
-                if (remainder)
-                {
-                    uint[] sumWithRemainder = new uint[sum.Length + 1];
-                    sum.CopyTo(sumWithRemainder, 0);
-                    sumWithRemainder[sum.Length] = 1;
-                    return new Integer(sumWithRemainder, 1);
-                }
-                return new Integer(sum, 1);
+                calculateValues();
+                return new Integer(sumValues, 1);
             }
             public static Integer operator ++(Integer a)
             {
@@ -547,7 +544,7 @@ namespace Solver
                 }
                 division.Remainder = new Integer(Values, 1);
                 int divisorLeadingDigitPlace = 0;
-                uint power = 0b10000000000000000000000000000000;
+                uint power = 0x80000000;
                 for (int i = 32; i > 0; --i)
                 {
                     if ((divisor.Values[divisor.Values.Length - 1] & power) != 0)
@@ -561,7 +558,7 @@ namespace Solver
                 uint[] quotient = new uint[Values.Length];
                 void calculateValue(int valuePlace, int stoppingDigitPlace)
                 {
-                    power = 0b10000000000000000000000000000000;
+                    power = 0x80000000;
                     for (int i = 32; i >= stoppingDigitPlace; --i)
                     {
                         Integer shiftedDivisor = positiveDivisor.ShiftLeft(valuePlace -
@@ -2106,7 +2103,7 @@ namespace Solver
                     List<Polynomial> liftedFactors = new List<Polynomial>();
                     Polynomial productOfUnliftedFactors =
                         new Polynomial(factor.Coefficients, moddedFactor.Characteristic);
-                    Polynomial B = null;
+                    Polynomial B = factor;
                     for (int j = 0; j < irreducibleModdedFactors.Count - 1; ++j)
                     {
                         productOfUnliftedFactors /= irreducibleModdedFactors[j];
@@ -2679,8 +2676,8 @@ namespace Solver
                 try
                 {
 #if DEBUG
-                    string input = "1/(1+2^(1/3))";
-#else
+                    string input = "1/(1+2^(1/2))";
+#else                    
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
                         return;
