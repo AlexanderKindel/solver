@@ -249,7 +249,7 @@ namespace Solver
         {
             uint[] Values;
             public sbyte Sign { get; private set; }
-            public Integer(uint[] values, sbyte sign)
+            Integer(uint[] values, sbyte sign)
             {
                 int lastNonzeroValueIndex = 0;
                 for (int i = values.Length - 1; i >= 0; --i)
@@ -492,18 +492,16 @@ namespace Solver
                 return One;
             }
             public static Integer operator *(Integer a, Integer b)
-            {
+            {                
                 Integer product = Zero;
                 for (int i = 0; i < a.Values.Length; ++i)
-                {
-                    uint power = 1;
-                    for (int j = 0; j < 32; ++j)
+                    for (int j = 0; j < b.Values.Length; ++j)
                     {
-                        if ((a.Values[i] & power) != 0)
-                            product = product + b.ShiftLeft(i, j);
-                        power = power << 1;
+                        ulong productComponent = (ulong)(a.Values[i]) * b.Values[j];
+                        product += new Integer(ShiftValuesLeft(new uint[] {
+                            (uint)(productComponent & 0x00000000ffffffff),
+                            (uint)((productComponent & 0xffffffff00000000) >> 32) }, i + j, 0), 1);                        
                     }
-                }
                 product.Sign = (sbyte)(b.Sign * a.Sign);
                 return product;
             }
@@ -2677,7 +2675,7 @@ namespace Solver
                 {
 #if DEBUG
                     string input = "1/(1+2^(1/2))";
-#else                    
+#else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
                         return;
