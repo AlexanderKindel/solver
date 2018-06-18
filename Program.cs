@@ -52,7 +52,7 @@ namespace Solver
         {
             T GetMultiplicativeIdentity();
         }
-        interface IArithmetic<T> : IRingElement<T>
+        interface IArithmetic<T> : IRingElement<T>, IEquatable<T>
         {
             T GetAdditiveIdentity();
             T GetNegative();
@@ -215,7 +215,7 @@ namespace Solver
                     a.RefineImaginaryPartErrorInterval(error); });
             }
         }
-        abstract class Number : Primitive, IArithmetic<Number>, IComparable, IEquatable<Number>
+        abstract class Number : Primitive, IArithmetic<Number>, IComparable
         {
             public static Integer Zero = new Integer(0);
             public static Integer One = new Integer(1);
@@ -333,7 +333,7 @@ namespace Solver
                 if (ArgumentEstimate.Min <= Pi.LowEstimate &&
                     Pi.LowEstimate <= ArgumentEstimate.Max)
                 {
-                    cosine.Min = new Integer(-1);
+                    cosine.Min = -One;
                     cosine.Max = estimateCosine(ArgumentEstimate.Min);
                     if (delta > Zero)
                         cosine.Max += delta;
@@ -427,7 +427,7 @@ namespace Solver
                     if (ArgumentEstimate.Min <= threeOverTwo * Pi.LowEstimate &&
                         threeOverTwo * Pi.LowEstimate <= ArgumentEstimate.Max)
                     {
-                        sine.Min = new Integer(-1);
+                        sine.Min = -One;
                         sine.Max = estimateSine(ArgumentEstimate.Min);
                         if (delta > Zero)
                             sine.Max += delta;
@@ -584,7 +584,7 @@ namespace Solver
             }
             public Rational Plus(Rational a)
             {
-                return Create(Numerator * a.Denominator + Numerator * Denominator,
+                return Create(Numerator * a.Denominator + a.Numerator * Denominator,
                     Denominator * a.Denominator);
             }
             public Rational Minus(Rational a)
@@ -602,6 +602,10 @@ namespace Solver
             public Division<Rational> EuclideanDivideBy(Rational divisor)
             {
                 return new Division<Rational>(this / divisor, Zero);
+            }
+            public bool Equals(Rational a)
+            {
+                return CompareTo(a) == 0;
             }
             public static Rational operator +(Rational a, Rational b)
             {
@@ -666,11 +670,11 @@ namespace Solver
         {
             uint[] Values;
             sbyte Sign;
-            public override Integer Numerator{ get => this; }
+            public override Integer Numerator { get => this; }
             public override Integer Denominator { get => One; }
             Integer(uint[] values, sbyte sign)
             {
-                int lastNonzeroValueIndex = 0;
+                int lastNonzeroValueIndex = -1;
                 for (int i = values.Length - 1; i >= 0; --i)
                     if (values[i] != 0)
                     {
@@ -680,8 +684,8 @@ namespace Solver
                 Values = new uint[lastNonzeroValueIndex + 1];
                 for (int i = 0; i <= lastNonzeroValueIndex; ++i)
                     Values[i] = values[i];
-                if (Values.Length == 1 && Values[0] == 0)
-                    Sign = 0;
+                if (lastNonzeroValueIndex < 0)                
+                    Sign = 0;                
                 else
                     Sign = sign;
                 RealPartEstimate = new Interval(this, this);
@@ -693,7 +697,7 @@ namespace Solver
                 if (value == 0)
                 {
                     Sign = 0;
-                    Values = new uint[] { (uint)value };
+                    Values = new uint[] { };
                 }
                 else if (value > 0)
                 {
@@ -830,7 +834,10 @@ namespace Solver
                     }
                     return outputValues;
                 }
-                aValues = new uint[Math.Max(Values.Length, a.Values.Length)];
+                if (Values.Length > a.Values.Length)
+                    aValues = new uint[Values.Length];
+                else
+                    aValues = new uint[a.Values.Length];
                 Values.CopyTo(aValues, 0);
                 bValues = new uint[aValues.Length];
                 a.Values.CopyTo(bValues, 0);
@@ -898,9 +905,8 @@ namespace Solver
                 if (divisor.Sign == 0)
                     throw new DivideByZeroException();
                 Division<Integer> division = new Division<Integer>();
-                if (divisor.Values.Length > Values.Length ||
-                    (divisor.Values.Length == Values.Length &&
-                    divisor.Values[divisor.Values.Length - 1] > Values[Values.Length - 1]))
+                Integer positiveDivisor = divisor.Magnitude();
+                if (positiveDivisor > Magnitude()) 
                 {
                     division.Quotient = Zero;
                     division.Remainder = this;
@@ -918,7 +924,6 @@ namespace Solver
                     }
                     power = power >> 1;
                 }
-                Integer positiveDivisor = new Integer(divisor.Values, 1);
                 uint[] quotient = new uint[Values.Length];
                 void calculateValue(int valuePlace, int stoppingDigitPlace)
                 {
@@ -952,6 +957,8 @@ namespace Solver
                 if (exponent.Numerator < Zero)
                     return Reciprocal().Exponentiate(-exponent);
                 Integer power = Solver.Exponentiate(this, exponent.Numerator);
+                if (exponent.Denominator == One)
+                    return power;
                 Integer coefficient = One;
                 Integer two = new Integer(2);
                 Integer takeRootOfPositiveRadicand(Integer radicand)
@@ -1006,6 +1013,10 @@ namespace Solver
                 foreach (uint value in Values)
                     output ^= value;
                 return (int)(output * Sign);
+            }
+            public bool Equals(Integer a)
+            {
+                return CompareTo(a) == 0;
             }
             public static Integer operator +(Integer a, Integer b)
             {
@@ -1112,10 +1123,12 @@ namespace Solver
             public override String InsertString(String str)
             {
                 if (this != One)
-                    if (this == new Integer(-1))
+                    if (this == -One)
                         return '-' + str;
-                    else
+                    else if (str[0] == '(')
                         return ToString() + str;
+                    else
+                        return ToString() + '*' + str;
                 return str;
             }
             public override string ToString()
@@ -1129,7 +1142,10 @@ namespace Solver
                 {
                     Division<Integer> division = quotient.EuclideanDivideBy(power);
                     quotient = division.Quotient;
-                    output.Insert(0, division.Remainder.Values[0]);
+                    if (division.Remainder.Sign != 0)
+                        output.Insert(0, division.Remainder.Values[0]);
+                    else
+                        output.Insert(0, '0');
                 }
                 if (this < Zero)
                     output.Insert(0, '-');
@@ -1345,9 +1361,7 @@ namespace Solver
             public override List<Number> GetConjugates()
             {
                 List<Number> radicandConjugates = Radicand.GetConjugates();
-                List<Number> rootsOfUnity = new List<Number>();
-                for (int i = 0; new Integer(i) < Index; ++i) 
-                    rootsOfUnity.Add(NthRootsOfUnity.GetNthRoots(Index)[i]);
+                List<Number> rootsOfUnity = NthRootsOfUnity.GetNthRoots(Index);
                 List<Number> conjugateCandidates = new List<Number>();
                 foreach (Number conjugate in radicandConjugates)
                     foreach (Number root in rootsOfUnity)
@@ -1389,7 +1403,7 @@ namespace Solver
             }
             public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
             {
-                Rational d = new Integer(3) * Coefficient;
+                Rational d = new Integer(3) * Coefficient.Magnitude();
                 Radicand.RefineMagnitudeErrorInterval(
                     Solver.Exponentiate(errorIntervalSize, Index) / d);
                 errorIntervalSize /= d;
@@ -1403,7 +1417,7 @@ namespace Solver
                     else
                         root = radicand;
                     delta = (radicand / Solver.Exponentiate(root, indexMinusOne) - root) / Index;
-                    while (delta > errorIntervalSize)
+                    while (delta.Magnitude() > errorIntervalSize)
                     {
                         root += delta;
                         delta =
@@ -1417,8 +1431,8 @@ namespace Solver
                         Coefficient * overestimateRoot(Radicand.MagnitudeEstimate.Max));
                 else
                     MagnitudeEstimate =
-                        new Interval(Coefficient * overestimateRoot(Radicand.MagnitudeEstimate.Max), Coefficient *
-                        overestimateRoot(Radicand.MagnitudeEstimate.Min) + delta);
+                        new Interval(Coefficient * overestimateRoot(Radicand.MagnitudeEstimate.Max),
+                        Coefficient * overestimateRoot(Radicand.MagnitudeEstimate.Min) + delta);
             }
             public override String ToString()
             {
@@ -2236,7 +2250,7 @@ namespace Solver
             RationalPolynomial MinimalPolynomial;            
             public IntegerPolynomial(List<Integer> coefficients,
                 RationalPolynomial minimalPolynomial = null)
-            {
+            {//Can mutate the coefficients parameter.
                 while (coefficients.Count != 0 &&
                     coefficients[coefficients.Count - 1] == Number.Zero) 
                     coefficients.RemoveAt(coefficients.Count - 1);
@@ -2312,6 +2326,15 @@ namespace Solver
                 division.Remainder = new IntegerPolynomial(remainder, MinimalPolynomial);
                 return division;
             }            
+            public bool Equals(IntegerPolynomial a)
+            {
+                if (Coefficients.Count != a.Coefficients.Count)
+                    return false;
+                for (int i = 0; i < Coefficients.Count; ++i)
+                    if (Coefficients[i] != a.Coefficients[i])
+                        return false;
+                return true;
+            }
             public static IntegerPolynomial operator -(IntegerPolynomial a, IntegerPolynomial b)
             {
                 return a.Minus(b);
@@ -2406,8 +2429,7 @@ namespace Solver
                 IntegerPolynomial a = GetGCD(this, derivative);
                 IntegerPolynomial b = this / a;
                 IntegerPolynomial c = derivative / a - b.GetDerivative();
-                while (!(b.Coefficients.Count == 1 &&
-                    (b.Coefficients[0] == Number.One || b.Coefficients[0] == new Integer(-1))))
+                while (!(b.Coefficients.Count == 1 && b.Coefficients[0].Magnitude() == Number.One))
                 {
                     a = GetGCD(b, c);
                     if (!squarefreeFactors.Contains(a))
@@ -2615,16 +2637,7 @@ namespace Solver
                         irreducibleFactors.AddRange(splitFactor(factor));
                 }
                 return irreducibleFactors;
-            }            
-#if DEBUG
-            public override string ToString()
-            {
-                StringBuilder output = new StringBuilder();
-                foreach (Rational coefficient in Coefficients)
-                    output.Append(coefficient.ToString() + ',');
-                return output.ToString();
             }
-#endif
         }
         class ModdedPolynomial : IArithmetic<ModdedPolynomial>
         {
@@ -2693,6 +2706,15 @@ namespace Solver
                 division.Quotient = new ModdedPolynomial(quotient, Characteristic);
                 division.Remainder = new ModdedPolynomial(remainder, Characteristic);
                 return division;
+            }
+            public bool Equals(ModdedPolynomial a)
+            {
+                if (Coefficients.Count != a.Coefficients.Count)
+                    return false;
+                for (int i = 0; i < Coefficients.Count; ++i)
+                    if (Coefficients[i] != a.Coefficients[i])
+                        return false;
+                return true;
             }
             public static ModdedPolynomial operator +(ModdedPolynomial a, ModdedPolynomial b)
             {
@@ -2829,7 +2851,7 @@ namespace Solver
             public RationalPolynomial MinimalPolynomial { get; }
             public RationalPolynomial(List<Rational> coefficients,
                 RationalPolynomial minimalPolynomial = null)
-            {                
+            {//Can mutate the coefficients parameter.                
                 while (coefficients.Count != 0 &&
                     coefficients[coefficients.Count - 1] == Number.Zero)
                     coefficients.RemoveAt(coefficients.Count - 1);
@@ -2899,6 +2921,15 @@ namespace Solver
                 division.Quotient = new RationalPolynomial(quotient, MinimalPolynomial);
                 division.Remainder = new RationalPolynomial(remainder, MinimalPolynomial);
                 return division;
+            }
+            public bool Equals(RationalPolynomial a)
+            {
+                if (Coefficients.Count != a.Coefficients.Count)
+                    return false;
+                for (int i = 0; i < Coefficients.Count; ++i)
+                    if (Coefficients[i] != a.Coefficients[i])
+                        return false;
+                return true;
             }
             public static RationalPolynomial operator +(RationalPolynomial a, RationalPolynomial b)
             {
@@ -3113,11 +3144,11 @@ namespace Solver
             public RationalPolynomial InnerMinimalPolynomial { get; set; }
             public NestedPolynomial(List<RationalPolynomial> coefficients,
                 RationalPolynomial innerMinimalPolynomial = null)
-            {
-                Coefficients = new List<RationalPolynomial>();
-                while (Coefficients.Count != 0 &&
-                    Coefficients[Coefficients.Count - 1].Coefficients.Count != 0) 
-                    Coefficients.RemoveAt(Coefficients.Count - 1);
+            {//Can mutate the coefficients parameter.
+                while (coefficients.Count != 0 &&
+                    coefficients[coefficients.Count - 1].Coefficients.Count == 0) 
+                    coefficients.RemoveAt(coefficients.Count - 1);
+                Coefficients = coefficients;
                 InnerMinimalPolynomial = innerMinimalPolynomial;
             }
             public NestedPolynomial GetAdditiveIdentity()
@@ -3176,6 +3207,15 @@ namespace Solver
                 division.Quotient = new NestedPolynomial(quotient, InnerMinimalPolynomial);
                 division.Remainder = new NestedPolynomial(remainder, InnerMinimalPolynomial);
                 return division;
+            }
+            public bool Equals(NestedPolynomial a)
+            {
+                if (Coefficients.Count != a.Coefficients.Count)
+                    return false;
+                for (int i = 0; i < Coefficients.Count; ++i)
+                    if (!Coefficients[i].Equals(a.Coefficients[i]))
+                        return false;
+                return true;
             }
             public static NestedPolynomial operator +(NestedPolynomial a, NestedPolynomial b)
             {
@@ -3330,10 +3370,9 @@ namespace Solver
                 NestedPolynomial a = GetGCD(this, derivative);
                 NestedPolynomial b = this / a;
                 NestedPolynomial c = derivative / a - b.GetDerivative();
-                while (!(b.Coefficients.Count == 1 &&
-                    (b.Coefficients[0] == b.Coefficients[0].GetMultiplicativeIdentity() ||
-                    b.Coefficients[0] == new RationalPolynomial(new List<Rational> {
-                    new Integer(-1) }, b.Coefficients[0].MinimalPolynomial)))) 
+                while (!(b.Coefficients.Count == 1 && (b.Coefficients[0].Equals(
+                    b.Coefficients[0].GetMultiplicativeIdentity()) || b.Coefficients[0].Equals(
+                    b.Coefficients[0].GetMultiplicativeIdentity().GetNegative())))) 
                 {
                     a = GetGCD(b, c);
                     if (!squarefreeFactors.Contains(a))
@@ -3669,7 +3708,7 @@ namespace Solver
         {
             static Dictionary<Integer, List<Number>> NthRoots = new Dictionary<Integer,
                 List<Number>> { { Number.One, new List<Number> { Number.One } },
-                { new Integer(2),new List<Number> { Number.One, -Number.One } } };
+                { new Integer(2), new List<Number> { Number.One, -Number.One } } };
             public static List<Number> GetNthRoots(Integer n)
             {
                 if (NthRoots.ContainsKey(n))
@@ -3837,6 +3876,7 @@ namespace Solver
                     PrimeList.Add(primeCandidate);
                 }
                 yield return PrimeList[i];
+                ++i;
             }
         }
         static List<List<T>> GetCartesianProduct<T>(List<List<T>> sets)
@@ -3876,6 +3916,8 @@ namespace Solver
         }
         static T GetGCD<T>(T a, T b) where T : IArithmetic<T>
         {
+            if (b.Equals(b.GetAdditiveIdentity()))
+                return a;
             T c;
             while (!b.Equals(a.GetAdditiveIdentity()))
             {
@@ -4059,7 +4101,7 @@ namespace Solver
                 try
                 {
 #if DEBUG
-                    string input = "1";
+                    string input = "1/(1+2^(1/2))";
 #else
                     string input = Console.ReadLine();
                     if (input[0] == 'q')
