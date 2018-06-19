@@ -1576,7 +1576,7 @@ namespace Solver
                         VariableForm_ = new RationalPolynomial(variableFormCoefficients,
                             PrimitiveElement.MinimalPolynomial);
                     }
-                    return VariableForm;
+                    return VariableForm_;
                 }
             }
             public LinearlyIndependentSum(List<Term> terms, Primitive primitiveElement)
@@ -1730,31 +1730,20 @@ namespace Solver
                 Number numerator = One;
                 foreach (Number conjugate in conjugates)
                     numerator *= conjugate;
-                List<RationalPolynomial> powers = new List<RationalPolynomial>();
-                RationalPolynomial power = VariableForm;
-                for (int i = 0; i < MinimalPolynomial.Coefficients.Count; ++i)
-                {
-                    powers.Add(power);
-                    power *= VariableForm;
-                }
-                Matrix powerMatrix = new Matrix(powers).GetTranspose();
-                List<Rational> augmentation = new List<Rational>(power.Coefficients);
-                powerMatrix.Diagonalize(augmentation);
-                List<List<Rational>> transformMatrixRows =
-                    new List<List<Rational>> { new List<Rational>() };
-                for (int i = 0; i < augmentation.Count - 1; ++i)
-                    transformMatrixRows[0].Add(Zero);
-                transformMatrixRows[0].Add(augmentation[0]);
-                for (int i = 1; i < augmentation.Count; ++i)
+                List<List<Rational>> matrixRows = new List<List<Rational>> { new List<Rational>() };
+                for (int i = 0; i < MinimalPolynomial.Coefficients.Count - 2; ++i)
+                    matrixRows[0].Add(Zero);
+                matrixRows[0].Add(-MinimalPolynomial.Coefficients[0]);
+                for (int i = 1; i < MinimalPolynomial.Coefficients.Count - 1; ++i)
                 {
                     List<Rational> row = new List<Rational>();
-                    for (int j = 0; j < augmentation.Count - 1; ++j)
+                    for (int j = 0; j < MinimalPolynomial.Coefficients.Count - 2; ++j)
                         row.Add(Zero);
                     row[i - 1] = One;
-                    row.Add(augmentation[i]);
-                    transformMatrixRows.Add(row);
+                    row.Add(-MinimalPolynomial.Coefficients[i]);
+                    matrixRows.Add(row);
                 }
-                Matrix transformMatrix = new Matrix(transformMatrixRows);
+                Matrix transformMatrix = new Matrix(matrixRows);
                 return numerator / transformMatrix.GetDeterminant();
             }
             public override Rational RationalFactor()
@@ -2109,7 +2098,7 @@ namespace Solver
                 for (int i = 0; i < rows.Count; ++i)
                 {
                     Rows.Add(new List<Rational>(rows[i].Coefficients));
-                    for (int j = Rows[i].Count; j < Rows.Count; ++j)
+                    for (int j = Rows[i].Count; j < rows.Count; ++j)
                         Rows[i].Add(Number.Zero);
                 }
             }
@@ -2174,7 +2163,7 @@ namespace Solver
             }
             public Rational GetDeterminant()
             {//Mutates *this.
-                Rational determinant = Number.One;
+                Rational determinant = -Number.One;
                 for (int i = 1; i < Rows.Count; ++i)
                     for (int j = i; j < Rows.Count; ++j)
                         if (Rows[i - 1][Rows.Count - i] == Number.Zero)
@@ -2194,7 +2183,7 @@ namespace Solver
                                         Rows[i - 1][Rows.Count - i];
                                     for (int l = 0; l < Rows.Count; ++l)
                                         Rows[k][l] -= Rows[i - 1][l] * scalar;
-                                    determinant *= scalar;
+                                    determinant *= Rows[i - 1][Rows.Count - i];
                                 }
                             break;
                         }
@@ -3009,7 +2998,7 @@ namespace Solver
                 Rational realErrorScaleFromExponentiation = Number.Zero;
                 Rational imaginaryErrorScaleFromExponentiation = Number.Zero;
                 Integer degree = new Integer(Coefficients.Count - 1);
-                for (Integer i = Number.Zero; i < degree; ++i)
+                for (Integer i = Number.Zero; i <= degree; ++i)
                 {
                     Integer binomialCoefficient = degree.ThisChooseK(i);
                     realErrorScaleFromExponentiation += binomialCoefficient *
@@ -3658,11 +3647,7 @@ namespace Solver
                         break;
                     }
                 }
-                List<Rational> monicMinimalPolynomialCoefficients = new List<Rational>();
-                foreach (Integer coefficient in minimalPolynomial.Coefficients)
-                    monicMinimalPolynomialCoefficients.Add(coefficient /
-                        minimalPolynomial.Coefficients[0]);
-                return new RationalPolynomial(monicMinimalPolynomialCoefficients);
+                return new RationalPolynomial(GetMonicCoefficients(minimalPolynomial.Coefficients));
             }            
         }
         static class Pi
@@ -3956,161 +3941,155 @@ namespace Solver
             output.GCD = b;
             output.BOverGCD = a.GetAdditiveIdentity().Minus(output.BOverGCD);
             return output;
-        }
-        static Number EvaluateExpression(List<char> operations, List<Number> numbers)
+        }                
+        static void Main(string[] args)
         {
-            for (int i = 0; i < operations.Count;)
-            {
-                if (operations[i] == ')')
-                    throw new InvalidUserInput("Unmatched parentheses.");
-                if (operations[i] == '(')
-                {
-                    int numOfUnmatchedParens = 1;
-                    int matchingParenIndex = i;
-                    while (numOfUnmatchedParens > 0)
-                    {
-                        matchingParenIndex += 1;
-                        try
-                        {
-                            if (operations[matchingParenIndex] == '(')
-                                numOfUnmatchedParens += 1;
-                            else if (operations[matchingParenIndex] == ')')
-                                numOfUnmatchedParens -= 1;
-                        }
-                        catch (ArgumentOutOfRangeException)
-                        {
-                            throw new InvalidUserInput("Unmatched parentheses.");
-                        }
-                    }
-                    numbers[i] = EvaluateExpression(operations.GetRange(i + 1, matchingParenIndex -
-                        i - 1), numbers.GetRange(i + 1, matchingParenIndex - i - 1));
-                    operations[i] = ' ';
-                    numbers.RemoveRange(i + 1, matchingParenIndex - i);
-                    operations.RemoveRange(i + 1, matchingParenIndex - i);
-                }
-                else
-                    ++i;
-            }
-            try
+            Number EvaluateExpression(List<char> operations, List<Number> numbers)
             {
                 for (int i = 0; i < operations.Count;)
                 {
-                    if (i == 0 || numbers[i - 1] == null)
+                    if (operations[i] == ')')
+                        throw new InvalidUserInput("Unmatched parentheses.");
+                    if (operations[i] == '(')
                     {
-                        if (operations[i] == '+')
-                            if (numbers[i + 1] != null || operations[i + 1] == '+' ||
-                                operations[i + 1] == '-')
-                            {
-                                numbers.RemoveAt(i);
-                                operations.RemoveAt(i);
-                            }
-                            else
-                                throw new InvalidUserInput("Operator missing operand.");
-                        else if (operations[i] == '-')
+                        int numOfUnmatchedParens = 1;
+                        int matchingParenIndex = i;
+                        while (numOfUnmatchedParens > 0)
                         {
-                            if (numbers[i + 1] != null)
+                            matchingParenIndex += 1;
+                            try
                             {
-                                numbers[i + 1] = -numbers[i + 1];
-                                numbers.RemoveAt(i);
-                                operations.RemoveAt(i);
+                                if (operations[matchingParenIndex] == '(')
+                                    numOfUnmatchedParens += 1;
+                                else if (operations[matchingParenIndex] == ')')
+                                    numOfUnmatchedParens -= 1;
                             }
-                            else if (operations[i + 1] == '+') 
+                            catch (ArgumentOutOfRangeException)
                             {
-                                operations[i + 1] = '-';
-                                numbers.RemoveAt(i);
-                                operations.RemoveAt(i);
+                                throw new InvalidUserInput("Unmatched parentheses.");
                             }
-                            else if(operations[i + 1] == '-')
+                        }
+                        numbers[i] = EvaluateExpression(
+                            operations.GetRange(i + 1, matchingParenIndex - i - 1),
+                            numbers.GetRange(i + 1, matchingParenIndex - i - 1));
+                        operations[i] = ' ';
+                        numbers.RemoveRange(i + 1, matchingParenIndex - i);
+                        operations.RemoveRange(i + 1, matchingParenIndex - i);
+                    }
+                    else
+                        ++i;
+                }
+                try
+                {
+                    for (int i = 0; i < operations.Count;)
+                    {
+                        if (i == 0 || numbers[i - 1] == null)
+                        {
+                            if (operations[i] == '+')
+                                if (numbers[i + 1] != null || operations[i + 1] == '+' ||
+                                    operations[i + 1] == '-')
+                                {
+                                    numbers.RemoveAt(i);
+                                    operations.RemoveAt(i);
+                                }
+                                else
+                                    throw new InvalidUserInput("Operator missing operand.");
+                            else if (operations[i] == '-')
                             {
-                                operations[i + 1] = '+';
-                                numbers.RemoveAt(i);
-                                operations.RemoveAt(i);
+                                if (numbers[i + 1] != null)
+                                {
+                                    numbers[i + 1] = -numbers[i + 1];
+                                    numbers.RemoveAt(i);
+                                    operations.RemoveAt(i);
+                                }
+                                else if (operations[i + 1] == '+')
+                                {
+                                    operations[i + 1] = '-';
+                                    numbers.RemoveAt(i);
+                                    operations.RemoveAt(i);
+                                }
+                                else if (operations[i + 1] == '-')
+                                {
+                                    operations[i + 1] = '+';
+                                    numbers.RemoveAt(i);
+                                    operations.RemoveAt(i);
+                                }
+                                else
+                                    throw new InvalidUserInput("Operator missing operand.");
                             }
                             else
-                                throw new InvalidUserInput("Operator missing operand.");
+                                ++i;
                         }
                         else
                             ++i;
                     }
-                    else
-                        ++i;
-                }
-                for (int i = 0; i < operations.Count;)
-                {
-                    if (operations[i] == '^')
+                    for (int i = 0; i < operations.Count;)
                     {
-                        if (numbers[i + 1] is Rational exponent)
-                            numbers[i - 1] = numbers[i - 1].Exponentiate(exponent);
+                        if (operations[i] == '^')
+                        {
+                            if (numbers[i + 1] is Rational exponent)
+                                numbers[i - 1] = numbers[i - 1].Exponentiate(exponent);
+                            else
+                                throw new InvalidUserInput("The input expression contains an " +
+                                    "exponentiation\nwhose exponent is not both real and " +
+                                    "rational;\nthis program doesn't handle transcendental numbers.");
+                            numbers.RemoveRange(i, 2);
+                            operations.RemoveRange(i, 2);
+                        }
                         else
-                            throw new InvalidUserInput("The input expression contains an " +
-                                "exponentiation\nwhose exponent is not both real and rational;\n" +
-                                "this program doesn't handle transcendental numbers.");
-                        numbers.RemoveRange(i, 2);
-                        operations.RemoveRange(i, 2);
+                            ++i;
                     }
-                    else
-                        ++i;
+                    for (int i = 0; i < operations.Count;)
+                    {
+                        if (operations[i] == '*')
+                        {
+                            numbers[i - 1] = numbers[i - 1] * numbers[i + 1];
+                            numbers.RemoveRange(i, 2);
+                            operations.RemoveRange(i, 2);
+                        }
+                        else if (operations[i] == '/')
+                        {
+                            numbers[i - 1] = numbers[i - 1] / numbers[i + 1];
+                            numbers.RemoveRange(i, 2);
+                            operations.RemoveRange(i, 2);
+                        }
+                        else
+                            ++i;
+                    }
+                    for (int i = 0; i < operations.Count;)
+                    {
+                        if (operations[i] == '+')
+                        {
+                            numbers[i - 1] = numbers[i - 1] + numbers[i + 1];
+                            numbers.RemoveRange(i, 2);
+                            operations.RemoveRange(i, 2);
+                        }
+                        else if (operations[i] == '-')
+                        {
+                            numbers[i - 1] = numbers[i - 1] - numbers[i + 1];
+                            numbers.RemoveRange(i, 2);
+                            operations.RemoveRange(i, 2);
+                        }
+                        else
+                            ++i;
+                    }
                 }
-                for (int i = 0; i < operations.Count;)
+                catch (ArgumentOutOfRangeException)
                 {
-                    if (operations[i] == '*')
-                    {
-                        numbers[i - 1] = numbers[i - 1] * numbers[i + 1];
-                        numbers.RemoveRange(i, 2);
-                        operations.RemoveRange(i, 2);
-                    }
-                    else if (operations[i] == '/')
-                    {
-                        numbers[i - 1] = numbers[i - 1] / numbers[i + 1];
-                        numbers.RemoveRange(i, 2);
-                        operations.RemoveRange(i, 2);
-                    }
-                    else
-                        ++i;
+                    throw new InvalidUserInput("Operator missing operand.");
                 }
-                for (int i = 0; i < operations.Count;)
-                {
-                    if (operations[i] == '+')
-                    {
-                        numbers[i - 1] = numbers[i - 1] + numbers[i + 1];
-                        numbers.RemoveRange(i, 2);
-                        operations.RemoveRange(i, 2);
-                    }
-                    else if (operations[i] == '-')
-                    {
-                        numbers[i - 1] = numbers[i - 1] - numbers[i + 1];
-                        numbers.RemoveRange(i, 2);
-                        operations.RemoveRange(i, 2);
-                    }
-                    else
-                        ++i;
-                }
+                if (numbers.Count == 0)
+                    return null;
+                return numbers[0];
             }
-            catch (ArgumentOutOfRangeException)
+            void EvaluateString(string input)
             {
-                throw new InvalidUserInput("Operator missing operand.");
-            }
-            if (numbers.Count == 0)
-                return null;
-            return numbers[0];
-        }        
-        static void Main(string[] args)
-        {
-            while (true)
-            {
+                List<char> operations = new List<char>();
+                List<Number> numbers = new List<Number>();
+                StringBuilder numberCollector = new StringBuilder();
+                bool lastCharWasDigit = false;
                 try
                 {
-#if DEBUG
-                    string input = "1/(1+2^(1/2))";
-#else
-                    string input = Console.ReadLine();
-                    if (input[0] == 'q')
-                        return;
-#endif
-                    List<char> operations = new List<char>();
-                    List<Number> numbers = new List<Number>();
-                    StringBuilder numberCollector = new StringBuilder();
-                    bool lastCharWasDigit = false;
                     foreach (char c in input)
                     {
                         if (lastCharWasDigit)
@@ -4158,7 +4137,7 @@ namespace Solver
                             i += 2;
                         }
                         else if (operations[i] == ')' && i + 1 < operations.Count &&
-                            (numbers[i + 1] != null || operations[i + 1] == '(')) 
+                            (numbers[i + 1] != null || operations[i + 1] == '('))
                         {
                             operations.Insert(i + 1, '*');
                             numbers.Insert(i + 1, null);
@@ -4181,10 +4160,18 @@ namespace Solver
                 {
                     Console.WriteLine(e.Message);
                 }
-#if DEBUG
-                return;
-#endif
             }
+#if DEBUG
+            EvaluateString("1/(1+2^(1/2))");
+#else
+            while (true)
+            {
+                string input = Console.ReadLine();
+                if (input[0] == 'q')
+                    return;
+                EvaluateString(input);
+            }
+#endif
         }
     }
 }
