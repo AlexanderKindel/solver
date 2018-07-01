@@ -7,11 +7,11 @@ namespace Solver
 {
     static class Solver
     {
-        struct Interval
+        struct Interval<T>
         {
-            public Rational Min;
-            public Rational Max;
-            public Interval(Rational min, Rational max)
+            public T Min;
+            public T Max;
+            public Interval(T min, T max)
             {
                 Min = min;
                 Max = max;
@@ -19,9 +19,9 @@ namespace Solver
         }
         struct RectangularEstimate
         {
-            public Interval RealPart;
-            public Interval ImaginaryPart;
-            public RectangularEstimate(Interval realPart, Interval imaginaryPart)
+            public Interval<Float> RealPart;
+            public Interval<Float> ImaginaryPart;
+            public RectangularEstimate(Interval<Float> realPart, Interval<Float> imaginaryPart)
             {
                 RealPart = realPart;
                 ImaginaryPart = imaginaryPart;
@@ -44,7 +44,9 @@ namespace Solver
             public T BCoefficient;
             public T AOverGCD;
             public T BOverGCD;
-        }        
+        }
+        delegate Interval<Float> PartGetter(Primitive a);
+        delegate void PartRefiner(Primitive a, Rational errorIntervalSize);
         interface IMultipliable<S, T>
         {
             S Times(T n);
@@ -63,8 +65,8 @@ namespace Solver
         }        
         abstract class Primitive
         {
-            public Interval RealPartEstimate { get; protected set; }
-            public Interval ImaginaryPartEstimate { get; protected set; }
+            public Interval<Float> RealPartEstimate { get; protected set; }
+            public Interval<Float> ImaginaryPartEstimate { get; protected set; }
             RationalPolynomial MinimalPolynomial_ = null;
             public RationalPolynomial MinimalPolynomial
             {
@@ -74,6 +76,14 @@ namespace Solver
                         MinimalPolynomial_ = CalculateMinimalPolynomial();
                     return MinimalPolynomial_;
                 }
+            }
+            public static Interval<Float> GetRealPartEstimate(Primitive a)
+            {
+                return a.RealPartEstimate;
+            }
+            public static Interval<Float> GetImaginaryPartEstimate(Primitive a)
+            {
+                return a.ImaginaryPartEstimate;
             }
             protected abstract RationalPolynomial CalculateMinimalPolynomial();
             protected void RemoveNonConjugates(List<Number> conjugateCandidates)
@@ -120,17 +130,16 @@ namespace Solver
                 List<Number> conjugates = GetConjugates();
                 conjugates.RemoveAt(0);
                 Rational precision = Number.One;
-                Integer two = new Integer(2);
                 for (int i = 0; i < candidateFactors.Count; ++i)
                 {
                     List<Number> candidateConjugates = new List<Number>(conjugates);
                     bool factorEqualsThis()
                     {
-                        Interval getDistanceInterval(Interval b, Interval c)
+                        Interval<Float> getDistanceInterval(Interval<Float> b, Interval<Float> c)
                         {
-                            Rational magnitude = (b.Min - c.Min).Magnitude();
-                            Interval output = new Interval(magnitude, magnitude);
-                            void updateBounds(Rational boundCandidate)
+                            Float magnitude = (b.Min - c.Min).Magnitude();
+                            Interval<Float> output = new Interval<Float>(magnitude, magnitude);
+                            void updateBounds(Float boundCandidate)
                             {
                                 if (boundCandidate < output.Min)
                                     output.Min = boundCandidate;
@@ -153,15 +162,15 @@ namespace Solver
                             }
                             RectangularEstimate aEstimate =
                                 candidateFactors[i].EstimateEvaluation(this, precision);
-                            Interval realDistanceToThis =
+                            Interval<Float> realDistanceToThis =
                                 getDistanceInterval(RealPartEstimate, aEstimate.RealPart);
-                            Interval imaginaryDistanceToThis =
+                            Interval<Float> imaginaryDistanceToThis =
                                 getDistanceInterval(ImaginaryPartEstimate, aEstimate.ImaginaryPart);
                             for (int j = 0; j < candidateConjugates.Count;)
                             {
-                                Interval realDistanceToConjugate = getDistanceInterval(
+                                Interval<Float> realDistanceToConjugate = getDistanceInterval(
                                     candidateConjugates[j].RealPartEstimate, aEstimate.RealPart);
-                                Interval imaginaryDistanceToConjugate = getDistanceInterval(
+                                Interval<Float> imaginaryDistanceToConjugate = getDistanceInterval(
                                     candidateConjugates[j].ImaginaryPartEstimate,
                                     aEstimate.ImaginaryPart);
                                 if (realDistanceToConjugate.Max < realDistanceToThis.Min ||
@@ -173,7 +182,7 @@ namespace Solver
                                 else
                                     ++j;
                             }
-                            precision /= two;
+                            precision /= Number.Two;
                         }
                         return true;
                     }
@@ -182,47 +191,88 @@ namespace Solver
                 }
                 return null;
             }
+            protected delegate Interval<Rational> RationalEstimateGetter(
+                Rational errorIntervalSize);
+            protected Interval<Float> GetRefinedErrorInterval(Rational errorIntervalSize,
+                RationalEstimateGetter getEstimate)
+            {
+                Rational placeValue = Float.GetEstimatePlaceValue(errorIntervalSize);
+                Interval<Rational> rationalEstimate = getEstimate(placeValue);
+                rationalEstimate.Min.RefineRealPartErrorInterval(placeValue);
+                rationalEstimate.Max.RefineRealPartErrorInterval(placeValue);
+                return new Interval<Float>(rationalEstimate.Min.RealPartEstimate.Min,
+                    rationalEstimate.Max.RealPartEstimate.Max);
+            }
+            protected virtual Interval<Rational> GetRationalRealEstimate(
+                Rational errorIntervalSize)
+            {
+                throw new NotImplementedException("Any derived class that doesn't override " +
+                    "GetRationalRealEstimate should override RefineRealPartErrorInterval.");
+            }
+            protected virtual Interval<Rational> GetRationalImaginaryEstimate(
+                Rational errorIntervalSize)
+            {
+                throw new NotImplementedException("Any derived class that doesn't override " +
+                    "GetRationalImaginaryEstimate should override" +
+                    "RefineImaginaryPartErrorInterval.");
+            }
             public virtual void RefineRealPartErrorInterval(Rational errorIntervalSize)
-            { }
+            {
+                if (RealPartEstimate.Min == null || (Rational)(RealPartEstimate.Max -
+                    RealPartEstimate.Min) > errorIntervalSize)
+                    RealPartEstimate = GetRefinedErrorInterval(errorIntervalSize,
+                        GetRationalRealEstimate);
+            }
+            public static void RefineRealPartErrorInterval(Primitive a, Rational errorIntervalSize)
+            {
+                a.RefineRealPartErrorInterval(errorIntervalSize);
+            }
             public virtual void RefineImaginaryPartErrorInterval(Rational errorIntervalSize)
-            { }
-            delegate void PartRefiner(Number a, Rational errorIntervalSize);
-            delegate Interval PartGetter(Number a);
-            Interval EstimateSumPart<T>(List<T> terms, Rational errorIntervalSize,
+            {
+                if (ImaginaryPartEstimate.Min == null || (Rational)(ImaginaryPartEstimate.Max -
+                    ImaginaryPartEstimate.Min) > errorIntervalSize)
+                    ImaginaryPartEstimate = GetRefinedErrorInterval(errorIntervalSize,
+                        GetRationalImaginaryEstimate);
+            }
+            public static void RefineImaginaryPartErrorInterval(Primitive a,
+              Rational errorIntervalSize)
+            {
+                a.RefineImaginaryPartErrorInterval(errorIntervalSize);
+            }
+            Interval<Float> EstimateSumPart<T>(List<T> terms, Rational errorIntervalSize,
                 PartGetter getPart, PartRefiner refinePart) where T : Number
             {
-                Interval sumEstimate = new Interval(Number.Zero, Number.Zero);
+                Interval<Float> sumEstimate = new Interval<Float>(Float.Zero, Float.Zero);
                 for (int i = 0; i < terms.Count; ++i)
                 {
                     refinePart(terms[i], errorIntervalSize / new Integer(terms.Count - i));
-                    Interval part = getPart(terms[i]);
+                    Interval<Float> part = getPart(terms[i]);
                     sumEstimate.Min += part.Min;
                     sumEstimate.Max += part.Max;
-                    errorIntervalSize -= part.Max - part.Min;
+                    errorIntervalSize -= (Rational)(part.Max - part.Min);
                 }
                 return sumEstimate;
-            }
-            public Interval EstimateSumRealPart<T>(List<T> terms, Rational errorIntervalSize)
+            }            
+            public Interval<Float> EstimateSumRealPart<T>(List<T> terms, Rational errorIntervalSize)
                 where T : Number
             {
-                return EstimateSumPart(terms, errorIntervalSize,
-                    delegate (Number a) { return a.RealPartEstimate; },
-                    delegate (Number a, Rational error) { a.RefineRealPartErrorInterval(error); });
+                return EstimateSumPart(terms, errorIntervalSize, GetRealPartEstimate,
+                    RefineRealPartErrorInterval);
             }
-            public Interval EstimateSumImaginaryPart<T>(List<T> terms, Rational errorIntervalSize)
-                where T : Number
+            public Interval<Float> EstimateSumImaginaryPart<T>(List<T> terms,
+                Rational errorIntervalSize) where T : Number
             {
-                return EstimateSumPart(terms, errorIntervalSize, delegate (Number a) {
-                    return a.ImaginaryPartEstimate; }, delegate (Number a, Rational error) {
-                    a.RefineImaginaryPartErrorInterval(error); });
+                return EstimateSumPart(terms, errorIntervalSize, GetImaginaryPartEstimate,
+                    RefineImaginaryPartErrorInterval);
             }
         }
         abstract class Number : Primitive, IArithmetic<Number>, IComparable
         {
             public static Integer Zero = new Integer(0);
             public static Integer One = new Integer(1);
-            public Interval ArgumentEstimate { get; protected set; }
-            public Interval MagnitudeEstimate { get; protected set; }
+            public static Integer Two = new Integer(2);
+            public Interval<Float> ArgumentEstimate { get; protected set; }
+            public Interval<Float> MagnitudeEstimate { get; protected set; }
             public Number GetAdditiveIdentity()
             {
                 return Zero;
@@ -298,22 +348,43 @@ namespace Solver
             public static bool operator !=(Number a, Number b)
             {
                 return !(a == b);
-            }                                    
-            public virtual void RefineArgumentErrorInterval(Rational errorIntervalSize)
-            { }            
+            }            
+            protected virtual Interval<Rational> GetRationalArgumentEstimate(
+                Rational errorIntervalSize)
+            {
+                throw new NotImplementedException("Any derived class that doesn't override " +
+                    "GetRationalArgumentEstimate should override RefineArgumentErrorInterval.");
+            }
+            protected virtual Interval<Rational> GetRationalMagnitudeEstimate(
+                Rational errorIntervalSize)
+            {
+                throw new NotImplementedException("Any derived class that doesn't override " +
+                    "GetRationalMagnitudeEstimate should override RefineMagnitudeErrorInterval.");
+            }
+            public void RefineArgumentErrorInterval(Rational errorIntervalSize)
+            {
+                if (ArgumentEstimate.Min == null || (Rational)(ArgumentEstimate.Max -
+                    ArgumentEstimate.Min) > errorIntervalSize)
+                    ArgumentEstimate = GetRefinedErrorInterval(errorIntervalSize,
+                        GetRationalArgumentEstimate);
+            }            
             public virtual void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
-            { }
-            protected Interval EstimateCosineOfArgument(Rational errorIntervalSize)
+            {
+                if (MagnitudeEstimate.Min == null || (Rational)(MagnitudeEstimate.Max -
+                    MagnitudeEstimate.Min) > errorIntervalSize)
+                    MagnitudeEstimate = GetRefinedErrorInterval(errorIntervalSize,
+                        GetRationalMagnitudeEstimate);
+            }
+            protected Interval<Rational> EstimateCosineOfArgument(Rational errorIntervalSize)
             {
                 errorIntervalSize /= new Integer(3);
                 RefineArgumentErrorInterval(errorIntervalSize);
-                Interval cosine = new Interval();
                 Rational delta;
-                Rational estimateCosine(Rational argument)
+                Rational estimateCosine(Float argument)
                 {
                     Rational cosineValue = One;
-                    Rational argumentSquared = argument * argument;
-                    Integer factorialComponent = new Integer(2);
+                    Rational argumentSquared = (Rational)(argument * argument);
+                    Integer factorialComponent = Two;
                     delta = -argumentSquared / factorialComponent;
                     while (delta.Magnitude() > errorIntervalSize)
                     {
@@ -321,19 +392,21 @@ namespace Solver
                         ++factorialComponent;
                         delta *= argumentSquared / factorialComponent;
                         ++factorialComponent;
-                        delta /= factorialComponent;
-                        delta = -delta;
+                        delta /= -factorialComponent;
                     }
                     return cosineValue;
                 }
-                while (Pi.LowEstimate <= ArgumentEstimate.Min &&
-                    ArgumentEstimate.Min <= Pi.HighEstimate)
+                Rational rationalArgumentEstimateMin = (Rational)ArgumentEstimate.Min;
+                while (Pi.LowEstimate <= rationalArgumentEstimateMin &&
+                    rationalArgumentEstimateMin <= Pi.HighEstimate)
                     Pi.RefineErrorInterval();
-                while (Pi.LowEstimate <= ArgumentEstimate.Max &&
-                    ArgumentEstimate.Max <= Pi.HighEstimate)
+                Rational rationalArgumentEstimateMax = (Rational)ArgumentEstimate.Max;
+                while (Pi.LowEstimate <= rationalArgumentEstimateMax &&
+                    rationalArgumentEstimateMax <= Pi.HighEstimate)
                     Pi.RefineErrorInterval();
-                if (ArgumentEstimate.Min <= Pi.LowEstimate &&
-                    Pi.LowEstimate <= ArgumentEstimate.Max)
+                Interval<Rational> cosine;
+                if (rationalArgumentEstimateMin <= Pi.LowEstimate &&
+                    Pi.HighEstimate <= rationalArgumentEstimateMax)
                 {
                     cosine.Min = -One;
                     cosine.Max = estimateCosine(ArgumentEstimate.Min);
@@ -374,44 +447,44 @@ namespace Solver
                 }
                 return cosine;
             }
-            protected Interval EstimateSineOfArgument(Rational errorIntervalSize)
+            protected Interval<Rational> EstimateSineOfArgument(Rational errorIntervalSize)
             {
                 errorIntervalSize /= new Integer(3);
                 RefineArgumentErrorInterval(errorIntervalSize);
-                Interval sine = new Interval();
                 Rational delta;
                 Rational estimateSine(Rational argument)
                 {
                     Rational sineValue = argument;
                     Rational argumentSquared = argument * argument;
                     Integer factorialComponent = new Integer(3);
-                    delta = -argumentSquared * argument / factorialComponent;
+                    delta = -argumentSquared * argument / new Integer(6);
                     while (delta.Magnitude() > errorIntervalSize)
                     {
                         sineValue += delta;
                         ++factorialComponent;
                         delta *= argumentSquared / factorialComponent;
                         ++factorialComponent;
-                        delta /= factorialComponent;
-                        delta = -delta;
+                        delta /= -factorialComponent;
                     }
                     return sineValue;
                 }
-                Integer two = new Integer(2);
-                while (Pi.LowEstimate / two <= ArgumentEstimate.Min &&
-                    ArgumentEstimate.Min <= Pi.HighEstimate / two)
+                Rational rationalArgumentEstimateMin = (Rational)ArgumentEstimate.Min;
+                while (Pi.LowEstimate / Two <= rationalArgumentEstimateMin &&
+                    rationalArgumentEstimateMin <= Pi.HighEstimate / Two)
                     Pi.RefineErrorInterval();
-                while (Pi.LowEstimate / two <= ArgumentEstimate.Max &&
-                    ArgumentEstimate.Max <= Pi.HighEstimate / two)
+                Rational rationalArgumentEstimateMax = (Rational)ArgumentEstimate.Max;
+                while (Pi.LowEstimate / Two <= rationalArgumentEstimateMax &&
+                    rationalArgumentEstimateMax <= Pi.HighEstimate / Two)
                     Pi.RefineErrorInterval();
-                if (ArgumentEstimate.Min <= Pi.LowEstimate / two &&
-                    Pi.LowEstimate / two <= ArgumentEstimate.Max)
+                Interval<Rational> sine;
+                if (rationalArgumentEstimateMin <= Pi.LowEstimate / Two &&
+                    Pi.HighEstimate / Two <= rationalArgumentEstimateMax)
                 {
                     sine.Max = One;
-                    sine.Min = estimateSine(ArgumentEstimate.Min);
+                    sine.Min = estimateSine(rationalArgumentEstimateMin);
                     if (delta < Zero)
                         sine.Min += delta;
-                    Rational sineValue = estimateSine(ArgumentEstimate.Max);
+                    Rational sineValue = estimateSine(rationalArgumentEstimateMax);
                     if (delta < Zero)
                         sineValue += delta;
                     if (sineValue < sine.Min)
@@ -419,21 +492,21 @@ namespace Solver
                 }
                 else
                 {
-                    Rational threeOverTwo = new Fraction(new Integer(3), two);
-                    while (threeOverTwo * Pi.LowEstimate <= ArgumentEstimate.Min &&
-                        ArgumentEstimate.Min <= threeOverTwo * Pi.HighEstimate)
+                    Fraction threeOverTwo = new Fraction(new Integer(3), Two);
+                    while (threeOverTwo * Pi.LowEstimate <= rationalArgumentEstimateMin &&
+                        rationalArgumentEstimateMin <= threeOverTwo * Pi.HighEstimate)
                         Pi.RefineErrorInterval();
-                    while (threeOverTwo * Pi.LowEstimate <= ArgumentEstimate.Max &&
-                        ArgumentEstimate.Max <= threeOverTwo * Pi.LowEstimate)
+                    while (threeOverTwo * Pi.LowEstimate <= rationalArgumentEstimateMax &&
+                        rationalArgumentEstimateMax <= threeOverTwo * Pi.LowEstimate)
                         Pi.RefineErrorInterval();
-                    if (ArgumentEstimate.Min <= threeOverTwo * Pi.LowEstimate &&
-                        threeOverTwo * Pi.LowEstimate <= ArgumentEstimate.Max)
+                    if (rationalArgumentEstimateMin <= threeOverTwo * Pi.LowEstimate &&
+                        threeOverTwo * Pi.LowEstimate <= rationalArgumentEstimateMax)
                     {
                         sine.Min = -One;
-                        sine.Max = estimateSine(ArgumentEstimate.Min);
+                        sine.Max = estimateSine(rationalArgumentEstimateMin);
                         if (delta > Zero)
                             sine.Max += delta;
-                        Rational sineValue = estimateSine(ArgumentEstimate.Max);
+                        Rational sineValue = estimateSine(rationalArgumentEstimateMax);
                         if (delta > Zero)
                             sineValue += delta;
                         if (sineValue > sine.Max)
@@ -441,13 +514,13 @@ namespace Solver
                     }
                     else
                     {
-                        sine.Min = estimateSine(ArgumentEstimate.Min);
+                        sine.Min = estimateSine(rationalArgumentEstimateMin);
                         sine.Max = sine.Min;
                         if (delta > Zero)
                             sine.Max += delta;
                         else
                             sine.Min += delta;
-                        Rational sineValue = estimateSine(ArgumentEstimate.Max);
+                        Rational sineValue = estimateSine(rationalArgumentEstimateMax);
                         if (delta > Zero)
                             if (sineValue < sine.Min)
                                 sine.Min = sineValue;
@@ -469,24 +542,22 @@ namespace Solver
                 }
                 return sine;
             }
-            protected delegate Interval TrigFunction(Rational errorIntervalSize);
-            protected Interval EstimateRectangularPartFromPolarForm(Rational errorIntervalSize,
+            protected delegate Interval<Rational> TrigFunction(Rational errorIntervalSize);
+            protected Interval<Rational> EstimateRectangularPartFromPolarForm(Rational errorIntervalSize,
                 TrigFunction sineOrCosine)
             {
                 RefineMagnitudeErrorInterval(One);
-                errorIntervalSize =
-                    errorIntervalSize / (MagnitudeEstimate.Max.Magnitude() + new Integer(2));
+                errorIntervalSize /= (Rational)MagnitudeEstimate.Max.Magnitude() + Two;
                 RefineMagnitudeErrorInterval(errorIntervalSize);
-                Interval trigValue = sineOrCosine(errorIntervalSize);
+                Interval<Rational> trigValue = sineOrCosine(errorIntervalSize);
                 if (trigValue.Min >= Zero)
-                    return new Interval(trigValue.Min * MagnitudeEstimate.Min,
-                        trigValue.Max * MagnitudeEstimate.Max);
+                    return new Interval<Rational>(trigValue.Min * (Rational)MagnitudeEstimate.Min,
+                        trigValue.Max * (Rational)MagnitudeEstimate.Max);
                 else if (trigValue.Max <= Zero)
-                    return new Interval(trigValue.Min * MagnitudeEstimate.Max,
-                        trigValue.Max * MagnitudeEstimate.Min);
-                else
-                    return new Interval(trigValue.Min * MagnitudeEstimate.Max,
-                        trigValue.Max * MagnitudeEstimate.Max);
+                    return new Interval<Rational>(trigValue.Min * (Rational)MagnitudeEstimate.Max,
+                        trigValue.Max * (Rational)MagnitudeEstimate.Min);
+                return new Interval<Rational>(trigValue.Min * (Rational)MagnitudeEstimate.Max,
+                    trigValue.Max * (Rational)MagnitudeEstimate.Max);
             }                                    
             public abstract override string ToString();            
         }        
@@ -645,6 +716,10 @@ namespace Solver
             {
                 return !(a < b);
             }
+            public static explicit operator Rational(Float a)
+            {
+                return a.Significand / Solver.Exponentiate(Two, a.RadixPointPosition); 
+            }
             protected override RationalPolynomial CalculateMinimalPolynomial()
             {
                 return new RationalPolynomial(new List<Rational> { -this, One });
@@ -652,17 +727,20 @@ namespace Solver
             public override List<Number> GetConjugates()
             {
                 return new List<Number> { this };
-            }            
-            public override void RefineArgumentErrorInterval(Rational errorIntervalSize)
+            }
+            protected override Interval<Rational> GetRationalImaginaryEstimate(
+                Rational errorIntervalSize)
+            {
+                return new Interval<Rational>(Zero, Zero);
+            }
+            protected override Interval<Rational> GetRationalArgumentEstimate(
+                Rational errorIntervalSize)
             {
                 if (Numerator > Zero)                
-                    ArgumentEstimate = new Interval(Zero, Zero);                
-                else if (Numerator < Zero)
-                {
-                    Pi.RefineErrorInterval(errorIntervalSize);
-                    ArgumentEstimate = new Interval(Pi.LowEstimate, Pi.HighEstimate);
-                }
-            }
+                    return new Interval<Rational>(Zero, Zero);
+                Pi.RefineErrorInterval(errorIntervalSize);
+                return new Interval<Rational>(Pi.LowEstimate, Pi.HighEstimate);                
+            }            
 
             //Treats str as the string representation of a numerical constant, and returns the
             //string representation of the reference object multiplied by that constant.
@@ -689,10 +767,7 @@ namespace Solver
                 if (lastNonzeroValueIndex < 0)                
                     Sign = 0;                
                 else
-                    Sign = sign;
-                RealPartEstimate = new Interval(this, this);
-                ImaginaryPartEstimate = new Interval(Zero, Zero);
-                MagnitudeEstimate = new Interval(Magnitude(), Magnitude());
+                    Sign = sign;                
             }
             public Integer(int value)
             {
@@ -710,10 +785,7 @@ namespace Solver
                 {
                     Sign = -1;
                     Values = new uint[] { (uint)-value };
-                }
-                RealPartEstimate = new Interval(this, this);
-                ImaginaryPartEstimate = new Interval(Zero, Zero);
-                MagnitudeEstimate = new Interval(Magnitude(), Magnitude());
+                }                
             }
             public override Term Copy()
             {
@@ -767,7 +839,7 @@ namespace Solver
             }
             public Integer Reciprocal(Integer characteristic)
             {
-                return Solver.Exponentiate(this, characteristic - new Integer(2));
+                return Solver.Exponentiate(this, characteristic - Two);
             }
             public Integer Plus(Integer a)
             {
@@ -962,10 +1034,9 @@ namespace Solver
                 if (exponent.Denominator == One)
                     return power;
                 Integer coefficient = One;
-                Integer two = new Integer(2);
                 Integer takeRootOfPositiveRadicand(Integer radicand)
                 {
-                    for (Integer i = radicand.EuclideanDivideBy(two).Quotient; i >= One; --i)
+                    for (Integer i = radicand.EuclideanDivideBy(Two).Quotient; i >= One; --i)
                     {
                         Division<Integer> division =
                             EuclideanDivideBy(Solver.Exponentiate(i, exponent.Denominator));
@@ -981,12 +1052,12 @@ namespace Solver
                 if (power < Zero)
                 {
                     power = takeRootOfPositiveRadicand(-power);
-                    if (exponent.Denominator.EuclideanDivideBy(two).Remainder == Zero)
+                    if (exponent.Denominator.EuclideanDivideBy(Two).Remainder == Zero)
                     {
                         if (power == One)
                             return coefficient *
-                                NthRootsOfUnity.GetNthRoots(exponent.Denominator * two)[1];
-                        return NthRootsOfUnity.GetNthRoots(exponent.Denominator * two)[1] *
+                                NthRootsOfUnity.GetNthRoots(exponent.Denominator * Two)[1];
+                        return NthRootsOfUnity.GetNthRoots(exponent.Denominator * Two)[1] *
                             new Surd(coefficient, power, exponent.Denominator);
                     }
                     else
@@ -1064,6 +1135,16 @@ namespace Solver
             {
                 return (int)a.Values[0];
             }
+            public override void RefineRealPartErrorInterval(Rational errorIntervalSize)
+            {
+                Float floatThis = new Float(this, Zero);
+                RealPartEstimate = new Interval<Float>(floatThis, floatThis);
+            }
+            public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
+            {
+                Float magnitude = new Float(Magnitude(), Zero);
+                MagnitudeEstimate = new Interval<Float>(magnitude, magnitude);
+            }
             static uint[] ShiftValuesLeft(uint[] values, int valuePlaces, int digitPlaces)
             {//Negative valuePlaces and digitPlaces values shift to the right. Left shifts preserve
              //all digits by adding extra uints, while right shifts truncate the rightmost digits.
@@ -1110,7 +1191,7 @@ namespace Solver
                 for (Integer i = this - k + One; i <= this; ++i)
                     numerator *= i;
                 Integer denominator = One;
-                for (Integer i = new Integer(2); i <= k; ++i)
+                for (Integer i = Two; i <= k; ++i)
                     denominator *= i;
                 return numerator.EuclideanDivideBy(denominator).Quotient;
             }
@@ -1160,14 +1241,15 @@ namespace Solver
             Integer Denominator_;
             public override Integer Numerator { get => Numerator_; }
             public override Integer Denominator { get => Denominator_; }
+            Integer EstimateNumerator = null;
+            Integer EstimateDenominator = One;
+            Integer EstimateRemainder = null;
+            Integer RadixPointPosition = Zero;
             public Fraction(Integer numerator, Integer denominator)
             {//To be called only when the arguments are known a priori to form a canonical-form
              //fraction. Otherwise, use numerator / denominator instead.
                 Numerator_ = numerator;
-                Denominator_ = denominator;
-                RealPartEstimate = new Interval(this, this);
-                ImaginaryPartEstimate = new Interval(Zero, Zero);
-                MagnitudeEstimate = new Interval(Magnitude(), Magnitude());                
+                Denominator_ = denominator;                
             }
             public override Term Copy()
             {
@@ -1224,6 +1306,54 @@ namespace Solver
             public override int GetHashCode()
             {
                 return Numerator.GetHashCode() ^ Denominator.GetHashCode();
+            }
+            public override void RefineRealPartErrorInterval(Rational errorIntervalSize)
+            {
+                RefineMagnitudeErrorInterval(errorIntervalSize);
+                if (Numerator < Zero)
+                    RealPartEstimate =
+                        new Interval<Float>(-MagnitudeEstimate.Max, -MagnitudeEstimate.Min);
+                else
+                    RealPartEstimate = MagnitudeEstimate;                
+            }            
+            public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
+            {
+                Division<Integer> division;
+                Integer numeratorMagnitude = Numerator.Magnitude();
+                if (EstimateNumerator == null)
+                {
+                    division = numeratorMagnitude.EuclideanDivideBy(Denominator);
+                    EstimateNumerator = division.Quotient;
+                    EstimateRemainder = division.Remainder;
+                }
+                else if ((Rational)(MagnitudeEstimate.Max - MagnitudeEstimate.Min) <
+                    errorIntervalSize)
+                    return;
+                Float estimate;
+                while (errorIntervalSize.Denominator >
+                    EstimateDenominator * errorIntervalSize.Numerator)
+                {                    
+                    division = (Two * EstimateRemainder).EuclideanDivideBy(Denominator);                    
+                    EstimateNumerator = Two * EstimateNumerator + division.Quotient;
+                    EstimateDenominator *= Two;
+                    EstimateRemainder = division.Remainder;
+                    ++RadixPointPosition;
+                    if (EstimateRemainder == Zero)
+                    {
+                        estimate = new Float(EstimateNumerator, RadixPointPosition);
+                        MagnitudeEstimate = new Interval<Float>(estimate, estimate);
+                        return;
+                    }
+                }
+                estimate = Float.GetReducedForm(EstimateNumerator, RadixPointPosition);
+                Integer crossMultiplicationA = EstimateNumerator * Denominator;
+                Integer crossMultiplicationB = EstimateDenominator * numeratorMagnitude;
+                if (crossMultiplicationA > crossMultiplicationB)
+                    MagnitudeEstimate = new Interval<Float>(Float.GetReducedForm(
+                        EstimateNumerator - One, RadixPointPosition), estimate);
+                else
+                    MagnitudeEstimate = new Interval<Float>(estimate,
+                        Float.GetReducedForm(EstimateNumerator + One, RadixPointPosition));
             }
             public override String InsertString(String str)
             {
@@ -1284,9 +1414,9 @@ namespace Solver
                     Number product = Coefficient * surd.Coefficient * (Radicand.Exponentiate(
                         GCDInfo.BOverGCD) * surd.Radicand.Exponentiate(GCDInfo.AOverGCD)).
                         Exponentiate(One / ((Index * surd.Index) / GCDInfo.GCD).Numerator);                    
-                    Rational errorIntervalSize = Pi.LowEstimate / Index;
+                    Rational errorIntervalSize = (Rational)Pi.LowEstimate / Index;
                     product.RefineArgumentErrorInterval(errorIntervalSize);
-                    errorIntervalSize /= new Integer(4) * Pi.HighEstimate;
+                    errorIntervalSize /= new Integer(4) * (Rational)Pi.HighEstimate;
                     RefineArgumentErrorInterval(errorIntervalSize);
                     surd.RefineArgumentErrorInterval(errorIntervalSize);
                     if (product.ArgumentEstimate.Max <
@@ -1337,17 +1467,16 @@ namespace Solver
                 foreach (IntegerPolynomial candidate in candidates)
                     rationalCandidates.Add(candidate);
                 Rational precision = One;
-                Integer two = new Integer(2);
                 while (true) 
                 {
                     for (int i = 0; i < rationalCandidates.Count;) 
                     {
                         RectangularEstimate candidateEstimate =
                             rationalCandidates[i].EstimateEvaluation(this, precision);
-                        if (Zero < candidateEstimate.RealPart.Min ||
-                            candidateEstimate.RealPart.Max < Zero ||
-                            Zero < candidateEstimate.ImaginaryPart.Min ||
-                            candidateEstimate.ImaginaryPart.Max < Zero)
+                        if (Float.Zero < candidateEstimate.RealPart.Min ||
+                            candidateEstimate.RealPart.Max < Float.Zero ||
+                            Float.Zero < candidateEstimate.ImaginaryPart.Min ||
+                            candidateEstimate.ImaginaryPart.Max < Float.Zero)
                         {
                             rationalCandidates.RemoveAt(i);
                             if (rationalCandidates.Count == 1)
@@ -1357,7 +1486,7 @@ namespace Solver
                         else
                             ++i;
                     }
-                    precision /= two;
+                    precision /= Two;
                 }
             }
             public override List<Number> GetConjugates()
@@ -1374,36 +1503,39 @@ namespace Solver
             protected override int GetTypeIndex()
             {
                 return 3;
-            }            
-            public override void RefineRealPartErrorInterval(Rational errorIntervalSize)
+            }
+            protected override Interval<Rational> GetRationalRealEstimate(
+                Rational errorIntervalSize)
             {
-                RealPartEstimate = EstimateRectangularPartFromPolarForm(errorIntervalSize,
+                return EstimateRectangularPartFromPolarForm(errorIntervalSize,
                     EstimateCosineOfArgument);
             }
-            public override void RefineImaginaryPartErrorInterval(Rational errorIntervalSize)
+            protected override Interval<Rational> GetRationalImaginaryEstimate(
+                Rational errorIntervalSize)
             {
-                ImaginaryPartEstimate = EstimateRectangularPartFromPolarForm(errorIntervalSize,
+                return EstimateRectangularPartFromPolarForm(errorIntervalSize,
                     EstimateSineOfArgument);
             }
-            public override void RefineArgumentErrorInterval(Rational errorIntervalSize)
+            protected override Interval<Rational> GetRationalArgumentEstimate(
+                Rational errorIntervalSize)
             {
                 if (Coefficient > Zero)
                 {
-                    Radicand.RefineArgumentErrorInterval(Index * errorIntervalSize);
-                    ArgumentEstimate = new Interval(Radicand.ArgumentEstimate.Min / Index,
-                        Radicand.ArgumentEstimate.Max / Index);
+                    errorIntervalSize *= Index;
+                    Radicand.RefineArgumentErrorInterval(errorIntervalSize);
+                    return new Interval<Rational>((Rational)Radicand.ArgumentEstimate.Min / Index,
+                        (Rational)Radicand.ArgumentEstimate.Max / Index);
                 }
-                else
-                {
-                    errorIntervalSize /= new Integer(2);
-                    Coefficient.RefineArgumentErrorInterval(errorIntervalSize);
-                    Radicand.RefineArgumentErrorInterval(Index * errorIntervalSize);
-                    ArgumentEstimate = new Interval(
-                        Coefficient.ArgumentEstimate.Min + Radicand.ArgumentEstimate.Min / Index,
-                        Coefficient.ArgumentEstimate.Max + Radicand.ArgumentEstimate.Max / Index);
-                }
+                errorIntervalSize /= Two;
+                Coefficient.RefineArgumentErrorInterval(errorIntervalSize);
+                Radicand.RefineArgumentErrorInterval(Index * errorIntervalSize);
+                return new Interval<Rational>((Rational)Coefficient.ArgumentEstimate.Min +
+                    (Rational)Radicand.ArgumentEstimate.Min / Index,
+                    (Rational)Coefficient.ArgumentEstimate.Max +
+                    (Rational)Radicand.ArgumentEstimate.Max / Index);
             }
-            public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
+            protected override Interval<Rational> GetRationalMagnitudeEstimate(
+                Rational errorIntervalSize)
             {
                 Rational d = new Integer(3) * Coefficient.Magnitude();
                 Radicand.RefineMagnitudeErrorInterval(
@@ -1428,9 +1560,9 @@ namespace Solver
                     return root + delta;
                 }
                 Rational coefficientMagnitude = Coefficient.Magnitude();
-                MagnitudeEstimate = new Interval(coefficientMagnitude *
-                    overestimateRoot(Radicand.MagnitudeEstimate.Min) + delta,
-                    coefficientMagnitude * overestimateRoot(Radicand.MagnitudeEstimate.Max));
+                return new Interval<Rational>(coefficientMagnitude * overestimateRoot(
+                    (Rational)Radicand.MagnitudeEstimate.Min) + delta, coefficientMagnitude *
+                    overestimateRoot((Rational)Radicand.MagnitudeEstimate.Max));
             }
             public override string ToString()
             {
@@ -1493,13 +1625,13 @@ namespace Solver
                 ImaginaryPartEstimate = EstimateSumImaginaryPart(Terms, errorIntervalSize);
             }
         }
-        static Interval GetMagnitudeInterval(Interval interval)
+        static Interval<Float> GetMagnitudeInterval(Interval<Float> interval)
         {
-            Rational magnitudeA = interval.Min.Magnitude();
-            Rational magnitudeB = interval.Max.Magnitude();
+            Float magnitudeA = interval.Min.Magnitude();
+            Float magnitudeB = interval.Max.Magnitude();
             if (magnitudeA < magnitudeB)
-                return new Interval(magnitudeA, magnitudeB);
-            return new Interval(magnitudeB, magnitudeA);
+                return new Interval<Float>(magnitudeA, magnitudeB);
+            return new Interval<Float>(magnitudeB, magnitudeA);
         }
         class LinearlyIndependentSum : Number
         {
@@ -1809,15 +1941,40 @@ namespace Solver
             public override void RefineImaginaryPartErrorInterval(Rational errorIntervalSize)
             {
                 ImaginaryPartEstimate = EstimateSumImaginaryPart(Terms, errorIntervalSize);
-            }            
-            public override void RefineArgumentErrorInterval(Rational errorIntervalSize)
+            }
+            public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
             {
-                Integer two = new Integer(2);
+                errorIntervalSize /= new Integer(3);
+                Integer four = new Integer(4);
+                RefineRealPartErrorInterval(One);
+                RefineRealPartErrorInterval(errorIntervalSize /
+                    (four * (Rational)GetMagnitudeInterval(RealPartEstimate).Max + Two));
+                RefineImaginaryPartErrorInterval(One);
+                RefineImaginaryPartErrorInterval(errorIntervalSize /
+                    (four * (Rational)GetMagnitudeInterval(ImaginaryPartEstimate).Max + Two));
+                Interval<Float> realPartInterval = GetMagnitudeInterval(RealPartEstimate);
+                Interval<Float> imaginaryPartInterval = GetMagnitudeInterval(ImaginaryPartEstimate);
+                Fraction half = new Fraction(One, Two);
+                Number magnitudeUnderestimate =
+                    ((Rational)(realPartInterval.Min * realPartInterval.Min +
+                    imaginaryPartInterval.Min * imaginaryPartInterval.Min)).Exponentiate(half);
+                magnitudeUnderestimate.RefineRealPartErrorInterval(errorIntervalSize);
+                Number magnitudeOverestimate =
+                    ((Rational)(realPartInterval.Max * realPartInterval.Max +
+                    imaginaryPartInterval.Max * imaginaryPartInterval.Max)).Exponentiate(half);
+                magnitudeOverestimate.RefineRealPartErrorInterval(errorIntervalSize);
+                MagnitudeEstimate = new Interval<Float>(magnitudeUnderestimate.RealPartEstimate.Min,
+                    magnitudeOverestimate.RealPartEstimate.Max);
+            }
+            protected override Interval<Rational> GetRationalArgumentEstimate(
+                Rational errorIntervalSize)
+            {
                 bool hasZeroImaginaryPart(Number a)
                 {
                     Rational localErrorIntervalSize = One;
                     a.RefineImaginaryPartErrorInterval(localErrorIntervalSize);
-                    if (a.ImaginaryPartEstimate.Max < Zero || Zero < a.ImaginaryPartEstimate.Min)
+                    if (a.ImaginaryPartEstimate.Max < Float.Zero ||
+                        Float.Zero < a.ImaginaryPartEstimate.Min)
                         return false;
                     List<Number> conjugates = a.GetConjugates();
                     conjugates.RemoveAt(0);
@@ -1833,7 +1990,7 @@ namespace Solver
                             else
                                 ++i;
                         }
-                        localErrorIntervalSize /= two;
+                        localErrorIntervalSize /= Two;
                     }
                     while (true)
                     {
@@ -1843,232 +2000,203 @@ namespace Solver
                             a.RealPartEstimate.Max < conjugates[0].RealPartEstimate.Min)
                             return true;
                         a.RefineImaginaryPartErrorInterval(localErrorIntervalSize);
-                        if (a.ImaginaryPartEstimate.Min < Zero ||
-                            Zero < a.ImaginaryPartEstimate.Max)
+                        if (a.ImaginaryPartEstimate.Min < Float.Zero ||
+                            Float.Zero < a.ImaginaryPartEstimate.Max)
                             return false;
-                        localErrorIntervalSize /= two;
+                        localErrorIntervalSize /= Two;
                     }
                 }
-                Number thisTimesI = this * new Surd(One, new Integer(-1), two);
+                Number thisTimesI = this * new Surd(One, -One, Two);
                 if (hasZeroImaginaryPart(this))
                 {
-                    if (!hasZeroImaginaryPart(thisTimesI))
-                        if (thisTimesI.ImaginaryPartEstimate.Min > Zero)
-                            ArgumentEstimate = new Interval(Zero, Zero);
-                        else
+                    if (hasZeroImaginaryPart(thisTimesI))
+                        return new Interval<Rational>();
+                    if (thisTimesI.ImaginaryPartEstimate.Min > Float.Zero)
+                        return new Interval<Rational>(Zero, Zero);
+                    Pi.RefineErrorInterval(errorIntervalSize);
+                    return new Interval<Rational>(Pi.LowEstimate, Pi.HighEstimate);
+                }
+                if (hasZeroImaginaryPart(thisTimesI))
+                {
+                    if (thisTimesI.RealPartEstimate.Max < Float.Zero)
+                    {
+                        Pi.RefineErrorInterval(Two * errorIntervalSize);
+                        return new Interval<Rational>(Pi.LowEstimate / Two, Pi.HighEstimate / Two);
+                    }
+                    Rational threeOverTwo = new Fraction(new Integer(3), Two);
+                    Pi.RefineErrorInterval(errorIntervalSize / threeOverTwo);
+                    return new Interval<Rational>(threeOverTwo * Pi.LowEstimate,
+                        threeOverTwo * Pi.HighEstimate);
+                }
+                Interval<Float> realMagnitudeInterval =
+                    GetMagnitudeInterval(RealPartEstimate);
+                Interval<Float> imaginaryMagnitudeInterval =
+                    GetMagnitudeInterval(ImaginaryPartEstimate);
+                errorIntervalSize /= new Integer(3) * ((Rational)(realMagnitudeInterval.Max +
+                    imaginaryMagnitudeInterval.Max) + One);
+                RefineRealPartErrorInterval(errorIntervalSize *
+                    (Rational)(realMagnitudeInterval.Min * realMagnitudeInterval.Min));
+                RefineRealPartErrorInterval(errorIntervalSize);
+                RefineImaginaryPartErrorInterval(errorIntervalSize * (Rational)(
+                    imaginaryMagnitudeInterval.Min * imaginaryMagnitudeInterval.Min));
+                RefineImaginaryPartErrorInterval(errorIntervalSize);
+                Rational delta = null;
+                Rational estimateArctangent(Rational a, Rational localErrorIntervalSize)
+                {
+                    Rational arctangentValue = a;
+                    Rational aSquared = a * a;
+                    Integer denominator = new Integer(3);
+                    delta = -aSquared * a / denominator;
+                    while (delta.Magnitude() > localErrorIntervalSize)
+                    {
+                        arctangentValue += delta;
+                        denominator += Two;
+                        delta *= aSquared / denominator;
+                        delta = -delta;
+                    }
+                    return arctangentValue;
+                }
+                Interval<Rational> argument = new Interval<Rational>();
+                if (RealPartEstimate.Min > Float.Zero)
+                    if (ImaginaryPartEstimate.Min > Float.Zero)
+                    {
+                        if (ImaginaryPartEstimate.Min < RealPartEstimate.Max)
                         {
                             Pi.RefineErrorInterval(errorIntervalSize);
-                            ArgumentEstimate = new Interval(Pi.LowEstimate, Pi.HighEstimate);
+                            argument.Min = estimateArctangent((Rational)RealPartEstimate.Max /
+                                (Rational)ImaginaryPartEstimate.Min, errorIntervalSize -
+                                Pi.ErrorIntervalSize / Two) + Pi.LowEstimate / Two;
                         }
-                }
-                else if (hasZeroImaginaryPart(thisTimesI))
-                    if (thisTimesI.ImaginaryPartEstimate.Max < Zero)
-                    {
-                        Pi.RefineErrorInterval(two * errorIntervalSize);
-                        ArgumentEstimate =
-                            new Interval(Pi.LowEstimate / two, Pi.HighEstimate / two);
+                        else
+                            argument.Min = estimateArctangent((Rational)ImaginaryPartEstimate.Min /
+                                (Rational)RealPartEstimate.Max, errorIntervalSize);
+                        if (delta < Zero)
+                            argument.Min += delta;
+                        if (ImaginaryPartEstimate.Max < RealPartEstimate.Min)
+                        {
+                            Pi.RefineErrorInterval(errorIntervalSize);
+                            argument.Max = estimateArctangent((Rational)RealPartEstimate.Min /
+                                (Rational)ImaginaryPartEstimate.Max, errorIntervalSize -
+                                Pi.ErrorIntervalSize / Two) + Pi.HighEstimate / Two;
+                        }
+                        else
+                            argument.Max = estimateArctangent((Rational)ImaginaryPartEstimate.Max /
+                                (Rational)RealPartEstimate.Min, errorIntervalSize);
                     }
                     else
                     {
-                        Rational threeOverTwo = new Fraction(new Integer(3), two);
-                        Pi.RefineErrorInterval(errorIntervalSize / threeOverTwo);
-                        ArgumentEstimate = new Interval(threeOverTwo * Pi.LowEstimate,
-                            threeOverTwo * Pi.HighEstimate);
+                        if (-ImaginaryPartEstimate.Min < RealPartEstimate.Min)
+                        {
+                            Integer three = new Integer(3);
+                            Pi.RefineErrorInterval(errorIntervalSize / three);
+                            Rational threeOverTwo = new Fraction(three, Two);
+                            argument.Min = estimateArctangent((Rational)RealPartEstimate.Min /
+                                (Rational)ImaginaryPartEstimate.Min, errorIntervalSize - threeOverTwo *
+                                Pi.ErrorIntervalSize) + threeOverTwo * Pi.LowEstimate;
+                        }
+                        else
+                        {
+                            Pi.RefineErrorInterval(errorIntervalSize / new Integer(4));
+                            argument.Min = estimateArctangent((Rational)ImaginaryPartEstimate.Min /
+                                (Rational)RealPartEstimate.Min, errorIntervalSize -
+                                Two * Pi.ErrorIntervalSize) + Two * Pi.LowEstimate;
+                        }
+                        if (delta < Zero)
+                            argument.Min += delta;
+                        if (-ImaginaryPartEstimate.Max < RealPartEstimate.Max)
+                        {
+                            Integer three = new Integer(3);
+                            Pi.RefineErrorInterval(errorIntervalSize / three);
+                            Rational threeOverTwo = new Fraction(three, Two);
+                            argument.Max = estimateArctangent((Rational)RealPartEstimate.Max /
+                                (Rational)ImaginaryPartEstimate.Max,
+                                errorIntervalSize - threeOverTwo * Pi.ErrorIntervalSize) +
+                                threeOverTwo * Pi.HighEstimate;
+                        }
+                        else
+                        {
+                            Pi.RefineErrorInterval(errorIntervalSize / new Integer(4));
+                            argument.Max = estimateArctangent((Rational)ImaginaryPartEstimate.Max /
+                                (Rational)RealPartEstimate.Max, errorIntervalSize -
+                                Two * Pi.ErrorIntervalSize) + Two * Pi.HighEstimate;
+                        }
                     }
-                else
-                {
-                    Interval realMagnitudeInterval =
-                        GetMagnitudeInterval(RealPartEstimate);
-                    Interval imaginaryMagnitudeInterval =
-                        GetMagnitudeInterval(ImaginaryPartEstimate);
-                    errorIntervalSize = errorIntervalSize / (new Integer(3) *
-                        (realMagnitudeInterval.Max + imaginaryMagnitudeInterval.Max + One));
-                    RefineRealPartErrorInterval(errorIntervalSize *
-                        realMagnitudeInterval.Min * realMagnitudeInterval.Min);
-                    RefineRealPartErrorInterval(errorIntervalSize);
-                    RefineImaginaryPartErrorInterval(errorIntervalSize *
-                        imaginaryMagnitudeInterval.Min * imaginaryMagnitudeInterval.Min);
-                    RefineImaginaryPartErrorInterval(errorIntervalSize);
-                    Rational delta = null;
-                    Rational estimateArctangent(Rational a, Rational localErrorIntervalSize)
+                else if (RealPartEstimate.Max < Float.Zero)
+                    if (ImaginaryPartEstimate.Min > Float.Zero)
                     {
-                        Rational arctangentValue = a;
-                        Rational aSquared = a * a;
-                        Integer denominator = new Integer(3);
-                        delta = -aSquared * a / denominator;
-                        while (delta.Magnitude() > localErrorIntervalSize)
+                        if (ImaginaryPartEstimate.Max < -RealPartEstimate.Min)
                         {
-                            arctangentValue += delta;
-                            denominator += two;
-                            delta *= aSquared / denominator;
-                            delta = -delta;
+                            Pi.RefineErrorInterval(errorIntervalSize);
+                            argument.Min = estimateArctangent((Rational)RealPartEstimate.Min /
+                                (Rational)ImaginaryPartEstimate.Max, errorIntervalSize -
+                                Pi.ErrorIntervalSize / Two) + Pi.LowEstimate / Two;
                         }
-                        return arctangentValue;
+                        else
+                        {
+                            Pi.RefineErrorInterval(errorIntervalSize / Two);
+                            argument.Min = estimateArctangent((Rational)ImaginaryPartEstimate.Max /
+                                (Rational)RealPartEstimate.Min, errorIntervalSize -
+                                Pi.HighEstimate + Pi.LowEstimate) + Pi.LowEstimate;
+                        }
+                        if (delta < Zero)
+                            argument.Min += delta;
+                        if (ImaginaryPartEstimate.Min < -RealPartEstimate.Max)
+                        {
+                            Pi.RefineErrorInterval(errorIntervalSize);
+                            argument.Max = estimateArctangent((Rational)RealPartEstimate.Max /
+                                (Rational)ImaginaryPartEstimate.Min, errorIntervalSize -
+                                Pi.ErrorIntervalSize / Two) + Pi.HighEstimate / Two;
+                        }
+                        else
+                        {
+                            Pi.RefineErrorInterval(errorIntervalSize / Two);
+                            argument.Max = estimateArctangent((Rational)ImaginaryPartEstimate.Min /
+                                (Rational)RealPartEstimate.Max, errorIntervalSize -
+                                Pi.ErrorIntervalSize) + Pi.HighEstimate;
+                        }
                     }
-                    Interval argument = new Interval(null, null);
-                    if (RealPartEstimate.Min > Zero)
-                        if (ImaginaryPartEstimate.Min > Zero)
+                    else
+                    {
+                        if (ImaginaryPartEstimate.Min > RealPartEstimate.Max)
                         {
-                            if (ImaginaryPartEstimate.Min < RealPartEstimate.Max)
-                            {
-                                Pi.RefineErrorInterval(errorIntervalSize);
-                                argument.Min = estimateArctangent(RealPartEstimate.Max /
-                                    ImaginaryPartEstimate.Min, errorIntervalSize -
-                                    Pi.ErrorIntervalSize / two) + Pi.LowEstimate / two;
-                            }
-                            else
-                                argument.Min = estimateArctangent(ImaginaryPartEstimate.Min /
-                                    RealPartEstimate.Max, errorIntervalSize);
-                            if (delta < Zero)
-                                argument.Min += delta;
-                            if (ImaginaryPartEstimate.Max < RealPartEstimate.Min)
-                            {
-                                Pi.RefineErrorInterval(errorIntervalSize);
-                                argument.Max = estimateArctangent(RealPartEstimate.Min /
-                                    ImaginaryPartEstimate.Max, errorIntervalSize -
-                                    Pi.ErrorIntervalSize / two) + Pi.HighEstimate / two;
-                            }
-                            else
-                                argument.Max = estimateArctangent(ImaginaryPartEstimate.Max /
-                                    RealPartEstimate.Min, errorIntervalSize);
+                            Integer three = new Integer(3);
+                            Pi.RefineErrorInterval(errorIntervalSize / three);
+                            Rational threeOverTwo = new Fraction(three, Two);
+                            argument.Min = estimateArctangent((Rational)RealPartEstimate.Max /
+                                (Rational)ImaginaryPartEstimate.Min, errorIntervalSize -
+                                threeOverTwo * Pi.ErrorIntervalSize) +
+                                threeOverTwo * Pi.LowEstimate;
                         }
                         else
                         {
-                            if (-ImaginaryPartEstimate.Min < RealPartEstimate.Min)
-                            {
-                                Integer three = new Integer(3);
-                                Pi.RefineErrorInterval(errorIntervalSize / three);
-                                Rational threeOverTwo = new Fraction(three, two);
-                                argument.Min = estimateArctangent(RealPartEstimate.Min /
-                                    ImaginaryPartEstimate.Min, errorIntervalSize - threeOverTwo *
-                                    Pi.ErrorIntervalSize) + threeOverTwo * Pi.LowEstimate;
-                            }
-                            else
-                            {
-                                Pi.RefineErrorInterval(errorIntervalSize / new Integer(4));
-                                argument.Min = estimateArctangent(ImaginaryPartEstimate.Min /
-                                    RealPartEstimate.Min, errorIntervalSize -
-                                    two * Pi.ErrorIntervalSize) + two * Pi.LowEstimate;
-                            }
-                            if (delta < Zero)
-                                argument.Min += delta;
-                            if (-ImaginaryPartEstimate.Max < RealPartEstimate.Max)
-                            {
-                                Integer three = new Integer(3);
-                                Pi.RefineErrorInterval(errorIntervalSize / three);
-                                Rational threeOverTwo = new Fraction(three, two);
-                                argument.Max = estimateArctangent(RealPartEstimate.Max /
-                                    ImaginaryPartEstimate.Max, errorIntervalSize - threeOverTwo *
-                                    Pi.ErrorIntervalSize) + threeOverTwo * Pi.HighEstimate;
-                            }
-                            else
-                            {
-                                Pi.RefineErrorInterval(errorIntervalSize / new Integer(4));
-                                argument.Max = estimateArctangent(ImaginaryPartEstimate.Max /
-                                    RealPartEstimate.Max, errorIntervalSize -
-                                    two * Pi.ErrorIntervalSize) + two * Pi.HighEstimate;
-                            }
+                            Pi.RefineErrorInterval(errorIntervalSize);
+                            argument.Min = estimateArctangent((Rational)ImaginaryPartEstimate.Min /
+                                (Rational)RealPartEstimate.Max, errorIntervalSize -
+                                Pi.ErrorIntervalSize) + Pi.LowEstimate;
                         }
-                    else if (RealPartEstimate.Max < Zero)
-                        if (ImaginaryPartEstimate.Min > Zero)
+                        if (delta < Zero)
+                            argument.Min += delta;
+                        if (ImaginaryPartEstimate.Max > RealPartEstimate.Min)
                         {
-                            if (ImaginaryPartEstimate.Max < -RealPartEstimate.Min)
-                            {
-                                Pi.RefineErrorInterval(errorIntervalSize);
-                                argument.Min = estimateArctangent(RealPartEstimate.Min /
-                                    ImaginaryPartEstimate.Max, errorIntervalSize -
-                                    Pi.ErrorIntervalSize / two) + Pi.LowEstimate / two;
-                            }
-                            else
-                            {
-                                Pi.RefineErrorInterval(errorIntervalSize / two);
-                                argument.Min = estimateArctangent(ImaginaryPartEstimate.Max /
-                                    RealPartEstimate.Min, errorIntervalSize -
-                                    Pi.HighEstimate + Pi.LowEstimate) + Pi.LowEstimate;
-                            }
-                            if (delta < Zero)
-                                argument.Min += delta;
-                            if (ImaginaryPartEstimate.Min < -RealPartEstimate.Max)
-                            {
-                                Pi.RefineErrorInterval(errorIntervalSize);
-                                argument.Max = estimateArctangent(RealPartEstimate.Max /
-                                    ImaginaryPartEstimate.Min, errorIntervalSize -
-                                    Pi.ErrorIntervalSize / two) + Pi.HighEstimate / two;
-                            }
-                            else
-                            {
-                                Pi.RefineErrorInterval(errorIntervalSize / two);
-                                argument.Max = estimateArctangent(ImaginaryPartEstimate.Min /
-                                    RealPartEstimate.Max, errorIntervalSize -
-                                    Pi.ErrorIntervalSize) + Pi.HighEstimate;
-                            }
+                            Integer three = new Integer(3);
+                            Pi.RefineErrorInterval(errorIntervalSize / three);
+                            Rational threeOverTwo = new Fraction(three, Two);
+                            argument.Max = estimateArctangent((Rational)RealPartEstimate.Min /
+                                (Rational)ImaginaryPartEstimate.Max,
+                                errorIntervalSize - threeOverTwo * Pi.ErrorIntervalSize) +
+                                threeOverTwo * Pi.HighEstimate;
                         }
                         else
                         {
-                            if (ImaginaryPartEstimate.Min > RealPartEstimate.Max)
-                            {
-                                Integer three = new Integer(3);
-                                Pi.RefineErrorInterval(errorIntervalSize / three);
-                                Rational threeOverTwo = new Fraction(three, two);
-                                argument.Min = estimateArctangent(RealPartEstimate.Max /
-                                    ImaginaryPartEstimate.Min, errorIntervalSize -
-                                    threeOverTwo * Pi.ErrorIntervalSize) +
-                                    threeOverTwo * Pi.LowEstimate;
-                            }
-                            else
-                            {
-                                Pi.RefineErrorInterval(errorIntervalSize);
-                                argument.Min = estimateArctangent(ImaginaryPartEstimate.Min /
-                                    RealPartEstimate.Max, errorIntervalSize -
-                                    Pi.ErrorIntervalSize) + Pi.LowEstimate;
-                            }
-                            if (delta < Zero)
-                                argument.Min += delta;
-                            if (ImaginaryPartEstimate.Max > RealPartEstimate.Min)
-                            {
-                                Integer three = new Integer(3);
-                                Pi.RefineErrorInterval(errorIntervalSize / three);
-                                Rational threeOverTwo = new Fraction(three, two);
-                                argument.Max = estimateArctangent(RealPartEstimate.Min /
-                                    ImaginaryPartEstimate.Max, errorIntervalSize - threeOverTwo *
-                                    Pi.ErrorIntervalSize) + threeOverTwo * Pi.HighEstimate;
-                            }
-                            else
-                            {
-                                Pi.RefineErrorInterval(errorIntervalSize);
-                                argument.Max = estimateArctangent(ImaginaryPartEstimate.Max /
-                                    RealPartEstimate.Min, errorIntervalSize -
-                                    Pi.ErrorIntervalSize) + Pi.HighEstimate;
-                            }
+                            Pi.RefineErrorInterval(errorIntervalSize);
+                            argument.Max = estimateArctangent((Rational)ImaginaryPartEstimate.Max /
+                                (Rational)RealPartEstimate.Min, errorIntervalSize -
+                                Pi.ErrorIntervalSize) + Pi.HighEstimate;
                         }
-                    if (delta > Zero)
-                        argument.Max += delta;
-                    ArgumentEstimate = argument;
-                }
-            }
-            public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
-            {
-                errorIntervalSize /= new Integer(3);
-                Integer two = new Integer(2);
-                Integer four = new Integer(4);
-                RefineRealPartErrorInterval(One);
-                RefineRealPartErrorInterval(errorIntervalSize /
-                    (four * GetMagnitudeInterval(RealPartEstimate).Max + two));
-                RefineImaginaryPartErrorInterval(One);
-                RefineImaginaryPartErrorInterval(errorIntervalSize /
-                    (four * GetMagnitudeInterval(ImaginaryPartEstimate).Max + two));
-                Interval realPartInterval = GetMagnitudeInterval(RealPartEstimate);
-                Interval imaginaryPartInterval = GetMagnitudeInterval(ImaginaryPartEstimate);
-                Number magnitudeUnderestimate = (realPartInterval.Min * realPartInterval.Min +
-                    imaginaryPartInterval.Min * imaginaryPartInterval.Min).Exponentiate(
-                    new Fraction(One, two));
-                magnitudeUnderestimate.RefineRealPartErrorInterval(errorIntervalSize);
-                Number magnitudeOverestimate = (realPartInterval.Max * realPartInterval.Max +
-                    imaginaryPartInterval.Max * imaginaryPartInterval.Max).Exponentiate(
-                    new Fraction(One, two));
-                magnitudeOverestimate.RefineRealPartErrorInterval(errorIntervalSize);
-                MagnitudeEstimate = new Interval(magnitudeUnderestimate.RealPartEstimate.Min,
-                    magnitudeOverestimate.RealPartEstimate.Max);
+                    }
+                if (delta > Zero)
+                    argument.Max += delta;
+                return argument;
             }
             public override string ToString()
             {
@@ -2470,12 +2598,11 @@ namespace Solver
                     Integer squareRoot = Number.One;
                     while (squareRoot * squareRoot < bound)
                         ++squareRoot;
-                    Integer two = new Integer(2);
                     Integer factorDegreeMinusOne = new Integer(factor.Coefficients.Count - 2);
-                    Integer k = factorDegreeMinusOne.EuclideanDivideBy(two).Quotient;
+                    Integer k = factorDegreeMinusOne.EuclideanDivideBy(Number.Two).Quotient;
                     bound = (squareRoot * factorDegreeMinusOne.ThisChooseK(k) +
                         factor.Coefficients[factor.Coefficients.Count - 1].Magnitude() *
-                        factorDegreeMinusOne.ThisChooseK(k - Number.One)) * two *
+                        factorDegreeMinusOne.ThisChooseK(k - Number.One)) * Number.Two *
                         factor.Coefficients[factor.Coefficients.Count - 1].Magnitude();
                     Integer e = Number.One;
                     Integer characteristicPower = moddedFactor.Characteristic;
@@ -2539,7 +2666,7 @@ namespace Solver
                         {
                             Integer remainder = polynomial.Coefficients[i].EuclideanDivideBy(
                                 characteristicPower).Remainder;
-                            if (remainder * two <= characteristicPower)
+                            if (remainder * Number.Two <= characteristicPower)
                                 polynomial.Coefficients[i] = remainder;
                             else
                                 polynomial.Coefficients[i] = remainder - characteristicPower;
@@ -2799,7 +2926,7 @@ namespace Solver
                         return;
                     }
                     ModdedPolynomial B;
-                    if (Characteristic == new Integer(2))
+                    if (Characteristic == Number.Two)
                     {
                         ModdedPolynomial T = new ModdedPolynomial(
                             new List<Integer> { Number.Zero, Number.One }, Characteristic);
@@ -2828,7 +2955,7 @@ namespace Solver
                             coefficients.Add(p);
                         coefficients.Add(Number.One);
                         Integer power = ((Exponentiate(Characteristic,
-                            new Integer(degree)) - Number.One) / new Integer(2)).Numerator;
+                            new Integer(degree)) - Number.One) / Number.Two).Numerator;
                         B = GetGCD(factorProduct, Exponentiate(new ModdedPolynomial(
                             new List<Integer>(coefficients), Characteristic), power) -
                             GetMultiplicativeIdentity());
@@ -3050,27 +3177,6 @@ namespace Solver
             public RectangularEstimate EstimateEvaluation(Primitive argument,
                 Rational errorIntervalSize)
             {
-                argument.RefineRealPartErrorInterval(Number.One);
-                argument.RefineImaginaryPartErrorInterval(Number.One);
-                Rational preliminaryRealEstimate =
-                    GetMagnitudeInterval(argument.RealPartEstimate).Max;
-                Rational preliminaryImaginaryEstimate =
-                  GetMagnitudeInterval(argument.ImaginaryPartEstimate).Max;
-                Rational realErrorScaleFromExponentiation = Number.Zero;
-                Rational imaginaryErrorScaleFromExponentiation = Number.Zero;
-                Integer degree = new Integer(Coefficients.Count - 1);
-                for (Integer i = Number.Zero; i <= degree; ++i)
-                {
-                    Integer binomialCoefficient = degree.ThisChooseK(i);
-                    realErrorScaleFromExponentiation += binomialCoefficient *
-                        Exponentiate(preliminaryRealEstimate, i);
-                    imaginaryErrorScaleFromExponentiation += binomialCoefficient *
-                        Exponentiate(preliminaryImaginaryEstimate, i);
-                }
-                Rational realErrorIntervalSize =
-                    errorIntervalSize / realErrorScaleFromExponentiation;
-                Rational imaginaryErrorIntervalSize =
-                    errorIntervalSize / imaginaryErrorScaleFromExponentiation;
                 Rational largestCoefficientMagnitude = Number.Zero;
                 foreach (Rational coefficient in Coefficients)
                 {
@@ -3078,46 +3184,56 @@ namespace Solver
                     if (coefficientMagnitude > largestCoefficientMagnitude)
                         largestCoefficientMagnitude = coefficientMagnitude;
                 }
-                errorIntervalSize /= new Integer(Coefficients.Count) * largestCoefficientMagnitude;
-                argument.RefineRealPartErrorInterval(errorIntervalSize /
-                    realErrorScaleFromExponentiation);
-                argument.RefineImaginaryPartErrorInterval(errorIntervalSize /
-                    imaginaryErrorScaleFromExponentiation);
-                Interval realEstimate = new Interval(Number.Zero, Number.Zero);
-                Interval imaginaryEstimate = new Interval(Number.Zero, Number.Zero);
-                for (int i = 0; i < Coefficients.Count; ++i)
+                errorIntervalSize /= largestCoefficientMagnitude;                
+                Interval<Float> getPartEstimate(PartGetter getPart, PartRefiner refinePart)
                 {
-                    Integer termDegree = new Integer(i);
-                    Rational minExponentiation = Coefficients[i] *
-                        Exponentiate(argument.RealPartEstimate.Min, termDegree);
-                    Rational maxExponentiation = Coefficients[i] *
-                        Exponentiate(argument.RealPartEstimate.Max, termDegree);
-                    if (minExponentiation < maxExponentiation) 
-                    {
-                        realEstimate.Min += minExponentiation;
-                        realEstimate.Max += maxExponentiation;
-                    }
+                    refinePart(argument, Number.One);
+                    Rational argumentPartScale;
+                    if (getPart(argument).Min < Float.Zero && Float.Zero < getPart(argument).Max)
+                        argumentPartScale =
+                            (Rational)(getPart(argument).Max - getPart(argument).Min);
                     else
+                        argumentPartScale =
+                            Number.Two * (Rational)(getPart(argument).Max).Magnitude();
+                    Rational partScalePower = Number.One;
+                    Rational partErrorScale = Number.One;
+                    for (int i = 1; i < Coefficients.Count; ++i)
                     {
-                        realEstimate.Min += maxExponentiation;
-                        realEstimate.Max += minExponentiation;
+                        partScalePower *= argumentPartScale;
+                        partErrorScale += partScalePower;
                     }
-                    minExponentiation = Coefficients[i] *
-                        Exponentiate(argument.ImaginaryPartEstimate.Min, termDegree);
-                    maxExponentiation = Coefficients[i] *
-                        Exponentiate(argument.ImaginaryPartEstimate.Max, termDegree);
-                    if (minExponentiation < maxExponentiation)
+                    Rational partErrorIntervalSize = errorIntervalSize / partErrorScale;
+                    partErrorIntervalSize = Float.GetEstimatePlaceValue(partErrorIntervalSize);
+                    refinePart(argument, partErrorIntervalSize);
+                    Rational partEstimateMin = Number.Zero;
+                    Rational partEstimateMax = Number.Zero;
+                    for (int i = 0; i < Coefficients.Count; ++i)
                     {
-                        realEstimate.Min += minExponentiation;
-                        realEstimate.Max += maxExponentiation;
+                        Integer termDegree = new Integer(i);
+                        Rational minExponentiation = Coefficients[i] *
+                            (Rational)Exponentiate(getPart(argument).Min, termDegree);
+                        Rational maxExponentiation = Coefficients[i] *
+                            (Rational)Exponentiate(getPart(argument).Max, termDegree);
+                        if (minExponentiation < maxExponentiation)
+                        {
+                            partEstimateMin += minExponentiation;
+                            partEstimateMax += maxExponentiation;
+                        }
+                        else
+                        {
+                            partEstimateMin += maxExponentiation;
+                            partEstimateMax += minExponentiation;
+                        }
                     }
-                    else
-                    {
-                        imaginaryEstimate.Min += maxExponentiation;
-                        imaginaryEstimate.Max += minExponentiation;
-                    }
+                    refinePart(partEstimateMin, partErrorIntervalSize);
+                    refinePart(partEstimateMax, partErrorIntervalSize);
+                    return new Interval<Float>(getPart(partEstimateMin).Min,
+                        getPart(partEstimateMax).Max);
                 }
-                return new RectangularEstimate(realEstimate, imaginaryEstimate);
+                return new RectangularEstimate(getPartEstimate(Primitive.GetRealPartEstimate,
+                    Primitive.RefineRealPartErrorInterval),
+                    getPartEstimate(Primitive.GetImaginaryPartEstimate,
+                    Primitive.RefineImaginaryPartErrorInterval));
             }
             public RationalPolynomial GetDerivative()
             {
@@ -3751,8 +3867,116 @@ namespace Solver
                 return new RationalPolynomial(GetMonicCoefficients(minimalPolynomial.Coefficients));
             }            
         }
+        class Float : IRingElement<Float>
+        {//Behaves like a Rational whose denominator is limited to a power of two. 
+            public Integer Significand { get; }
+            public Integer RadixPointPosition { get; }
+            public static Float Zero = new Float(Number.Zero, Number.Zero);
+            public static Float One = new Float(Number.One, Number.Zero);
+            public Float(Integer significand, Integer radixPointPosition)
+            {
+                Significand = significand;
+                RadixPointPosition = radixPointPosition;
+            }
+            public static Float GetReducedForm(Integer significand, Integer radixPointPosition)
+            {
+                Division<Integer> division = significand.EuclideanDivideBy(Number.Two);
+                while (radixPointPosition > Number.Zero && division.Remainder == Number.Zero)
+                {
+                    significand = division.Quotient;
+                    --radixPointPosition;
+                    division = significand.EuclideanDivideBy(Number.Two);
+                }
+                return new Float(significand, radixPointPosition);
+            }
+            public Float GetMultiplicativeIdentity()
+            {
+                return One;
+            }
+            public Float Magnitude()
+            {
+                if (Significand < Number.Zero)
+                    return new Float(-Significand, RadixPointPosition);
+                return this;
+            }
+            public Float Times(Float a)
+            {
+                return this * a;
+            }
+            public static Float operator +(Float a, Float b)
+            {
+                if (a.RadixPointPosition == b.RadixPointPosition)                                    
+                    return GetReducedForm(a.Significand + b.Significand, a.RadixPointPosition);                
+                if (b.RadixPointPosition > a.RadixPointPosition)
+                    return new Float(b.Significand + a.Significand * Exponentiate(Number.Two,
+                        b.RadixPointPosition - a.RadixPointPosition), b.RadixPointPosition);
+                return new Float(a.Significand + b.Significand * Exponentiate(Number.Two,
+                    a.RadixPointPosition - b.RadixPointPosition), a.RadixPointPosition);
+            }
+            public static Float operator -(Float a, Float b)
+            {
+                return a + -b;
+            }
+            public static Float operator -(Float a)
+            {
+                return new Float(-a.Significand, a.RadixPointPosition);
+            }
+            public static Float operator *(Float a, Float b)
+            {
+                return GetReducedForm(a.Significand * b.Significand,
+                    a.RadixPointPosition + b.RadixPointPosition);
+            }
+            public static bool operator <(Float a, Float b)
+            {
+                return (a - b).Significand < Number.Zero;
+            }
+            public static bool operator >(Float a, Float b)
+            {
+                return (a - b).Significand > Number.Zero;
+            }
+            public static bool operator <=(Float a, Float b)
+            {
+                return !(a > b);
+            }
+            public static bool operator >=(Float a, Float b)
+            {
+                return !(a < b);
+            }
+            public Float ShiftRadixPointLeft(int placesToShift)
+            {
+                Debug.Assert(placesToShift >= 0);
+                Integer significand = Significand;
+                if (RadixPointPosition == Number.Zero)
+                {
+                    Division<Integer> division = significand.EuclideanDivideBy(Number.Two);
+                    while (placesToShift > 0 && division.Remainder == Number.Zero)
+                    {                        
+                        significand = division.Quotient;
+                        --placesToShift;
+                        division = significand.EuclideanDivideBy(Number.Two);
+                    }
+                }
+                return new Float(significand, RadixPointPosition + new Integer(placesToShift));
+            }
+            public static Rational GetEstimatePlaceValue(Rational errorIntervalSize)
+            {
+                Rational placeValue = Number.One;
+                while (placeValue > errorIntervalSize)
+                    placeValue /= Number.Two;
+                return placeValue / Number.Two;
+            }
+#if DEBUG
+            public override string ToString()
+            {
+                return ((Rational)this).ToString();
+            }
+#endif
+        }
         static class Pi
         {
+            //K is the index of the next approximation iteration.            
+            static Integer SixteenToTheK = new Integer(16);
+            static Integer EightK = new Integer(8);
             public static Rational ErrorIntervalSize { get; private set; } =
                 new Fraction(new Integer(1696), new Integer(12285));
             public static Rational LowEstimate { get; private set; } =
@@ -3763,15 +3987,11 @@ namespace Solver
                 {
                     return LowEstimate + ErrorIntervalSize;
                 }
-            }
-
-            //K is the index of the next approximation iteration.            
-            static Integer SixteenToTheK = new Integer(16);
-            static Integer EightK = new Integer(8);
+            }            
             public static void RefineErrorInterval()
             {
                 Integer four = new Integer(4);
-                LowEstimate += (four / (EightK + Number.One) - new Integer(2) / (EightK + four) -
+                LowEstimate += (four / (EightK + Number.One) - Number.Two / (EightK + four) -
                     Number.One / (EightK + new Integer(5)) -
                     Number.One / (EightK + new Integer(6))) / SixteenToTheK;
                 Integer sixteen = new Integer(16);
@@ -3789,20 +4009,19 @@ namespace Solver
                         RefineErrorInterval();
                 }
             }
-        }        
+        }
         static class NthRootsOfUnity
         {
             static Dictionary<Integer, List<Number>> NthRoots = new Dictionary<Integer,
                 List<Number>> { { Number.One, new List<Number> { Number.One } },
-                { new Integer(2), new List<Number> { Number.One, -Number.One } } };
+                { Number.Two, new List<Number> { Number.One, -Number.One } } };
             public static List<Number> GetNthRoots(Integer n)
             {
                 if (NthRoots.ContainsKey(n))
                     return NthRoots[n];
                 List<Number> nthRoots = new List<Number>();
-                Integer two = new Integer(2);
                 Division<Integer> division;
-                Integer half = n.EuclideanDivideBy(two).Quotient;
+                Integer half = n.EuclideanDivideBy(Number.Two).Quotient;
                 foreach (Integer prime in Primes())
                 {
                     if (prime > half)
@@ -3822,7 +4041,7 @@ namespace Solver
                 }
                 Integer nMinusOne = n - Number.One;
                 Integer unfactoredComponent = nMinusOne;
-                half = unfactoredComponent.EuclideanDivideBy(two).Quotient;
+                half = unfactoredComponent.EuclideanDivideBy(Number.Two).Quotient;
                 List<Integer> factors = new List<Integer>();
                 foreach (Integer prime in Primes())
                 {
@@ -3839,7 +4058,7 @@ namespace Solver
                             unfactoredComponent = division.Quotient;
                             division = unfactoredComponent.EuclideanDivideBy(prime);
                         }
-                        half = unfactoredComponent.EuclideanDivideBy(two).Quotient;
+                        half = unfactoredComponent.EuclideanDivideBy(Number.Two).Quotient;
                     }
                 }
                 factors.Add(unfactoredComponent);
@@ -3934,20 +4153,20 @@ namespace Solver
             public InvalidUserInput(string message) : base(message)
             { }
         }
-        static List<Integer> PrimeList = new List<Integer> { new Integer(2), new Integer(3) };
+        static List<Integer> PrimeList = new List<Integer> { Number.Two, new Integer(3) };
         static IEnumerable<Integer> Primes()
         {
-            Integer two = new Integer(2);
             int i = 0;
             while (true)
             {
                 if (i == PrimeList.Count)
                 {
-                    Integer primeCandidate = PrimeList[PrimeList.Count - 1] + two;
+                    Integer primeCandidate = PrimeList[PrimeList.Count - 1] + Number.Two;
                     while (true)
                     {
                         bool isDivisible = false;
-                        Integer halfCandidate = primeCandidate.EuclideanDivideBy(two).Quotient;
+                        Integer halfCandidate =
+                            primeCandidate.EuclideanDivideBy(Number.Two).Quotient;
                         for (int j = 0; PrimeList[j] <= halfCandidate; ++j)
                             if (primeCandidate.EuclideanDivideBy(
                                 PrimeList[j]).Remainder == Number.Zero)
@@ -3957,7 +4176,7 @@ namespace Solver
                             }
                         if (!isDivisible)
                             break;
-                        primeCandidate += two;
+                        primeCandidate += Number.Two;
                     }
                     PrimeList.Add(primeCandidate);
                 }
@@ -3989,10 +4208,9 @@ namespace Solver
         {
             T output = expBase.GetMultiplicativeIdentity();
             T baseToAPowerOfTwo = expBase;
-            Integer two = new Integer(2);
             while (exponent > Number.Zero)
             {
-                Division<Integer> division = exponent.EuclideanDivideBy(two);
+                Division<Integer> division = exponent.EuclideanDivideBy(Number.Two);
                 if (division.Remainder == Number.One)
                     output = output.Times(baseToAPowerOfTwo);
                 baseToAPowerOfTwo = baseToAPowerOfTwo.Times(baseToAPowerOfTwo);
