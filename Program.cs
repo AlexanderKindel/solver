@@ -2472,11 +2472,11 @@ namespace Solver
                 if (divisor.Coefficients.Count <= Coefficients.Count)
                     for (int i = 0; i <= Coefficients.Count - divisor.Coefficients.Count; ++i)
                     {
-                        Number quotientCoefficient = remainder[remainder.Count - 1] /
+                        Rational quotientCoefficient = remainder[remainder.Count - 1] /
                             divisor.Coefficients[divisor.Coefficients.Count - 1];
-                        if (quotientCoefficient is Integer integer)
+                        if (quotientCoefficient.Denominator == Number.One)
                         {
-                            quotient.Insert(0, integer);
+                            quotient.Insert(0, quotientCoefficient.Numerator);
                             remainder.RemoveAt(remainder.Count - 1);
                             for (int j = 1; j < divisor.Coefficients.Count; ++j)
                                 remainder[remainder.Count - j] -= quotient[0] *
@@ -2523,10 +2523,15 @@ namespace Solver
                 return a.EuclideanDivideBy(b).Quotient;
             }
             public static IntegerPolynomial operator /(IntegerPolynomial a, Integer b)
-            {//Assumes exact integer divisions. 
+            {
                 List<Integer> quotientCoefficients = new List<Integer>();
                 foreach (Integer coefficient in a.Coefficients)
-                    quotientCoefficients.Add(coefficient.EuclideanDivideBy(b).Quotient);
+                {
+                    Division<Integer> division = coefficient.EuclideanDivideBy(b);
+                    Debug.Assert(division.Remainder == Number.Zero,
+                        "An element of a.Coefficients was not divisible by b.");
+                    quotientCoefficients.Add(division.Quotient);
+                }
                 return new IntegerPolynomial(a.MinimalPolynomial, quotientCoefficients);
             }
             public static IntegerPolynomial operator %(IntegerPolynomial a, IntegerPolynomial b)
@@ -2566,17 +2571,21 @@ namespace Solver
                 Integer g = Number.One;
                 Integer h = Number.One;
                 Integer degree = new Integer(a.Coefficients.Count - b.Coefficients.Count);
-                IntegerPolynomial remainder = (a * Exponentiate(b.Coefficients[
-                    b.Coefficients.Count - 1], degree + Number.One)).EuclideanDivideBy(b).Remainder;
+                IntegerPolynomial remainder = (a * Exponentiate(
+                    b.Coefficients[b.Coefficients.Count - 1], degree + Number.One)) % b;
                 while (remainder.Coefficients.Count > 1)
                 {
                     a = b;
-                    b = remainder / Exponentiate(g * h, degree);
+                    b = remainder / (g * Exponentiate(h, degree));
                     g = a.Coefficients[a.Coefficients.Count - 1];
-                    h = Exponentiate(h, Number.One - degree) * Exponentiate(g, degree);
+                    Integer hExponent = Number.One - degree;
+                    if (hExponent >= Number.Zero)
+                        h = Exponentiate(h, hExponent) * Exponentiate(g, degree);
+                    else
+                        h = (Exponentiate(g, degree) / Exponentiate(h, -hExponent)).Numerator;
                     degree = new Integer(a.Coefficients.Count - b.Coefficients.Count);
                     remainder = (a * Exponentiate(b.Coefficients[b.Coefficients.Count - 1],
-                        degree + Number.One)).EuclideanDivideBy(b).Remainder;
+                        degree + Number.One)) % b;
                 }
                 if (remainder.Coefficients.Count == 1)
                     return new IntegerPolynomial(a.MinimalPolynomial, d);
@@ -2825,13 +2834,29 @@ namespace Solver
                     Coefficients.RemoveAt(Coefficients.Count - 1);
                 Characteristic = characteristic;
             }
+            public ModdedPolynomial(Integer characteristic, params Integer[] coefficients)
+            {
+                Coefficients = new List<Integer>();
+                foreach (Integer coefficient in coefficients)
+                {
+                    Integer remainder = coefficient.EuclideanDivideBy(characteristic).Remainder;
+                    if (remainder < Number.Zero)
+                        Coefficients.Add(remainder + characteristic);
+                    else
+                        Coefficients.Add(remainder);
+                }
+                while (Coefficients.Count != 0 &&
+                    Coefficients[Coefficients.Count - 1] == Number.Zero)
+                    Coefficients.RemoveAt(Coefficients.Count - 1);
+                Characteristic = characteristic;
+            }
             public ModdedPolynomial GetAdditiveIdentity()
             {
-                return new ModdedPolynomial(new List<Integer>(), Characteristic);
+                return new ModdedPolynomial(Characteristic);
             }
             public ModdedPolynomial GetMultiplicativeIdentity()
             {
-                return new ModdedPolynomial(new List<Integer> { Number.One }, Characteristic);
+                return new ModdedPolynomial(Characteristic, Number.One);
             }
             public ModdedPolynomial GetNegative()
             {
@@ -2866,8 +2891,8 @@ namespace Solver
                             divisor.Coefficients.Count - 1].Reciprocal(Characteristic));
                         remainder.RemoveAt(remainder.Count - 1);
                         for (int j = 1; j < divisor.Coefficients.Count; ++j)
-                            remainder[remainder.Count - j] -=
-                                quotient[0] * divisor.Coefficients[divisor.Coefficients.Count - j - 1];
+                            remainder[remainder.Count - j] -= quotient[0] *
+                                divisor.Coefficients[divisor.Coefficients.Count - j - 1];
                     }
                 division.Quotient = new ModdedPolynomial(quotient, Characteristic);
                 division.Remainder = new ModdedPolynomial(remainder, Characteristic);
@@ -2896,7 +2921,7 @@ namespace Solver
             }
             public static ModdedPolynomial operator *(ModdedPolynomial a, Integer b)
             {
-                return a.Times(new ModdedPolynomial(new List<Integer> { b }, a.Characteristic));
+                return a.Times(new ModdedPolynomial(a.Characteristic, b));
             }
             public static ModdedPolynomial operator *(Integer a, ModdedPolynomial b)
             {
@@ -2922,15 +2947,14 @@ namespace Solver
                 Dictionary<int, ModdedPolynomial> distinctDegreeFactors =
                     new Dictionary<int, ModdedPolynomial>();
                 ModdedPolynomial V = this;
-                ModdedPolynomial W = new ModdedPolynomial(
-                    new List<Integer> { Number.Zero, Number.One }, Characteristic);
+                ModdedPolynomial W = new ModdedPolynomial(Characteristic, Number.Zero, Number.One);
                 int d = 0;
                 while (d < (Coefficients.Count + 1) / 2)
                 {
                     ++d;
                     W = Exponentiate(W, Characteristic) % this;
-                    ModdedPolynomial degreeDFactorProduct = GetGCD(W - new ModdedPolynomial(
-                        new List<Integer> { Number.Zero, Number.One }, Characteristic), V);
+                    ModdedPolynomial degreeDFactorProduct = GetGCD(W -
+                        new ModdedPolynomial(Characteristic, Number.Zero, Number.One), V);
                     if (degreeDFactorProduct.Coefficients.Count > 1)
                     {
                         distinctDegreeFactors.Add(d, degreeDFactorProduct);
@@ -2950,8 +2974,8 @@ namespace Solver
                     ModdedPolynomial B;
                     if (Characteristic == Number.Two)
                     {
-                        ModdedPolynomial T = new ModdedPolynomial(
-                            new List<Integer> { Number.Zero, Number.One }, Characteristic);
+                        ModdedPolynomial T =
+                            new ModdedPolynomial(Characteristic, Number.Zero, Number.One);
                         ModdedPolynomial C =
                             new ModdedPolynomial(new List<Integer>(T.Coefficients), Characteristic);
                         for (int j = 1; j < degree; ++j)
@@ -2960,8 +2984,8 @@ namespace Solver
                         while (B.Coefficients.Count < 2 ||
                             B.Coefficients.Count == factorProduct.Coefficients.Count)
                         {
-                            T *= new ModdedPolynomial(new List<Integer> {
-                                Number.Zero, Number.Zero, Number.One }, Characteristic);
+                            T *= new ModdedPolynomial(Characteristic, Number.Zero, Number.Zero,
+                                Number.One);
                             C = new ModdedPolynomial(new List<Integer>(T.Coefficients),
                                 Characteristic);
                             for (int j = 1; j < degree; ++j)
@@ -3097,8 +3121,8 @@ namespace Solver
                             divisor.Coefficients[divisor.Coefficients.Count - 1]);
                         remainder.RemoveAt(remainder.Count - 1);
                         for (int j = 1; j < divisor.Coefficients.Count; ++j)
-                            remainder[remainder.Count - j] -=
-                                quotient[0] * divisor.Coefficients[divisor.Coefficients.Count - j - 1];
+                            remainder[remainder.Count - j] -= quotient[0] *
+                                divisor.Coefficients[divisor.Coefficients.Count - j - 1];
                     }
                 division.Quotient = new RationalPolynomial(quotient, MinimalPolynomial);
                 division.Remainder = new RationalPolynomial(remainder, MinimalPolynomial);
@@ -3505,6 +3529,7 @@ namespace Solver
                     a = b;
                     b = c;
                 }
+                Integer hExponent;
                 while (b.Coefficients.Count > 1)
                 {
                     Integer degree = new Integer(a.Coefficients.Count - b.Coefficients.Count);
@@ -3515,11 +3540,18 @@ namespace Solver
                     a = b;
                     b = remainder / (g * Exponentiate(h, degree));
                     g = a.Coefficients[a.Coefficients.Count - 1];
-                    h = Exponentiate(h, Number.One - degree) * Exponentiate(g, degree);
+                    hExponent = Number.One - degree;
+                    if (hExponent >= Number.Zero)
+                        h = Exponentiate(h, hExponent) * Exponentiate(g, degree);
+                    else
+                        h = Exponentiate(g, degree) / Exponentiate(h, -hExponent);
                 }
-                return s * t * Exponentiate(h, new Integer(2 - a.Coefficients.Count)) *
-                    Exponentiate(b.Coefficients[b.Coefficients.Count - 1],
-                    new Integer(a.Coefficients.Count - 1));
+                hExponent = new Integer(2 - a.Coefficients.Count);
+                if (hExponent >= Number.Zero)
+                    return s * t * Exponentiate(h, hExponent) * Exponentiate(b.Coefficients[
+                        b.Coefficients.Count - 1], new Integer(a.Coefficients.Count - 1));
+                return s * t * Exponentiate(b.Coefficients[b.Coefficients.Count - 1],
+                    new Integer(a.Coefficients.Count - 1)) / Exponentiate(h, -hExponent);
             }
             static NestedPolynomial GetGCD(NestedPolynomial a, NestedPolynomial b)
             {
@@ -3547,9 +3579,13 @@ namespace Solver
                 while (remainder.Coefficients.Count > 1)
                 {
                     a = b;
-                    b = remainder / Exponentiate(g.Times(h), degree);
+                    b = remainder / (g * Exponentiate(h, degree));
                     g = a.Coefficients[a.Coefficients.Count - 1];
-                    h = Exponentiate(h, Number.One - degree) * Exponentiate(g, degree);
+                    Integer hExponent = Number.One - degree;
+                    if (hExponent >= Number.Zero)
+                        h = Exponentiate(h, hExponent) * Exponentiate(g, degree);
+                    else
+                        h = Exponentiate(g, degree) / Exponentiate(h, -hExponent);
                     degree = new Integer(a.Coefficients.Count - b.Coefficients.Count);
                     remainder = a.Times(Exponentiate(b.Coefficients[b.Coefficients.Count - 1],
                         degree + Number.One)) % b;
@@ -4071,8 +4107,8 @@ namespace Solver
                             new List<List<Number>> { GetNthRoots(prime),
                         GetNthRoots(division.Quotient) });
                         foreach (List<Number> combination in rootCombinations)
-                            nthRoots.Add(combination[0] *
-                                combination[1].Exponentiate(new Fraction(Number.One, prime), false));
+                            nthRoots.Add(combination[0] * combination[1].Exponentiate(
+                                new Fraction(Number.One, prime), false));
                         NthRoots.Add(n, nthRoots);
                         return nthRoots;
                     }
@@ -4271,6 +4307,8 @@ namespace Solver
         }
         static T Exponentiate<T>(T expBase, Integer exponent) where T : IRingElement<T>
         {
+            Debug.Assert(exponent >= Number.Zero,
+                "exponent was negative, which this algorithm doesn't account for.");
             T output = expBase.GetMultiplicativeIdentity();
             T baseToAPowerOfTwo = expBase;
             while (exponent > Number.Zero)
