@@ -47,6 +47,7 @@ namespace Solver
         }
         delegate Interval<Float> PartGetter(Primitive a);
         delegate void PartRefiner(Primitive a, Rational errorIntervalSize);
+        delegate T Multiplier<T>(T a, T b);
         interface IMultipliable<S, T>
         {
             S Times(T n);
@@ -212,7 +213,7 @@ namespace Solver
                 Rational errorIntervalSize)
             {
                 throw new NotImplementedException("Any derived class that doesn't override " +
-                    "GetRationalImaginaryEstimate should override" +
+                    "GetRationalImaginaryEstimate should override " +
                     "RefineImaginaryPartErrorInterval.");
             }
             public virtual void RefineRealPartErrorInterval(Rational errorIntervalSize)
@@ -296,7 +297,7 @@ namespace Solver
             {
                 return new Division<Number>(this / a, Zero);
             }
-            public abstract Number Exponentiate(Rational exponent, bool extractRootOfUnity = true);
+            public abstract Number Exponentiate(Rational exponent, bool extractRootOfUnity);
             protected abstract int GetTypeIndex();
             public virtual int CompareTo(object obj)
             {//Uses a cheap lexicographic scheme that is guaranteed to detect numerical equality for
@@ -1033,7 +1034,7 @@ namespace Solver
                 if (this == Zero)
                     return Zero;
                 if (exponent.Numerator < Zero)
-                    return Reciprocal().Exponentiate(-exponent);
+                    return Reciprocal().Exponentiate(-exponent, extractRootOfUnity);
                 Integer power = Solver.Exponentiate(this, exponent.Numerator);
                 if (exponent.Denominator == One)
                     return power;
@@ -1290,10 +1291,10 @@ namespace Solver
                         Denominator * fraction.Denominator);
                 return a * this;
             }
-            public override Number Exponentiate(Rational exponent, bool extractRootOfUnity = true)
+            public override Number Exponentiate(Rational exponent, bool extractRootOfUnity)
             {
                 return (Numerator * Denominator.Exponentiate(exponent.Denominator - One,
-                    extractRootOfUnity)).Exponentiate(exponent) /
+                    extractRootOfUnity)).Exponentiate(exponent, extractRootOfUnity) /
                     Denominator.Exponentiate(exponent.Numerator, extractRootOfUnity);
             }
             protected override int GetTypeIndex()
@@ -1397,7 +1398,7 @@ namespace Solver
             }
             public override Number Reciprocal()
             {
-                return Radicand.Exponentiate(new Fraction(Index - One, Index)) /
+                return Radicand.Exponentiate(new Fraction(Index - One, Index), true) /
                     (Coefficient * Radicand);
             }
             public override Rational RationalFactor()
@@ -1420,9 +1421,9 @@ namespace Solver
                 {
                     ExtendedGCDInfo<Integer> GCDInfo = ExtendedGCD(Index, surd.Index);
                     Number product = Coefficient * surd.Coefficient * (Radicand.Exponentiate(
-                        GCDInfo.BOverGCD.Magnitude()) * surd.Radicand.Exponentiate(
-                        GCDInfo.AOverGCD.Magnitude())).Exponentiate(One / ((Index * surd.Index) /
-                        GCDInfo.GCD).Numerator);
+                        GCDInfo.BOverGCD.Magnitude(), true) * surd.Radicand.Exponentiate(
+                        GCDInfo.AOverGCD.Magnitude(), true)).Exponentiate(
+                        One / ((Index * surd.Index) / GCDInfo.GCD).Numerator, true);
                     Rational errorIntervalSize = Pi.LowEstimate / Index;
                     product.RefineArgumentErrorInterval(errorIntervalSize);
                     errorIntervalSize /= new Integer(4) * Pi.HighEstimate;
@@ -1435,7 +1436,7 @@ namespace Solver
                 }
                 return a * this;
             }
-            public override Number Exponentiate(Rational exponent, bool extractRootOfUnity = true)
+            public override Number Exponentiate(Rational exponent, bool extractRootOfUnity)
             {
                 return Coefficient.Exponentiate(exponent, extractRootOfUnity) *
                     Radicand.Exponentiate(exponent / Index, extractRootOfUnity);
@@ -1905,7 +1906,7 @@ namespace Solver
             {
                 if (exponent.Numerator != One)
                     return Exponentiate<Number>(this, exponent.Numerator).Exponentiate(
-                        One / exponent.Denominator);
+                        One / exponent.Denominator, true);
                 Rational rationalFactor = RationalFactor();
                 return rationalFactor.Exponentiate(exponent, extractRootOfUnity) *
                     new Surd(One, this / rationalFactor, exponent.Denominator);
@@ -1967,13 +1968,13 @@ namespace Solver
                 Interval<Float> realPartInterval = GetMagnitudeInterval(RealPartEstimate);
                 Interval<Float> imaginaryPartInterval = GetMagnitudeInterval(ImaginaryPartEstimate);
                 Fraction half = new Fraction(One, Two);
-                Number magnitudeUnderestimate =
-                    ((Rational)(realPartInterval.Min * realPartInterval.Min +
-                    imaginaryPartInterval.Min * imaginaryPartInterval.Min)).Exponentiate(half);
+                Number magnitudeUnderestimate = ((Rational)(realPartInterval.Min *
+                    realPartInterval.Min + imaginaryPartInterval.Min *
+                    imaginaryPartInterval.Min)).Exponentiate(half, true);
                 magnitudeUnderestimate.RefineRealPartErrorInterval(errorIntervalSize);
-                Number magnitudeOverestimate =
-                    ((Rational)(realPartInterval.Max * realPartInterval.Max +
-                    imaginaryPartInterval.Max * imaginaryPartInterval.Max)).Exponentiate(half);
+                Number magnitudeOverestimate = ((Rational)(realPartInterval.Max *
+                    realPartInterval.Max + imaginaryPartInterval.Max *
+                    imaginaryPartInterval.Max)).Exponentiate(half, true);
                 magnitudeOverestimate.RefineRealPartErrorInterval(errorIntervalSize);
                 MagnitudeEstimate = new Interval<Float>(magnitudeUnderestimate.RealPartEstimate.Min,
                     magnitudeOverestimate.RealPartEstimate.Max);
@@ -2613,9 +2614,12 @@ namespace Solver
                     foreach (Integer prime in Primes())
                     {
                         moddedFactor = new ModdedPolynomial(factor.Coefficients, prime);
-                        GCD = Solver.GetGCD(moddedFactor, moddedFactor.GetDerivative());
-                        if (GCD.Coefficients.Count == 1)
-                            break;
+                        if (moddedFactor.Coefficients.Count == factor.Coefficients.Count)
+                        {
+                            GCD = Solver.GetGCD(moddedFactor, moddedFactor.GetDerivative());
+                            if (GCD.Coefficients.Count == 1)
+                                break;
+                        }
                     }
                     moddedFactor *= moddedFactor.Coefficients[
                         moddedFactor.Coefficients.Count - 1].Reciprocal(
@@ -3002,9 +3006,15 @@ namespace Solver
                         coefficients.Add(Number.One);
                         Integer power = ((Exponentiate(Characteristic,
                             new Integer(degree)) - Number.One) / Number.Two).Numerator;
-                        B = GetGCD(factorProduct, Exponentiate(new ModdedPolynomial(
-                            new List<Integer>(coefficients), Characteristic), power) -
-                            GetMultiplicativeIdentity());
+                        ModdedPolynomial one = factorProduct.GetMultiplicativeIdentity();
+                        ModdedPolynomial exponentiate()
+                        {
+                            return Exponentiate(new ModdedPolynomial(
+                                new List<Integer>(coefficients), Characteristic), power,
+                                delegate (ModdedPolynomial a, ModdedPolynomial b)
+                                { return (a * b) % factorProduct; }, one);
+                        }
+                        B = GetGCD(factorProduct, exponentiate() - one);
                         while (B.Coefficients.Count < 2 ||
                             B.Coefficients.Count == factorProduct.Coefficients.Count)
                         {
@@ -3015,9 +3025,7 @@ namespace Solver
                                 --j;
                             }
                             --coefficients[j];
-                            B = GetGCD(factorProduct, Exponentiate(new ModdedPolynomial(
-                                new List<Integer>(coefficients), Characteristic), power) -
-                                GetMultiplicativeIdentity());
+                            B = GetGCD(factorProduct, exponentiate() - one);
                         }
                     }
                     CZSplit(B, degree);
@@ -4069,7 +4077,7 @@ namespace Solver
                     Number.One / (EightK + new Integer(5)) -
                     Number.One / (EightK + new Integer(6))) / SixteenToTheK;
                 Integer sixteen = new Integer(16);
-                ErrorIntervalSize = ErrorIntervalSize / new Integer(16);
+                ErrorIntervalSize = ErrorIntervalSize / sixteen;
                 SixteenToTheK *= sixteen;
                 EightK += new Integer(8);
             }
@@ -4305,21 +4313,27 @@ namespace Solver
             generateElements(0, new List<T>());
             return elements;
         }
-        static T Exponentiate<T>(T expBase, Integer exponent) where T : IRingElement<T>
+        static T Exponentiate<T>(T expBase, Integer exponent, Multiplier<T> multiply,
+            T multiplicativeIdentity)
         {
             Debug.Assert(exponent >= Number.Zero,
                 "exponent was negative, which this algorithm doesn't account for.");
-            T output = expBase.GetMultiplicativeIdentity();
+            T output = multiplicativeIdentity;
             T baseToAPowerOfTwo = expBase;
             while (exponent > Number.Zero)
             {
                 Division<Integer> division = exponent.EuclideanDivideBy(Number.Two);
                 if (division.Remainder == Number.One)
-                    output = output.Times(baseToAPowerOfTwo);
-                baseToAPowerOfTwo = baseToAPowerOfTwo.Times(baseToAPowerOfTwo);
+                    output = multiply(output, baseToAPowerOfTwo);
+                baseToAPowerOfTwo = multiply(baseToAPowerOfTwo, baseToAPowerOfTwo);
                 exponent = division.Quotient;
             }
             return output;
+        }
+        static T Exponentiate<T>(T expBase, Integer exponent) where T : IRingElement<T>
+        {
+            return Exponentiate(expBase, exponent, delegate (T a, T b) { return a.Times(b); },
+                expBase.GetMultiplicativeIdentity());
         }
         static T GetGCD<T>(T a, T b) where T : IArithmetic<T>
         {
@@ -4445,7 +4459,7 @@ namespace Solver
                         if (operations[i] == '^')
                         {
                             if (numbers[i + 1] is Rational exponent)
-                                numbers[i - 1] = numbers[i - 1].Exponentiate(exponent);
+                                numbers[i - 1] = numbers[i - 1].Exponentiate(exponent, true);
                             else
                                 throw new InvalidUserInput("The input expression contains an " +
                                     "exponentiation\nwhose exponent is not both real and " +
