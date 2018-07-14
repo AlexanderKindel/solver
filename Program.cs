@@ -841,10 +841,11 @@ namespace Solver
             }
             public Integer Reciprocal(Integer characteristic)
             {
-                Integer reciprocal = Two;
-                while ((this * reciprocal).EuclideanDivideBy(characteristic).Remainder != One)
-                    ++reciprocal;
-                return reciprocal;
+                Integer inverse = ExtendedGCD(this, characteristic).ACoefficient;
+                if (inverse < Zero)
+                    inverse += characteristic;
+                Debug.Assert((this * inverse).EuclideanDivideBy(characteristic).Remainder == One);
+                return inverse;
             }
             public Integer Plus(Integer a)
             {
@@ -2503,6 +2504,10 @@ namespace Solver
                         return false;
                 return true;
             }
+            public static IntegerPolynomial operator +(IntegerPolynomial a, IntegerPolynomial b)
+            {
+                return a.Plus(b);
+            }
             public static IntegerPolynomial operator -(IntegerPolynomial a, IntegerPolynomial b)
             {
                 return a.Minus(b);
@@ -2647,53 +2652,49 @@ namespace Solver
                     }
                     List<IntegerPolynomial> liftedFactors = new List<IntegerPolynomial>();
                     ModdedPolynomial productOfUnliftedFactors =
-                        new ModdedPolynomial(factor.Coefficients, moddedFactor.Characteristic);
-                    IntegerPolynomial liftedB = factor;
+                        new ModdedPolynomial(factor.Coefficients, moddedFactor.Characteristic) *
+                        factor.Coefficients[factor.Coefficients.Count - 1].Reciprocal(
+                        moddedFactor.Characteristic);
+                    IntegerPolynomial unmoddedATimesB = factor;
+                    irreducibleModdedFactors.RemoveAt(irreducibleModdedFactors.Count - 1);
                     foreach (ModdedPolynomial irreducibleModdedFactor in irreducibleModdedFactors)
                     {
                         productOfUnliftedFactors /= irreducibleModdedFactor;
-                        Integer characteristicExponent = Number.One;
-                        Integer characteristicToPower = moddedFactor.Characteristic;
-                        ModdedPolynomial A = irreducibleModdedFactor;
-                        ModdedPolynomial B = productOfUnliftedFactors;
-                        while (characteristicExponent < e)
+                        Integer liftCharacteristic = moddedFactor.Characteristic;
+                        IntegerPolynomial A =
+                            new IntegerPolynomial(null, irreducibleModdedFactor.Coefficients);
+                        IntegerPolynomial B =
+                            new IntegerPolynomial(null, productOfUnliftedFactors.Coefficients);
+                        while (liftCharacteristic < characteristicPower)
                         {
-                            ExtendedGCDInfo<ModdedPolynomial> extendedGCD = ExtendedGCD(A, B);
+                            ModdedPolynomial AModCharacteristic =
+                                new ModdedPolynomial(A.Coefficients, moddedFactor.Characteristic);
+                            ModdedPolynomial BModCharacteristic =
+                                new ModdedPolynomial(B.Coefficients, moddedFactor.Characteristic);
+                            ExtendedGCDInfo<ModdedPolynomial> extendedGCD =
+                                ExtendedGCD(AModCharacteristic, BModCharacteristic);
                             Integer reciprocal = extendedGCD.GCD.Coefficients[0].Reciprocal(
                                 moddedFactor.Characteristic);
                             extendedGCD.ACoefficient *= reciprocal;
                             extendedGCD.BCoefficient *= reciprocal;
-                            IntegerPolynomial integerA =
-                                new IntegerPolynomial(null, A.Coefficients);
-                            IntegerPolynomial integerB =
-                                new IntegerPolynomial(null, B.Coefficients);
-                            List<Integer> fCoefficients =
-                                (liftedB - integerA * integerB).Coefficients;
-                            for (int j = 0; j < fCoefficients.Count; ++j)
-                                fCoefficients[j] = fCoefficients[j].EuclideanDivideBy(
-                                    characteristicToPower).Quotient;
-                            ModdedPolynomial f =
-                                new ModdedPolynomial(fCoefficients, moddedFactor.Characteristic);
-                            Division<ModdedPolynomial> division =
-                                (extendedGCD.BCoefficient * f).EuclideanDivideBy(A);
-                            ModdedPolynomial T =
-                                extendedGCD.ACoefficient * f + B * division.Quotient;
-                            List<Integer> ALiftCoefficients =
-                                (new IntegerPolynomial(null, division.Remainder.Coefficients) *
-                                characteristicToPower).Coefficients;
-                            List<Integer> BLiftCoefficients = (new IntegerPolynomial(null,
-                                T.Coefficients) * characteristicToPower).Coefficients;
-                            ++characteristicExponent;
-                            characteristicToPower *= moddedFactor.Characteristic;
-                            A = new ModdedPolynomial(CoefficientAdd(A.Coefficients,
-                                ALiftCoefficients), characteristicToPower);
-                            B = new ModdedPolynomial(CoefficientAdd(B.Coefficients,
-                                BLiftCoefficients), characteristicToPower);
+                            ModdedPolynomial f = new ModdedPolynomial(((unmoddedATimesB - A * B) /
+                                liftCharacteristic).Coefficients, moddedFactor.Characteristic);
+                            Division<ModdedPolynomial> division = (extendedGCD.BCoefficient *
+                                f).EuclideanDivideBy(AModCharacteristic);
+                            A += liftCharacteristic *
+                                new IntegerPolynomial(null, division.Remainder.Coefficients);
+                            B += liftCharacteristic *
+                                new IntegerPolynomial(null, (extendedGCD.ACoefficient * f +
+                                BModCharacteristic * division.Quotient).Coefficients);
+                            liftCharacteristic *= moddedFactor.Characteristic;
                         }
-                        liftedFactors.Add(new IntegerPolynomial(null, A.Coefficients));
-                        liftedB = new IntegerPolynomial(null, B.Coefficients);
+                        liftedFactors.Add(A);
+                        unmoddedATimesB = B;
                     }
-                    liftedFactors.Add(liftedB);
+                    liftedFactors.Add(new IntegerPolynomial(null, (new ModdedPolynomial(
+                        unmoddedATimesB.Coefficients, characteristicPower) *
+                        unmoddedATimesB.Coefficients[unmoddedATimesB.Coefficients.Count - 1].
+                        Reciprocal(characteristicPower)).Coefficients));
                     List<IntegerPolynomial> factorSplit = new List<IntegerPolynomial>();
                     int d = 1;
                     void BoundCoefficients(IntegerPolynomial polynomial)
@@ -2708,13 +2709,15 @@ namespace Solver
                                 polynomial.Coefficients[i] = remainder - characteristicPower;
                         }
                     }
+                    IntegerPolynomial factorTimesLeadingCoefficient =
+                        factor * factor.Coefficients[factor.Coefficients.Count - 1];
                     List<int> testFactorCombination(int elementsToAdd,
                         int indexOfPreviousElement, List<int> combinationIndices)
                     {
                         if (elementsToAdd == 0)
                         {
                             List<int> finalizedCombinationIndices;
-                            IntegerPolynomial V = new IntegerPolynomial(null,
+                            IntegerPolynomial v = new IntegerPolynomial(null,
                                 factor.Coefficients[factor.Coefficients.Count - 1]);
                             if (2 * combinationIndices.Count >= Coefficients.Count)
                             {
@@ -2728,23 +2731,26 @@ namespace Solver
                             else
                                 finalizedCombinationIndices = combinationIndices;
                             foreach (int index in finalizedCombinationIndices)
-                                V *= liftedFactors[index];
-                            BoundCoefficients(V);
-                            Division<IntegerPolynomial> division = factor.EuclideanDivideBy(V);
-                            if (division.Remainder.Coefficients.Count == 0)
+                                v *= liftedFactors[index];
+                            BoundCoefficients(v);
+                            Division<IntegerPolynomial> division =
+                                factorTimesLeadingCoefficient.EuclideanDivideBy(v);
+                            if (division.Remainder != null &&
+                                division.Remainder.Coefficients.Count == 0) 
                             {
-                                while (division.Remainder.Coefficients.Count == 0)
+                                while (division.Remainder != null &&
+                                    division.Remainder.Coefficients.Count == 0)
                                 {
                                     factor = division.Quotient;
-                                    division = factor.EuclideanDivideBy(V);
+                                    division = factor.EuclideanDivideBy(v);
                                 }
-                                factorSplit.Add(V.GetPrimitivePart());
+                                factorSplit.Add(v.GetPrimitivePart());
                                 return finalizedCombinationIndices;
                             }
                             return new List<int>();
                         }
                         for (int i = indexOfPreviousElement + 1;
-                            i < liftedFactors.Count - elementsToAdd; ++i)
+                            i <= liftedFactors.Count - elementsToAdd; ++i)
                         {
                             List<int> enlargedCombinationIndices =
                                 new List<int>(combinationIndices);
@@ -2774,7 +2780,8 @@ namespace Solver
                         foreach (int index in factorsToRemove)
                             liftedFactors.RemoveAt(index);
                     }
-                    IntegerPolynomial finalFactor = GetMultiplicativeIdentity();
+                    IntegerPolynomial finalFactor = new IntegerPolynomial(null,
+                        factor.Coefficients[factor.Coefficients.Count - 1]);
                     foreach (IntegerPolynomial liftedFactor in liftedFactors)
                         finalFactor *= liftedFactor;
                     if (finalFactor.Coefficients.Count > 1)
@@ -2871,6 +2878,8 @@ namespace Solver
             }
             public ModdedPolynomial Plus(ModdedPolynomial a)
             {
+                Debug.Assert(Characteristic == a.Characteristic,
+                    "Operation between ModdedPolynomials of unlike Characteristics.");
                 return new ModdedPolynomial(CoefficientAdd(Coefficients, a.Coefficients),
                     Characteristic);
             }
@@ -2880,11 +2889,15 @@ namespace Solver
             }
             public ModdedPolynomial Times(ModdedPolynomial a)
             {
+                Debug.Assert(Characteristic == a.Characteristic,
+                    "Operation between ModdedPolynomials of unlike Characteristics.");
                 return new ModdedPolynomial(CoefficientMultiply(Coefficients, a.Coefficients),
                     Characteristic);
             }
             public Division<ModdedPolynomial> EuclideanDivideBy(ModdedPolynomial divisor)
             {
+                Debug.Assert(Characteristic == divisor.Characteristic,
+                    "Operation between ModdedPolynomials of unlike Characteristics.");
                 Division<ModdedPolynomial> division;
                 List<Integer> quotient = new List<Integer>();
                 List<Integer> remainder = new List<Integer>(Coefficients);
@@ -2967,7 +2980,7 @@ namespace Solver
                     }
                 }
                 List<ModdedPolynomial> irreducibleFactors = new List<ModdedPolynomial>();
-                void CZSplit(ModdedPolynomial factorProduct, int degree)
+                void cantorZassenhausSplit(ModdedPolynomial factorProduct, int degree)
                 {
                     if ((factorProduct.Coefficients.Count - 1) / degree == 1)
                     {
@@ -3028,17 +3041,17 @@ namespace Solver
                             B = GetGCD(factorProduct, exponentiate() - one);
                         }
                     }
-                    CZSplit(B, degree);
-                    CZSplit(factorProduct / B, degree);
+                    cantorZassenhausSplit(B, degree);
+                    cantorZassenhausSplit(factorProduct / B, degree);
                 }
                 foreach (int degree in distinctDegreeFactors.Keys)
-                    CZSplit(distinctDegreeFactors[degree], degree);
+                    cantorZassenhausSplit(distinctDegreeFactors[degree], degree);
                 return irreducibleFactors;
             }
 #if DEBUG
             public override string ToString()
             {
-                return CoefficientsToString(Coefficients);
+                return CoefficientsToString(Coefficients) + " mod " + Characteristic.ToString();
             }
 #endif
         }
