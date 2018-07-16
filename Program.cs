@@ -844,7 +844,6 @@ namespace Solver
                 Integer inverse = ExtendedGCD(this, characteristic).ACoefficient;
                 if (inverse < Zero)
                     inverse += characteristic;
-                Debug.Assert((this * inverse).EuclideanDivideBy(characteristic).Remainder == One);
                 return inverse;
             }
             public Integer Plus(Integer a)
@@ -1547,35 +1546,23 @@ namespace Solver
                     (Rational)Coefficient.ArgumentEstimate.Max +
                     (Rational)Radicand.ArgumentEstimate.Max / Index);
             }
-            protected override Interval<Rational> GetRationalMagnitudeEstimate(
-                Rational errorIntervalSize)
+            public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
             {
-                Rational d = new Integer(3) * Coefficient.Magnitude();
+                Radicand.RefineMagnitudeErrorInterval(One);
+                if (Radicand.MagnitudeEstimate.Max <= Float.One)
+                    errorIntervalSize /= Coefficient.Magnitude() + Two;
+                else
+                    errorIntervalSize /=
+                        Coefficient.Magnitude() + (Rational)Radicand.MagnitudeEstimate.Max + One;
+                Coefficient.RefineMagnitudeErrorInterval(errorIntervalSize);
+                Integer three = new Integer(3);
                 Radicand.RefineMagnitudeErrorInterval(
-                    Solver.Exponentiate(errorIntervalSize, Index) / d);
-                errorIntervalSize /= d;
-                Integer indexMinusOne = Index - One;
-                Rational delta;
-                Rational overestimateRoot(Rational radicand)
-                {
-                    Rational root;
-                    if (radicand < One)
-                        root = One;
-                    else
-                        root = radicand;
-                    delta = (radicand / Solver.Exponentiate(root, indexMinusOne) - root) / Index;
-                    while (delta.Magnitude() > errorIntervalSize)
-                    {
-                        root += delta;
-                        delta =
-                            (radicand / Solver.Exponentiate(root, indexMinusOne) - root) / Index;
-                    }
-                    return root + delta;
-                }
-                Rational coefficientMagnitude = Coefficient.Magnitude();
-                return new Interval<Rational>(coefficientMagnitude * overestimateRoot(
-                    (Rational)Radicand.MagnitudeEstimate.Min) + delta, coefficientMagnitude *
-                    overestimateRoot((Rational)Radicand.MagnitudeEstimate.Max));
+                    Solver.Exponentiate(errorIntervalSize, Index) / three);
+                errorIntervalSize /= three;                
+                MagnitudeEstimate = new Interval<Float>(Coefficient.MagnitudeEstimate.Min *
+                    Radicand.MagnitudeEstimate.Min.EstimateRoot(errorIntervalSize, Index).Min,
+                    Coefficient.MagnitudeEstimate.Max *
+                    Radicand.MagnitudeEstimate.Max.EstimateRoot(errorIntervalSize, Index).Max);
             }
             public override string ToString()
             {
@@ -2631,12 +2618,14 @@ namespace Solver
                         moddedFactor.Characteristic);
                     List<ModdedPolynomial> irreducibleModdedFactors =
                         moddedFactor.GetFactorsOfSquarefree();
-                    Rational bound = Number.Zero;
+                    Integer bound = Number.Zero;
                     foreach (Integer coefficient in factor.Coefficients)
                         bound += coefficient * coefficient;
-                    Integer squareRoot = Number.One;
-                    while (squareRoot * squareRoot < bound)
-                        ++squareRoot;
+                    Float floatSquareRoot = new Float(bound, Number.Zero).EstimateRoot(
+                        Number.One, Number.Two).Max;
+                    Rational rationalRoot = (Rational)floatSquareRoot;
+                    Integer squareRoot = rationalRoot.Numerator.EuclideanDivideBy(
+                        rationalRoot.Denominator).Quotient + Number.One;
                     Integer factorDegreeMinusOne = new Integer(factor.Coefficients.Count - 2);
                     Integer k = factorDegreeMinusOne.EuclideanDivideBy(Number.Two).Quotient;
                     bound = (squareRoot * factorDegreeMinusOne.ThisChooseK(k) +
@@ -4060,6 +4049,31 @@ namespace Solver
                     placeValue /= Number.Two;
                 return placeValue / Number.Two;
             }
+            public Interval<Float> EstimateRoot(Rational errorIntervalSize, Integer index)
+            {
+                Debug.Assert(Significand >= Number.Zero,
+                    "*this was negative, which this algorithm doesn't account for.");
+                Float rootEstimate;
+                if (this < One)
+                    rootEstimate = One;
+                else
+                    rootEstimate = this;
+                Rational rationalRadicand = (Rational)this;
+                Integer indexMinusOne = index - Number.One;
+                Rational delta = (rationalRadicand / (Rational)Exponentiate(rootEstimate,
+                    indexMinusOne) - (Rational)rootEstimate) / index;
+                delta.RefineRealPartErrorInterval(-delta / Number.Two);
+                while ((Rational)delta.RealPartEstimate.Max - Number.Two * delta >
+                    errorIntervalSize)
+                {
+                    rootEstimate += delta.RealPartEstimate.Max;
+                    delta = (rationalRadicand / (Rational)Exponentiate(rootEstimate,
+                        indexMinusOne) - (Rational)rootEstimate) / index;
+                    delta.RefineRealPartErrorInterval(-delta / Number.Two);
+                }
+                rootEstimate += delta.RealPartEstimate.Max;
+                return new Interval<Float>(rootEstimate + delta.RealPartEstimate.Max, rootEstimate);
+            }
 #if DEBUG
             public override string ToString()
             {
@@ -4076,13 +4090,7 @@ namespace Solver
                 new Fraction(new Integer(1696), new Integer(12285));
             public static Rational LowEstimate { get; private set; } =
                 new Fraction(new Integer(47), new Integer(15));
-            public static Rational HighEstimate
-            {
-                get
-                {
-                    return LowEstimate + ErrorIntervalSize;
-                }
-            }
+            public static Rational HighEstimate { get => LowEstimate + ErrorIntervalSize; }
             public static void RefineErrorInterval()
             {
                 Integer four = new Integer(4);
