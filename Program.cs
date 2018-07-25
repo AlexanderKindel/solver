@@ -3212,63 +3212,142 @@ namespace Solver
             public RectangularEstimate EstimateEvaluation(Primitive argument,
                 Rational errorIntervalSize)
             {
-                Rational largestCoefficientMagnitude = Number.Zero;
-                foreach (Rational coefficient in Coefficients)
+                argument.RefineRealPartErrorInterval(Number.One);
+                argument.RefineImaginaryPartErrorInterval(Number.One);
+                Rational realErrorScale = Number.One;
+                Rational imaginaryErrorScale = Number.One;
+                Rational realMagnitudeBound =
+                    (Rational)GetMagnitudeInterval(argument.RealPartEstimate).Max;
+                Rational imaginaryMagnitudeBound =
+                    (Rational)GetMagnitudeInterval(argument.ImaginaryPartEstimate).Max;
+                Division<Integer> division =
+                    new Integer(Coefficients.Count - 1).EuclideanDivideBy(Number.Two);
+                Integer numberOfTermsInRealEvaluation =
+                    Number.One + division.Quotient * (new Integer(3) + division.Quotient);
+                Integer numberOfTermsInImaginaryEvaluation;
+                if (division.Remainder == Number.Zero)
                 {
-                    Rational coefficientMagnitude = coefficient.Magnitude();
-                    if (coefficientMagnitude > largestCoefficientMagnitude)
-                        largestCoefficientMagnitude = coefficientMagnitude;
+                    numberOfTermsInRealEvaluation -= division.Quotient + Number.One;
+                    numberOfTermsInImaginaryEvaluation =
+                        division.Quotient * (division.Quotient + Number.One);
                 }
-                errorIntervalSize /= largestCoefficientMagnitude;
-                Interval<Float> getPartEstimate(PartGetter getPart, PartRefiner refinePart)
+                else
                 {
-                    refinePart(argument, Number.One);
-                    Rational argumentPartScale;
-                    if (getPart(argument).Min < Float.Zero && Float.Zero < getPart(argument).Max)
-                        argumentPartScale =
-                            (Rational)(getPart(argument).Max - getPart(argument).Min);
-                    else
-                        argumentPartScale =
-                            Number.Two * (Rational)(getPart(argument).Max).Magnitude();
-                    Rational partScalePower = Number.One;
-                    Rational partErrorScale = Number.One;
-                    for (int i = 1; i < Coefficients.Count; ++i)
-                    {
-                        partScalePower *= argumentPartScale;
-                        partErrorScale += partScalePower;
-                    }
-                    Rational partErrorIntervalSize = errorIntervalSize / partErrorScale;
-                    partErrorIntervalSize = Float.GetEstimatePlaceValue(partErrorIntervalSize);
-                    refinePart(argument, partErrorIntervalSize);
-                    Rational partEstimateMin = Number.Zero;
-                    Rational partEstimateMax = Number.Zero;
-                    for (int i = 0; i < Coefficients.Count; ++i)
-                    {
-                        Integer termDegree = new Integer(i);
-                        Rational minExponentiation = Coefficients[i] *
-                            (Rational)Exponentiate(getPart(argument).Min, termDegree);
-                        Rational maxExponentiation = Coefficients[i] *
-                            (Rational)Exponentiate(getPart(argument).Max, termDegree);
-                        if (minExponentiation < maxExponentiation)
-                        {
-                            partEstimateMin += minExponentiation;
-                            partEstimateMax += maxExponentiation;
-                        }
-                        else
-                        {
-                            partEstimateMin += maxExponentiation;
-                            partEstimateMax += minExponentiation;
-                        }
-                    }
-                    refinePart(partEstimateMin, partErrorIntervalSize);
-                    refinePart(partEstimateMax, partErrorIntervalSize);
-                    return new Interval<Float>(getPart(partEstimateMin).Min,
-                        getPart(partEstimateMax).Max);
+                    Integer quotientCeiling = division.Quotient + Number.One;
+                    numberOfTermsInImaginaryEvaluation = quotientCeiling * quotientCeiling;
                 }
-                return new RectangularEstimate(getPartEstimate(Primitive.GetRealPartEstimate,
-                    Primitive.RefineRealPartErrorInterval),
-                    getPartEstimate(Primitive.GetImaginaryPartEstimate,
-                    Primitive.RefineImaginaryPartErrorInterval));
+                for (int i = 1; i < Coefficients.Count; ++i)
+                {                    
+                    Integer termDegree = new Integer(i);
+                    Rational coefficientMagnitude = Coefficients[i].Magnitude();
+                    Rational realMagnitudePower =
+                        Exponentiate(realMagnitudeBound, termDegree - Number.One);
+                    Rational realScaleCandidate = Number.Two * coefficientMagnitude *
+                        realMagnitudePower * numberOfTermsInRealEvaluation;
+                    if (realScaleCandidate > realErrorScale)
+                        realErrorScale = realScaleCandidate;
+                    Rational imaginaryMagnitudePower = Number.One;
+                    Rational imaginaryScaleCandidate;
+                    Integer activeTermCount = numberOfTermsInImaginaryEvaluation;
+                    Integer inactiveTermCount = numberOfTermsInRealEvaluation;
+                    for (Integer j = Number.One; j < termDegree; ++j)
+                    {
+                        Rational nextImaginaryMagnitudePower =
+                            imaginaryMagnitudePower * imaginaryMagnitudeBound;
+                        Rational sharedScaleComponent = Number.Two * activeTermCount *
+                            termDegree.ThisChooseK(j) * coefficientMagnitude *
+                            (Number.One + realMagnitudePower + nextImaginaryMagnitudePower);
+                        realMagnitudePower /= realMagnitudeBound;
+                        realScaleCandidate = sharedScaleComponent * realMagnitudePower;
+                        if (realScaleCandidate > realErrorScale)
+                            realErrorScale = realScaleCandidate;                        
+                        imaginaryScaleCandidate = sharedScaleComponent * imaginaryMagnitudePower;
+                        imaginaryMagnitudePower = nextImaginaryMagnitudePower;
+                        if (imaginaryScaleCandidate > imaginaryErrorScale)
+                            imaginaryErrorScale = imaginaryScaleCandidate;
+                        Integer temp = activeTermCount;
+                        activeTermCount = inactiveTermCount;
+                        inactiveTermCount = temp;
+                    }
+                    imaginaryScaleCandidate = Number.Two * coefficientMagnitude *
+                        imaginaryMagnitudePower * activeTermCount;
+                    if (imaginaryScaleCandidate > imaginaryErrorScale)
+                        imaginaryErrorScale = imaginaryScaleCandidate;
+                }
+                argument.RefineRealPartErrorInterval(errorIntervalSize / realErrorScale);
+                argument.RefineImaginaryPartErrorInterval(errorIntervalSize / imaginaryErrorScale);
+                Rational realEvaluationBoundA = Number.Zero;
+                Rational realEvaluationBoundB = Number.Zero;
+                Rational imaginaryEvaluationBoundA = Number.Zero;
+                Rational imaginaryEvaluationBoundB = Number.Zero;                
+                Rational realPartMin = (Rational)argument.RealPartEstimate.Min;
+                Rational realPartMax = (Rational)argument.RealPartEstimate.Max;
+                Rational imaginaryPartMin = (Rational)argument.ImaginaryPartEstimate.Min;
+                Rational imaginaryPartMax = (Rational)argument.ImaginaryPartEstimate.Max;                
+                for (int i = 0; i < Coefficients.Count; ++i)
+                {
+                    Integer termDegree = new Integer(i);
+                    Rational realPartMinPower = Exponentiate(realPartMin, termDegree);
+                    Rational realPartMaxPower = Exponentiate(realPartMax, termDegree);
+                    Rational imaginaryPartMinPower = Number.One;
+                    Rational imaginaryPartMaxPower = Number.One;
+                    for (int j = 0; j <= i; ++j)
+                    {
+                        Integer binomialCoefficient = termDegree.ThisChooseK(new Integer(j));
+                        Rational termBoundA = Coefficients[i] * binomialCoefficient *
+                            realPartMinPower * imaginaryPartMinPower;
+                        Rational termBoundB = Coefficients[i] * binomialCoefficient *
+                            realPartMaxPower * imaginaryPartMaxPower;
+                        int remainder = j % 4;
+                        switch (remainder)
+                        {
+                            case 0:
+                                realEvaluationBoundA += termBoundA;
+                                realEvaluationBoundB += termBoundB;
+                                break;
+                            case 1:
+                                imaginaryEvaluationBoundA += termBoundA;
+                                imaginaryEvaluationBoundB += termBoundB;
+                                break;
+                            case 2:
+                                realEvaluationBoundA -= termBoundA;
+                                realEvaluationBoundB -= termBoundB;
+                                break;
+                            case 3:
+                                imaginaryEvaluationBoundA -= termBoundA;
+                                imaginaryEvaluationBoundB -= termBoundB;
+                                break;
+                        }
+                        realPartMinPower /= realPartMin;
+                        realPartMaxPower /= realPartMax;
+                        imaginaryPartMinPower *= imaginaryPartMin;
+                        imaginaryPartMaxPower *= imaginaryPartMax;
+                    }
+                }
+                Rational placeValue = Float.GetEstimatePlaceValue(errorIntervalSize);
+                realEvaluationBoundA.RefineRealPartErrorInterval(placeValue);
+                realEvaluationBoundB.RefineRealPartErrorInterval(placeValue);
+                imaginaryEvaluationBoundA.RefineRealPartErrorInterval(placeValue);
+                imaginaryEvaluationBoundB.RefineRealPartErrorInterval(placeValue);
+                Interval<Float> evaluationRealPart;
+                if (realEvaluationBoundA > realEvaluationBoundB)
+                    evaluationRealPart =
+                        new Interval<Float>(realEvaluationBoundB.RealPartEstimate.Min,
+                        realEvaluationBoundA.RealPartEstimate.Max);
+                else
+                    evaluationRealPart =
+                        new Interval<Float>(realEvaluationBoundA.RealPartEstimate.Min,
+                        realEvaluationBoundB.RealPartEstimate.Max);
+                Interval<Float> evaluationImaginaryPart;
+                if (imaginaryEvaluationBoundA > imaginaryEvaluationBoundB)
+                    evaluationImaginaryPart =
+                        new Interval<Float>(imaginaryEvaluationBoundB.RealPartEstimate.Min,
+                        imaginaryEvaluationBoundA.RealPartEstimate.Max);
+                else
+                    evaluationImaginaryPart =
+                        new Interval<Float>(imaginaryEvaluationBoundA.RealPartEstimate.Min,
+                        imaginaryEvaluationBoundB.RealPartEstimate.Max);
+                return new RectangularEstimate(evaluationRealPart, evaluationImaginaryPart);
             }
             public RationalPolynomial GetDerivative()
             {
@@ -3993,6 +4072,12 @@ namespace Solver
             public static bool operator >=(Float a, Float b)
             {
                 return !(a < b);
+            }
+            public static Float Max(Float a, Float b)
+            {
+                if (a > b)
+                    return a;
+                return b;
             }
             public Float ShiftRadixPointLeft(int placesToShift)
             {
