@@ -134,23 +134,7 @@ namespace Solver
                 {
                     List<Number> candidateConjugates = new List<Number>(conjugates);
                     bool factorEqualsA()
-                    {
-                        Interval<Float> getDistanceInterval(Interval<Float> b, Interval<Float> c)
-                        {
-                            Float magnitude = (b.Min - c.Min).Magnitude();
-                            Interval<Float> output = new Interval<Float>(magnitude, magnitude);
-                            void updateBounds(Float boundCandidate)
-                            {
-                                if (boundCandidate < output.Min)
-                                    output.Min = boundCandidate;
-                                else if (boundCandidate > output.Max)
-                                    output.Max = boundCandidate;
-                            }
-                            updateBounds((b.Min - c.Max).Magnitude());
-                            updateBounds((b.Max - c.Min).Magnitude());
-                            updateBounds((b.Max - c.Max).Magnitude());
-                            return output;
-                        }
+                    {                        
                         while (candidateConjugates.Count > 0)
                         {
                             a.RefineRealPartErrorInterval(precision);
@@ -160,24 +144,25 @@ namespace Solver
                                 conjugate.RefineRealPartErrorInterval(precision);
                                 conjugate.RefineImaginaryPartErrorInterval(precision);
                             }
-                            RectangularEstimate aEstimate =
+                            RectangularEstimate factorEvaluatedAtThis =
                                 candidateFactors[i].EstimateEvaluation(this, precision);
-                            Interval<Float> realDistanceToThis =
-                                getDistanceInterval(RealPartEstimate, aEstimate.RealPart);
-                            Interval<Float> imaginaryDistanceToThis =
-                                getDistanceInterval(ImaginaryPartEstimate, aEstimate.ImaginaryPart);
+                            if (factorEvaluatedAtThis.RealPart.Min > a.RealPartEstimate.Max ||
+                                factorEvaluatedAtThis.RealPart.Max < a.RealPartEstimate.Min ||
+                                factorEvaluatedAtThis.ImaginaryPart.Min >
+                                a.ImaginaryPartEstimate.Max ||
+                                factorEvaluatedAtThis.ImaginaryPart.Max <
+                                a.ImaginaryPartEstimate.Min)
+                                return false;
                             for (int j = 0; j < candidateConjugates.Count;)
                             {
-                                Interval<Float> realDistanceToConjugate = getDistanceInterval(
-                                    candidateConjugates[j].RealPartEstimate, aEstimate.RealPart);
-                                Interval<Float> imaginaryDistanceToConjugate = getDistanceInterval(
-                                    candidateConjugates[j].ImaginaryPartEstimate,
-                                    aEstimate.ImaginaryPart);
-                                if (realDistanceToConjugate.Max < realDistanceToThis.Min ||
-                                    imaginaryDistanceToConjugate.Max < imaginaryDistanceToThis.Min)
-                                    return false;
-                                else if (realDistanceToConjugate.Min > realDistanceToThis.Max ||
-                                    imaginaryDistanceToConjugate.Min > imaginaryDistanceToThis.Max)
+                                if (factorEvaluatedAtThis.RealPart.Min >
+                                    candidateConjugates[j].RealPartEstimate.Max ||
+                                    factorEvaluatedAtThis.RealPart.Max <
+                                    candidateConjugates[j].RealPartEstimate.Min ||
+                                    factorEvaluatedAtThis.ImaginaryPart.Min >
+                                    candidateConjugates[j].ImaginaryPartEstimate.Max ||
+                                    factorEvaluatedAtThis.ImaginaryPart.Max <
+                                    candidateConjugates[j].ImaginaryPartEstimate.Min)
                                     candidateConjugates.RemoveAt(j);
                                 else
                                     ++j;
