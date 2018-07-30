@@ -3212,55 +3212,58 @@ namespace Solver
             public RectangularEstimate EstimateEvaluation(Primitive argument,
                 Rational errorIntervalSize)
             {
+                Debug.Assert(Coefficients.Count > 1,
+                    "RationalPolynomial.EstimateEvaluation was called from *this of degree less " +
+                    "than 1, which the method doesn't account for.");
+                Integer numberOfRealTermsInEvaluation;
+                Integer numberOfImaginaryTermsInEvaluation;
+                Division<Integer> division =
+                    new Integer(Coefficients.Count).EuclideanDivideBy(Number.Two);
+                if (division.Remainder == Number.Zero)
+                {
+                    numberOfRealTermsInEvaluation =
+                        division.Quotient * (division.Quotient + Number.One) - Number.One;
+                    numberOfImaginaryTermsInEvaluation = division.Quotient * division.Quotient;
+                }
+                else
+                {
+                    Integer quotientPlusOne = division.Quotient + Number.One;
+                    numberOfRealTermsInEvaluation = quotientPlusOne * quotientPlusOne - Number.One;
+                    numberOfImaginaryTermsInEvaluation =
+                        division.Quotient * (division.Quotient + Number.One);
+                }
+                Rational realErrorScale = Coefficients[0].Magnitude();
+                Rational imaginaryErrorScale = Number.One;
                 argument.RefineRealPartErrorInterval(Number.One);
                 argument.RefineImaginaryPartErrorInterval(Number.One);
-                Rational realErrorScale = Number.One;
-                Rational imaginaryErrorScale = Number.One;
                 Rational realMagnitudeBound =
                     (Rational)GetMagnitudeInterval(argument.RealPartEstimate).Max;
                 Rational imaginaryMagnitudeBound =
                     (Rational)GetMagnitudeInterval(argument.ImaginaryPartEstimate).Max;
-                Division<Integer> division =
-                    new Integer(Coefficients.Count - 1).EuclideanDivideBy(Number.Two);
-                Integer numberOfTermsInRealEvaluation =
-                    Number.One + division.Quotient * (new Integer(3) + division.Quotient);
-                Integer numberOfTermsInImaginaryEvaluation;
-                if (division.Remainder == Number.Zero)
-                {
-                    numberOfTermsInRealEvaluation -= division.Quotient + Number.One;
-                    numberOfTermsInImaginaryEvaluation =
-                        division.Quotient * (division.Quotient + Number.One);
-                }
-                else
-                {
-                    Integer quotientCeiling = division.Quotient + Number.One;
-                    numberOfTermsInImaginaryEvaluation = quotientCeiling * quotientCeiling;
-                }
                 for (int i = 1; i < Coefficients.Count; ++i)
-                {                    
-                    Integer termDegree = new Integer(i);
+                {
                     Rational coefficientMagnitude = Coefficients[i].Magnitude();
                     Rational realMagnitudePower =
-                        Exponentiate(realMagnitudeBound, termDegree - Number.One);
-                    Rational realScaleCandidate = Number.Two * coefficientMagnitude *
-                        realMagnitudePower * numberOfTermsInRealEvaluation;
+                        Exponentiate(realMagnitudeBound, new Integer(i - 1));
+                    Rational realScaleCandidate =
+                        Number.Two * coefficientMagnitude * realMagnitudePower;
                     if (realScaleCandidate > realErrorScale)
                         realErrorScale = realScaleCandidate;
                     Rational imaginaryMagnitudePower = Number.One;
                     Rational imaginaryScaleCandidate;
-                    Integer activeTermCount = numberOfTermsInImaginaryEvaluation;
-                    Integer inactiveTermCount = numberOfTermsInRealEvaluation;
-                    for (Integer j = Number.One; j < termDegree; ++j)
+                    Integer activeTermCount = numberOfImaginaryTermsInEvaluation;
+                    Integer inactiveTermCount = numberOfRealTermsInEvaluation;
+                    for (int j = 1; j < i; ++j)
                     {
                         Rational nextImaginaryMagnitudePower =
                             imaginaryMagnitudePower * imaginaryMagnitudeBound;
                         Rational sharedScaleComponent = Number.Two * activeTermCount *
-                            termDegree.ThisChooseK(j) * coefficientMagnitude *
+                            new Integer(i).ThisChooseK(new Integer(j)) * coefficientMagnitude *
                             (Number.One + realMagnitudePower + nextImaginaryMagnitudePower);
                         realMagnitudePower /= realMagnitudeBound;
                         realScaleCandidate = sharedScaleComponent * realMagnitudePower;
                         if (realScaleCandidate > realErrorScale)
-                            realErrorScale = realScaleCandidate;                        
+                            realErrorScale = realScaleCandidate;
                         imaginaryScaleCandidate = sharedScaleComponent * imaginaryMagnitudePower;
                         imaginaryMagnitudePower = nextImaginaryMagnitudePower;
                         if (imaginaryScaleCandidate > imaginaryErrorScale)
@@ -3274,17 +3277,18 @@ namespace Solver
                     if (imaginaryScaleCandidate > imaginaryErrorScale)
                         imaginaryErrorScale = imaginaryScaleCandidate;
                 }
+                errorIntervalSize = Float.GetEstimatePlaceValue(errorIntervalSize);
                 argument.RefineRealPartErrorInterval(errorIntervalSize / realErrorScale);
                 argument.RefineImaginaryPartErrorInterval(errorIntervalSize / imaginaryErrorScale);
-                Rational realEvaluationBoundA = Number.Zero;
-                Rational realEvaluationBoundB = Number.Zero;
-                Rational imaginaryEvaluationBoundA = Number.Zero;
-                Rational imaginaryEvaluationBoundB = Number.Zero;                
+                Interval<Rational> evaluationRealPart =
+                    new Interval<Rational>(Coefficients[0], Coefficients[0]);
+                Interval<Rational> evaluationImaginaryPart =
+                    new Interval<Rational>(Number.Zero, Number.Zero);
                 Rational realPartMin = (Rational)argument.RealPartEstimate.Min;
                 Rational realPartMax = (Rational)argument.RealPartEstimate.Max;
                 Rational imaginaryPartMin = (Rational)argument.ImaginaryPartEstimate.Min;
-                Rational imaginaryPartMax = (Rational)argument.ImaginaryPartEstimate.Max;                
-                for (int i = 0; i < Coefficients.Count; ++i)
+                Rational imaginaryPartMax = (Rational)argument.ImaginaryPartEstimate.Max;
+                for (int i = 1; i < Coefficients.Count; ++i)
                 {
                     Integer termDegree = new Integer(i);
                     Rational realPartMinPower = Exponentiate(realPartMin, termDegree);
@@ -3293,29 +3297,39 @@ namespace Solver
                     Rational imaginaryPartMaxPower = Number.One;
                     for (int j = 0; j <= i; ++j)
                     {
-                        Integer binomialCoefficient = termDegree.ThisChooseK(new Integer(j));
-                        Rational termBoundA = Coefficients[i] * binomialCoefficient *
-                            realPartMinPower * imaginaryPartMinPower;
-                        Rational termBoundB = Coefficients[i] * binomialCoefficient *
-                            realPartMaxPower * imaginaryPartMaxPower;
+                        Rational coefficient =
+                            Coefficients[i] * termDegree.ThisChooseK(new Integer(j));
+                        Rational termEstimate =
+                            coefficient * realPartMinPower * imaginaryPartMinPower;
+                        Interval<Rational> termInterval =
+                            new Interval<Rational>(termEstimate, termEstimate);
+                        List<Rational> termBoundCandidates = new List<Rational> {
+                            coefficient * realPartMinPower * imaginaryPartMaxPower,
+                            coefficient * realPartMaxPower * imaginaryPartMinPower,
+                            coefficient * realPartMaxPower * imaginaryPartMaxPower };                        
+                        foreach (Rational candidate in termBoundCandidates)
+                            if (candidate > termInterval.Max)
+                                termInterval.Max = candidate;
+                            else if (candidate < termInterval.Min)
+                                termInterval.Min = candidate;
                         int remainder = j % 4;
                         switch (remainder)
                         {
                             case 0:
-                                realEvaluationBoundA += termBoundA;
-                                realEvaluationBoundB += termBoundB;
+                                evaluationRealPart.Min += termInterval.Min;
+                                evaluationRealPart.Max += termInterval.Max;
                                 break;
                             case 1:
-                                imaginaryEvaluationBoundA += termBoundA;
-                                imaginaryEvaluationBoundB += termBoundB;
+                                evaluationImaginaryPart.Min += termInterval.Min;
+                                evaluationImaginaryPart.Max += termInterval.Max;
                                 break;
                             case 2:
-                                realEvaluationBoundA -= termBoundA;
-                                realEvaluationBoundB -= termBoundB;
+                                evaluationRealPart.Min -= termInterval.Max;
+                                evaluationRealPart.Max -= termInterval.Min;
                                 break;
                             case 3:
-                                imaginaryEvaluationBoundA -= termBoundA;
-                                imaginaryEvaluationBoundB -= termBoundB;
+                                evaluationImaginaryPart.Min -= termInterval.Max;
+                                evaluationImaginaryPart.Max -= termInterval.Min;
                                 break;
                         }
                         realPartMinPower /= realPartMin;
@@ -3323,31 +3337,16 @@ namespace Solver
                         imaginaryPartMinPower *= imaginaryPartMin;
                         imaginaryPartMaxPower *= imaginaryPartMax;
                     }
-                }
-                Rational placeValue = Float.GetEstimatePlaceValue(errorIntervalSize);
-                realEvaluationBoundA.RefineRealPartErrorInterval(placeValue);
-                realEvaluationBoundB.RefineRealPartErrorInterval(placeValue);
-                imaginaryEvaluationBoundA.RefineRealPartErrorInterval(placeValue);
-                imaginaryEvaluationBoundB.RefineRealPartErrorInterval(placeValue);
-                Interval<Float> evaluationRealPart;
-                if (realEvaluationBoundA > realEvaluationBoundB)
-                    evaluationRealPart =
-                        new Interval<Float>(realEvaluationBoundB.RealPartEstimate.Min,
-                        realEvaluationBoundA.RealPartEstimate.Max);
-                else
-                    evaluationRealPart =
-                        new Interval<Float>(realEvaluationBoundA.RealPartEstimate.Min,
-                        realEvaluationBoundB.RealPartEstimate.Max);
-                Interval<Float> evaluationImaginaryPart;
-                if (imaginaryEvaluationBoundA > imaginaryEvaluationBoundB)
-                    evaluationImaginaryPart =
-                        new Interval<Float>(imaginaryEvaluationBoundB.RealPartEstimate.Min,
-                        imaginaryEvaluationBoundA.RealPartEstimate.Max);
-                else
-                    evaluationImaginaryPart =
-                        new Interval<Float>(imaginaryEvaluationBoundA.RealPartEstimate.Min,
-                        imaginaryEvaluationBoundB.RealPartEstimate.Max);
-                return new RectangularEstimate(evaluationRealPart, evaluationImaginaryPart);
+                }                
+                evaluationRealPart.Min.RefineRealPartErrorInterval(errorIntervalSize);
+                evaluationRealPart.Max.RefineRealPartErrorInterval(errorIntervalSize);
+                evaluationImaginaryPart.Min.RefineRealPartErrorInterval(errorIntervalSize);
+                evaluationImaginaryPart.Max.RefineRealPartErrorInterval(errorIntervalSize);
+                return new RectangularEstimate(
+                    new Interval<Float>(evaluationRealPart.Min.RealPartEstimate.Min,
+                    evaluationRealPart.Max.RealPartEstimate.Max),
+                    new Interval<Float>(evaluationImaginaryPart.Min.RealPartEstimate.Min,
+                    evaluationImaginaryPart.Max.RealPartEstimate.Max));
             }
             public RationalPolynomial GetDerivative()
             {
@@ -4104,8 +4103,8 @@ namespace Solver
             }
             public Interval<Float> EstimateRoot(Rational errorIntervalSize, Integer index)
             {
-                Debug.Assert(Significand >= Number.Zero,
-                    "*this was negative, which this algorithm doesn't account for.");
+                Debug.Assert(Significand >= Number.Zero, "Float.EstimateRoot was called from a " +
+                    "negative *this, which the method doesn't account for.");
                 Float rootEstimate;
                 if (this < One)
                     rootEstimate = One;
@@ -4389,8 +4388,8 @@ namespace Solver
         static T Exponentiate<T>(T expBase, Integer exponent, Multiplier<T> multiply,
             T multiplicativeIdentity)
         {
-            Debug.Assert(exponent >= Number.Zero,
-                "exponent was negative, which this algorithm doesn't account for.");
+            Debug.Assert(exponent >= Number.Zero, "Solver.Exponentiate was called with a " +
+                "negative exponent, which the method doesn't account for.");
             T output = multiplicativeIdentity;
             T baseToAPowerOfTwo = expBase;
             while (exponent > Number.Zero)
