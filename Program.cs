@@ -117,6 +117,8 @@ namespace Solver
             public abstract List<Number> GetConjugates();//The first conjugate is *this.
             public RationalPolynomial ArgumentInTermsOfThis(Primitive a)
             {
+                if (a is Rational rational)
+                    return new RationalPolynomial(null, rational);
                 if ((MinimalPolynomial.Coefficients.Count - 1) %
                     (a.MinimalPolynomial.Coefficients.Count - 1) != 0)
                     return null;
@@ -1702,16 +1704,23 @@ namespace Solver
                     {
                         List<RationalPolynomial> termsInTermsOfPrimitiveElement =
                             new List<RationalPolynomial>();
-                        foreach (Term t in termsInTermsOfNewPrimitiveElement)
+                        foreach (Term t in termsInTermsOfNewPrimitiveElement)                        
                             termsInTermsOfPrimitiveElement.Add(
-                                t.ThisInTermsOfParentSumPrimitiveElement);
+                                t.ThisInTermsOfParentSumPrimitiveElement);                        
                         Matrix matrix = new Matrix(termsInTermsOfPrimitiveElement).GetTranspose();
+                        List<Term> outputTerms = new List<Term>();
+                        if (term.ThisInTermsOfParentSumPrimitiveElement.Coefficients.Count >
+                            matrix.Rows.Count)
+                        {
+                            outputTerms = new List<Term>(Terms);
+                            outputTerms.Add(term);
+                            return new LinearlyIndependentSum(outputTerms, PrimitiveElement);
+                        }
                         List<Rational> augmentation = new List<Rational>(
                             term.ThisInTermsOfParentSumPrimitiveElement.Coefficients);
                         while (augmentation.Count < termsInTermsOfPrimitiveElement.Count)
                             augmentation.Add(Zero);
                         matrix.GetRowEchelonForm(augmentation);
-                        List<Term> outputTerms;
                         for (int i = Terms.Count; i < augmentation.Count; ++i)
                             if (augmentation[i] != Zero)
                             {
@@ -1719,24 +1728,20 @@ namespace Solver
                                 outputTerms.Add(term);
                                 return new LinearlyIndependentSum(outputTerms, PrimitiveElement);
                             }
-                        List<Rational> linearCombinationCoefficients = new List<Rational>();
                         for (int i = Terms.Count - 1; i >= 0; --i)
                         {
-                            Rational nextCoefficient = augmentation[i];
-                            for (int j = 0; j < linearCombinationCoefficients.Count; ++j)
-                                nextCoefficient -= matrix.Rows[i][Terms.Count - 1 - j] *
-                                    linearCombinationCoefficients[j];
-                            linearCombinationCoefficients.Add(nextCoefficient / matrix.Rows[i][i]);
-                        }
-                        outputTerms = new List<Term>();
+                            augmentation[i] /= matrix.Rows[i][i];
+                            for (int j = 0; j < i; ++j)                            
+                                augmentation[j] -= augmentation[i] * matrix.Rows[i][j];
+                        }                        
                         Integer minusOne = -One;
                         for (int i = 0; i < Terms.Count; ++i)
-                            if (linearCombinationCoefficients[Terms.Count - 1 - i] != minusOne)
+                            if (augmentation[i] != minusOne)
                             {
-                                Term outputTerm = Terms[i] *
-                                    (One - linearCombinationCoefficients[Terms.Count - 1 - i]);
+                                Rational scale = One + augmentation[i];
+                                Term outputTerm = scale * Terms[i];
                                 outputTerm.ThisInTermsOfParentSumPrimitiveElement =
-                                    Terms[i].ThisInTermsOfParentSumPrimitiveElement;
+                                    scale * Terms[i].ThisInTermsOfParentSumPrimitiveElement;
                                 outputTerms.Add(outputTerm);
                             }
                         if (outputTerms.Count == 0)
@@ -4654,7 +4659,7 @@ namespace Solver
                 }
             }
 #if DEBUG
-            EvaluateString("1/(1+2^(1/3))");
+            EvaluateString("(1/2+2^(1/2))^(1/2)");
 #else
             while (true)
             {
