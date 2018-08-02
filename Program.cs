@@ -1398,8 +1398,8 @@ namespace Solver
                     ExtendedGCDInfo<Integer> GCDInfo = ExtendedGCD(Index, surd.Index);
                     Number product = Coefficient * surd.Coefficient * (Radicand.Exponentiate(
                         GCDInfo.BOverGCD.Magnitude()) * surd.Radicand.Exponentiate(
-                        GCDInfo.AOverGCD.Magnitude())).Exponentiate(One / ((Index * surd.Index) /
-                        GCDInfo.GCD).Numerator);
+                        GCDInfo.AOverGCD.Magnitude())).Exponentiate(GCDInfo.GCD /
+                        (Index * surd.Index));
                     Rational errorIntervalSize = Pi.LowEstimate / Index;
                     product.RefineArgumentErrorInterval(errorIntervalSize);
                     errorIntervalSize /= new Integer(4) * Pi.HighEstimate;
@@ -1870,11 +1870,16 @@ namespace Solver
             }
             public override Number Exponentiate(Rational exponent)
             {
+                if (exponent == One)
+                    return this;
                 if (exponent.Numerator != One)
                     return Exponentiate<Number>(this, exponent.Numerator).Exponentiate(
                         One / exponent.Denominator);
                 Rational rationalFactor = RationalFactor();
-                return rationalFactor.Exponentiate(exponent) *
+                Number coefficientExponentiation = rationalFactor.Exponentiate(exponent);
+                if (coefficientExponentiation is Surd surd && surd.Coefficient == One)
+                    return new Surd(One, this, exponent.Denominator);
+                return coefficientExponentiation *
                     new Surd(One, this / rationalFactor, exponent.Denominator);
             }
             protected override int GetTypeIndex()
