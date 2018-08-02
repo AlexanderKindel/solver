@@ -6,38 +6,38 @@ For each input expression, the program returns an expression equal to it that ob
 
 1/2+2^(1/2)+2\*2^(1/2)+2/3=7/6+3\*2^(1/2)
 
-2.) Any product consists of one rational number and one surd.
+2.) Any product consists of one rational number and one surd:
 
 2\*3^(1/2)\*2^(1/3)\*3=6\*108^(1/6)
 
-3.) The denominator of any division is a positive integer. 
+3.) The denominator of any division is a positive integer: 
 
 1/(1+2^(1/2))=-1/2+2^(1/2)/2
 
-4.) No numerator of a division has an integer factor that is divisible by the denominator.
+4.) No numerator of a division has an integer factor that is divisible by the denominator:
 
 6\*2^(1/2)/4=3\*2^(1/2)/2
 
-5.) No numerator of a division is a sum.
+5.) No numerator of a division is a sum:
 
 (1+2^(1/2))/2=1/2+2^(1/2)/2
 
-6.) Any exponent is a fraction with numerator 1.
+6.) Any exponent is a fraction with numerator 1:
 
 2^(-4/3)=4^(1/3)/4
 
-7.) There are no divisions within radicands.
+7.) There are no divisions within radicands:
 
 (1/2)^(1/2)=2^(1/2)/2
 
-8.) Any radicand is either an integer or a sum.
+8.) Any radicand is either an integer or a sum:
 
 (2\*2^(1/2))^(1/3)=8^(1/6)
 
-9.) No radicand of a degree n surd has an integer factor that is an nth power.
+9.) No radicand of a degree n surd has an integer factor that is an nth power:
 
 (8+12\*2^(1/2))^(1/2)=2(2+3\*2^(1/2))^(1/2)
 
-10.) No odd-degree surd has a negative integer radicand.
+10.) No odd-degree surd has a negative integer radicand:
 
 (-9)^(1/3)=-9^(1/3)
