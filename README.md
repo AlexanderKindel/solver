@@ -8,7 +8,7 @@ For each input expression, the program returns an expression equal to it that ob
 
 2.) Any product consists of one rational number and one surd:
 
-2\*3^(1/2)\*2^(1/3)\*3=6\*108^(1/6)
+2\*3^(1/2)\*2^(1/3)\*2/3=4\*108^(1/6)/3
 
 3.) The denominator of any division is a positive integer: 
 
