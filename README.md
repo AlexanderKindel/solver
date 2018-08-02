@@ -28,7 +28,7 @@ For each input expression, the program returns an expression equal to it that ob
 
 7.) There are no divisions within radicands:
 
-(1/2)^(1/2)=2^(1/2)/2
+(1/2+2^(1/2))^(1/2)=(2+4\*2^(1/2))^(1/2)/2
 
 8.) Any radicand is either an integer or a sum:
 
