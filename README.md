@@ -37,7 +37,3 @@ For each input expression, the program returns an expression equal to it that ob
 9.) No radicand of a degree n surd has an integer factor that is an nth power:
 
 (8+12\*2^(1/2))^(1/2)=2(2+3\*2^(1/2))^(1/2)
-
-10.) No odd-degree surd has a negative integer radicand:
-
-(-9)^(1/3)=-9^(1/3)
