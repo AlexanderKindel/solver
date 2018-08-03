@@ -1714,11 +1714,11 @@ namespace Solver
                         {
                             outputTerms = new List<Term>(Terms);
                             outputTerms.Add(term);
-                            return new LinearlyIndependentSum(outputTerms, PrimitiveElement);
+                            return new LinearlyIndependentSum(outputTerms, newPrimitiveElement);
                         }
                         List<Rational> augmentation = new List<Rational>(
                             term.ThisInTermsOfParentSumPrimitiveElement.Coefficients);
-                        while (augmentation.Count < termsInTermsOfPrimitiveElement.Count)
+                        while (augmentation.Count < matrix.Rows.Count)
                             augmentation.Add(Zero);
                         matrix.GetRowEchelonForm(augmentation);
                         for (int i = Terms.Count; i < augmentation.Count; ++i)
@@ -1726,7 +1726,7 @@ namespace Solver
                             {
                                 outputTerms = new List<Term>(Terms);
                                 outputTerms.Add(term);
-                                return new LinearlyIndependentSum(outputTerms, PrimitiveElement);
+                                return new LinearlyIndependentSum(outputTerms, newPrimitiveElement);
                             }
                         for (int i = Terms.Count - 1; i >= 0; --i)
                         {
@@ -1748,7 +1748,7 @@ namespace Solver
                             return Zero;
                         if (outputTerms.Count == 1)
                             return outputTerms[0];
-                        return new LinearlyIndependentSum(outputTerms, PrimitiveElement);
+                        return new LinearlyIndependentSum(outputTerms, newPrimitiveElement);
                     }
                     RationalPolynomial termInTermsOfPrimitiveElement =
                         PrimitiveElement.ArgumentInTermsOfThis(term);
@@ -1819,6 +1819,10 @@ namespace Solver
             }
             public override Number Times(Number a)
             {
+                if (a == Zero)
+                    return Zero;
+                if (a == One)
+                    return this;
                 Number output = Zero;
                 if (a is Term)
                 {
@@ -1912,7 +1916,7 @@ namespace Solver
             }
             protected override RationalPolynomial CalculateMinimalPolynomial()
             {
-                return VariableForm.MinimalPolynomial;
+                return VariableForm.GetMinimalPolynomial();
             }
             public override List<Number> GetConjugates()
             {
@@ -2208,14 +2212,17 @@ namespace Solver
                 for (int i = 0; i < rows.Count; ++i)
                 {
                     Rows.Add(new List<Rational>(rows[i].Coefficients));
-                    for (int j = Rows[i].Count; j < rows.Count; ++j)
+                    for (int j = Rows[0].Count; j < Rows[i].Count; ++j)
+                        for (int k = 0; k < i; ++k)
+                            Rows[k].Add(Number.Zero);
+                    while (Rows[i].Count < Rows[0].Count)
                         Rows[i].Add(Number.Zero);
                 }
             }
             public Matrix GetTranspose()
             {
                 List<List<Rational>> outputRows = new List<List<Rational>>();
-                for (int i = 0; i < Rows.Count; ++i)
+                for (int i = 0; i < Rows[0].Count; ++i)
                 {
                     List<Rational> row = new List<Rational>();
                     for (int j = 0; j < Rows.Count; ++j)
@@ -3371,7 +3378,7 @@ namespace Solver
                 List<List<Rational>> matrixRows = new List<List<Rational>>();
                 List<RationalPolynomial> augmentation = new List<RationalPolynomial>();
                 List<Rational> augmentationRow = new List<Rational> { Number.One };
-                for (int i = 0; i < MinimalPolynomial.Coefficients.Count; ++i)
+                for (int i = 1; i < MinimalPolynomial.Coefficients.Count; ++i)
                 {
                     power *= this;
                     powers.Add(power);
@@ -4664,7 +4671,7 @@ namespace Solver
                 }
             }
 #if DEBUG
-            EvaluateString("(1/2+2^(1/2))^(1/2)");
+            EvaluateString("1/(1+2^(1/3))");
 #else
             while (true)
             {
