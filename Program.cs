@@ -68,6 +68,7 @@ namespace Solver
         {
             public Interval<Float> RealPartEstimate { get; protected set; }
             public Interval<Float> ImaginaryPartEstimate { get; protected set; }
+            public Interval<Float> ArgumentEstimate { get; protected set; }
             RationalPolynomial MinimalPolynomial_ = null;
             public RationalPolynomial MinimalPolynomial
             {
@@ -131,7 +132,7 @@ namespace Solver
                         candidateFactors.Add(-polynomial.Coefficients[0]);
                 List<Number> conjugates = a.GetConjugates();
                 conjugates.RemoveAt(0);
-                Rational precision = Number.One;
+                Rational errorIntervalSize = Number.One;
                 for (int i = 0; i < candidateFactors.Count; ++i)
                 {
                     List<Number> candidateConjugates = new List<Number>(conjugates);
@@ -139,15 +140,15 @@ namespace Solver
                     {                        
                         while (candidateConjugates.Count > 0)
                         {
-                            a.RefineRealPartErrorInterval(precision);
-                            a.RefineImaginaryPartErrorInterval(precision);
+                            a.RefineRealPartErrorInterval(errorIntervalSize);
+                            a.RefineImaginaryPartErrorInterval(errorIntervalSize);
                             foreach (Number conjugate in candidateConjugates)
                             {
-                                conjugate.RefineRealPartErrorInterval(precision);
-                                conjugate.RefineImaginaryPartErrorInterval(precision);
+                                conjugate.RefineRealPartErrorInterval(errorIntervalSize);
+                                conjugate.RefineImaginaryPartErrorInterval(errorIntervalSize);
                             }
                             RectangularEstimate factorEvaluatedAtThis =
-                                candidateFactors[i].EstimateEvaluation(this, precision);
+                                candidateFactors[i].EstimateEvaluation(this, errorIntervalSize);
                             if (factorEvaluatedAtThis.RealPart.Min > a.RealPartEstimate.Max ||
                                 factorEvaluatedAtThis.RealPart.Max < a.RealPartEstimate.Min ||
                                 factorEvaluatedAtThis.ImaginaryPart.Min >
@@ -169,7 +170,7 @@ namespace Solver
                                 else
                                     ++j;
                             }
-                            precision /= Number.Two;
+                            errorIntervalSize /= Number.Two;
                         }
                         return true;
                     }
@@ -203,6 +204,12 @@ namespace Solver
                     "GetRationalImaginaryEstimate should override " +
                     "RefineImaginaryPartErrorInterval.");
             }
+            protected virtual Interval<Rational> GetRationalArgumentEstimate(
+                Rational errorIntervalSize)
+            {
+                throw new NotImplementedException("Any derived class that doesn't override " +
+                    "GetRationalArgumentEstimate should override RefineArgumentErrorInterval.");
+            }
             public virtual void RefineRealPartErrorInterval(Rational errorIntervalSize)
             {
                 if (RealPartEstimate.Min == null || (Rational)(RealPartEstimate.Max -
@@ -226,7 +233,14 @@ namespace Solver
             {
                 a.RefineImaginaryPartErrorInterval(errorIntervalSize);
             }
-            Interval<Float> EstimateSumPart<T>(List<T> terms, Rational errorIntervalSize,
+            public virtual void RefineArgumentErrorInterval(Rational errorIntervalSize)
+            {
+                if (ArgumentEstimate.Min == null || (Rational)(ArgumentEstimate.Max -
+                    ArgumentEstimate.Min) > errorIntervalSize)
+                    ArgumentEstimate = GetRefinedErrorInterval(errorIntervalSize,
+                        GetRationalArgumentEstimate);
+            }
+            protected Interval<Float> EstimatePartSum<T>(List<T> terms, Rational errorIntervalSize,
                 PartGetter getPart, PartRefiner refinePart) where T : Number
             {
                 Interval<Float> sumEstimate = new Interval<Float>(Float.Zero, Float.Zero);
@@ -240,16 +254,16 @@ namespace Solver
                 }
                 return sumEstimate;
             }
-            public Interval<Float> EstimateSumRealPart<T>(List<T> terms, Rational errorIntervalSize)
+            public Interval<Float> EstimateRealPartSum<T>(List<T> terms, Rational errorIntervalSize)
                 where T : Number
             {
-                return EstimateSumPart(terms, errorIntervalSize, GetRealPartEstimate,
+                return EstimatePartSum(terms, errorIntervalSize, GetRealPartEstimate,
                     RefineRealPartErrorInterval);
             }
-            public Interval<Float> EstimateSumImaginaryPart<T>(List<T> terms,
+            public Interval<Float> EstimateImaginaryPartSum<T>(List<T> terms,
                 Rational errorIntervalSize) where T : Number
             {
-                return EstimateSumPart(terms, errorIntervalSize, GetImaginaryPartEstimate,
+                return EstimatePartSum(terms, errorIntervalSize, GetImaginaryPartEstimate,
                     RefineImaginaryPartErrorInterval);
             }
         }
@@ -258,7 +272,6 @@ namespace Solver
             public static Integer Zero = new Integer(0);
             public static Integer One = new Integer(1);
             public static Integer Two = new Integer(2);
-            public Interval<Float> ArgumentEstimate { get; protected set; }
             public Interval<Float> MagnitudeEstimate { get; protected set; }
             public Number GetAdditiveIdentity()
             {
@@ -339,22 +352,13 @@ namespace Solver
             public static bool operator !=(Number a, Number b)
             {
                 return !(a == b);
-            }
-            protected abstract Interval<Rational> GetRationalArgumentEstimate(
-                Rational errorIntervalSize);
+            }            
             protected virtual Interval<Rational> GetRationalMagnitudeEstimate(
                 Rational errorIntervalSize)
             {
                 throw new NotImplementedException("Any derived class that doesn't override " +
                     "GetRationalMagnitudeEstimate should override RefineMagnitudeErrorInterval.");
-            }
-            public void RefineArgumentErrorInterval(Rational errorIntervalSize)
-            {
-                if (ArgumentEstimate.Min == null || (Rational)(ArgumentEstimate.Max -
-                    ArgumentEstimate.Min) > errorIntervalSize)
-                    ArgumentEstimate = GetRefinedErrorInterval(errorIntervalSize,
-                        GetRationalArgumentEstimate);
-            }
+            }            
             public virtual void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
             {
                 if (MagnitudeEstimate.Min == null || (Rational)(MagnitudeEstimate.Max -
@@ -590,14 +594,14 @@ namespace Solver
                 }
                 return a + this;
             }
-            protected abstract Term TermTimes(Rational a);
+            protected abstract Term TimesRational(Rational a);
             public static Term operator *(Term a, Rational b)
             {
-                return a.TermTimes(b);
+                return a.TimesRational(b);
             }
             public static Term operator *(Rational a, Term b)
             {
-                return b.TermTimes(a);
+                return b.TimesRational(a);
             }
         }
         abstract class Rational : Term, IArithmetic<Rational>
@@ -653,7 +657,7 @@ namespace Solver
             {
                 return this - a;
             }
-            protected override Term TermTimes(Rational a)
+            protected override Term TimesRational(Rational a)
             {
                 return Create(Numerator * a.Numerator, Denominator * a.Denominator);
             }
@@ -1041,18 +1045,22 @@ namespace Solver
                     }
                     return radicand;
                 }
+                Surd surd;
                 if (power < Zero)
                 {
-                    power = takeRootOfPositiveRadicand(-power);
-                    if (exponent.Denominator.EuclideanDivideBy(Two).Remainder == Zero)
-                        return new Surd(coefficient, -power, exponent.Denominator);
-                    coefficient = -coefficient;
+                    power = -takeRootOfPositiveRadicand(-power);
+                    surd = new Surd(power, exponent.Denominator);
                 }
                 else
+                {
                     power = takeRootOfPositiveRadicand(power);
+                    surd = new Surd(power, exponent.Denominator);
+                }
                 if (power == One)
                     return coefficient;
-                return new Surd(coefficient, power, exponent.Denominator);
+                if (coefficient == One)
+                    return surd;
+                return new Product(coefficient, new List<Surd> { surd });
             }
             protected override int GetTypeIndex()
             {
@@ -1303,6 +1311,9 @@ namespace Solver
             }
             public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
             {
+                if (MagnitudeEstimate.Min != null && (Rational)(MagnitudeEstimate.Max -
+                    MagnitudeEstimate.Min) <= errorIntervalSize)
+                    return;
                 Division<Integer> division;
                 Integer numeratorMagnitude = Numerator.Magnitude();
                 if (EstimateNumerator == null)
@@ -1351,21 +1362,19 @@ namespace Solver
         }
         class Surd : Term
         {
-            public Rational Coefficient { get; }
             public Number Radicand { get; }
             public Integer Index { get; }
-            public Surd(Rational coefficient, Number radicand, Integer index)
+            public Surd(Number radicand, Integer index)
             {//To be called only when it's known a priori that Index > One, radicand is not an
              //Integer that is a perfect indexth power and, for odd index,
              //radicand.RationalFactor() == One, or even index,
              //radicand.RationalFactor().Magnitude() == One. Otherwise, use radicand.Exponentiate().
-                Coefficient = coefficient;
                 Radicand = radicand;
                 Index = index;
             }
             public override Term Copy()
             {
-                Surd copy = new Surd(Coefficient, Radicand, Index);
+                Surd copy = new Surd(Radicand, Index);
                 copy.RealPartEstimate = RealPartEstimate;
                 copy.ImaginaryPartEstimate = ImaginaryPartEstimate;
                 copy.ArgumentEstimate = ArgumentEstimate;
@@ -1374,47 +1383,56 @@ namespace Solver
             }
             public override Number Reciprocal()
             {
-                return Radicand.Exponentiate(new Fraction(Index - One, Index)) /
-                    (Coefficient * Radicand);
+                return Radicand.Exponentiate(new Fraction(Index - One, Index)) / Radicand;
             }
             public override Rational RationalFactor()
             {
-                return Coefficient;
+                return One;
             }
-            protected override Term TermTimes(Rational a)
+            protected override Term TimesRational(Rational a)
             {
                 if (a == Zero)
                     return Zero;
                 if (a == One)
                     return this;
-                return new Surd(a * Coefficient, Radicand, Index);
+                return new Product(a, new List<Surd> { this });
             }
             public override Number Times(Number a)
             {
                 if (a is Rational rational)
-                    return TermTimes(rational);
+                    return TimesRational(rational);
                 if (a is Surd surd)
                 {
                     ExtendedGCDInfo<Integer> GCDInfo = ExtendedGCD(Index, surd.Index);
-                    Number product = Coefficient * surd.Coefficient * (Radicand.Exponentiate(
-                        GCDInfo.BOverGCD.Magnitude()) * surd.Radicand.Exponentiate(
-                        GCDInfo.AOverGCD.Magnitude())).Exponentiate(GCDInfo.GCD /
-                        (Index * surd.Index));
-                    Rational errorIntervalSize = Pi.LowEstimate / Index;
-                    product.RefineArgumentErrorInterval(errorIntervalSize);
-                    errorIntervalSize /= new Integer(4) * Pi.HighEstimate;
-                    RefineArgumentErrorInterval(errorIntervalSize);
-                    surd.RefineArgumentErrorInterval(errorIntervalSize);
-                    if (product.ArgumentEstimate.Max <
-                        ArgumentEstimate.Min * surd.ArgumentEstimate.Min)
-                        product *= RootsOfUnity.GetNthRoots(Index)[1];
-                    return product;
+                    Integer productIndex = ((Index * surd.Index) / GCDInfo.GCD).Numerator;
+                    Number radicandFactorA = Radicand.Exponentiate(GCDInfo.BOverGCD.Magnitude());
+                    Number radicandFactorB =
+                        surd.Radicand.Exponentiate(GCDInfo.AOverGCD.Magnitude());
+                    radicandFactorA.RefineArgumentErrorInterval(One);
+                    radicandFactorB.RefineArgumentErrorInterval(One);
+                    if (surd.Index != Index)
+                    {                        
+                        RefineArgumentErrorInterval(Pi.LowEstimate / productIndex);
+                        surd.RefineArgumentErrorInterval(Pi.LowEstimate / productIndex);
+                        if ((Rational)radicandFactorA.ArgumentEstimate.Max / productIndex <
+                            (Rational)ArgumentEstimate.Min ||
+                            (Rational)radicandFactorB.ArgumentEstimate.Max / productIndex <
+                            (Rational)surd.ArgumentEstimate.Min)
+                            return new Product(One, new List<Surd> { this, surd });
+                    }
+                    Number productRadicand = radicandFactorA * radicandFactorB;
+                    productRadicand.RefineArgumentErrorInterval(Pi.LowEstimate);
+                    if (productRadicand.ArgumentEstimate.Max <
+                        radicandFactorA.ArgumentEstimate.Min + radicandFactorB.ArgumentEstimate.Min)
+                        return productRadicand.Exponentiate(new Fraction(One, productIndex)) *
+                            RootsOfUnity.GetNthRoots(productIndex)[1];
+                    return productRadicand.Exponentiate(new Fraction(One, productIndex));
                 }
                 return a * this;
             }
             public override Number Exponentiate(Rational exponent)
             {
-                return Coefficient.Exponentiate(exponent) * Radicand.Exponentiate(exponent / Index);
+                return Radicand.Exponentiate(exponent / Index);
             }
             public override int CompareTo(object obj)
             {
@@ -1423,9 +1441,6 @@ namespace Solver
                     return comparison;
                 Surd surd = (Surd)obj;
                 comparison = Index.CompareTo(surd.Index);
-                if (comparison != 0)
-                    return comparison;
-                comparison = Coefficient.CompareTo(surd.Coefficient);
                 if (comparison != 0)
                     return comparison;
                 return Radicand.CompareTo(surd.Radicand);
@@ -1448,11 +1463,11 @@ namespace Solver
                 List<IntegerPolynomial> candidates =
                     new RationalPolynomial(coefficients).GetPrimitivePart().GetFactors();
                 if (candidates.Count == 1)
-                    return new RationalPolynomial(GetMonicCoefficients(candidates[0].Coefficients)).
-                        GetMinimalPolynomialOfKTimesRootOfThis(Coefficient);
+                    return new RationalPolynomial(GetMonicCoefficients(candidates[0].Coefficients));
                 List<RationalPolynomial> rationalCandidates = new List<RationalPolynomial>();
                 foreach (IntegerPolynomial candidate in candidates)
-                    rationalCandidates.Add(candidate);
+                    rationalCandidates.Add(
+                        new RationalPolynomial(GetMonicCoefficients(candidate.Coefficients)));
                 Rational precision = One;
                 while (true)
                 {
@@ -1467,8 +1482,7 @@ namespace Solver
                         {
                             rationalCandidates.RemoveAt(i);
                             if (rationalCandidates.Count == 1)
-                                return rationalCandidates[0].GetMinimalPolynomialOfKTimesRootOfThis(
-                                    Coefficient);
+                                return rationalCandidates[0];
                         }
                         else
                             ++i;
@@ -1483,7 +1497,7 @@ namespace Solver
                 List<Number> conjugateCandidates = new List<Number>();
                 foreach (Number conjugate in radicandConjugates)
                     foreach (Number root in rootsOfUnity)
-                        conjugateCandidates.Add(new Surd(Coefficient, conjugate, Index) * root);
+                        conjugateCandidates.Add(new Surd(conjugate, Index) * root);
                 RemoveNonConjugates(conjugateCandidates);
                 return conjugateCandidates;
             }
@@ -1506,44 +1520,316 @@ namespace Solver
             protected override Interval<Rational> GetRationalArgumentEstimate(
                 Rational errorIntervalSize)
             {
-                if (Coefficient > Zero)
-                {
-                    errorIntervalSize *= Index;
-                    Radicand.RefineArgumentErrorInterval(errorIntervalSize);
-                    return new Interval<Rational>((Rational)Radicand.ArgumentEstimate.Min / Index,
-                        (Rational)Radicand.ArgumentEstimate.Max / Index);
-                }
-                errorIntervalSize /= Two;
-                Coefficient.RefineArgumentErrorInterval(errorIntervalSize);
                 Radicand.RefineArgumentErrorInterval(Index * errorIntervalSize);
-                return new Interval<Rational>((Rational)Coefficient.ArgumentEstimate.Min +
-                    (Rational)Radicand.ArgumentEstimate.Min / Index,
-                    (Rational)Coefficient.ArgumentEstimate.Max +
+                return new Interval<Rational>((Rational)Radicand.ArgumentEstimate.Min / Index,
                     (Rational)Radicand.ArgumentEstimate.Max / Index);
             }
             public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
             {
-                Radicand.RefineMagnitudeErrorInterval(One);
-                if (Radicand.MagnitudeEstimate.Max <= Float.One)
-                    errorIntervalSize /= Coefficient.Magnitude() + Two;
-                else
-                    errorIntervalSize /=
-                        Coefficient.Magnitude() + (Rational)Radicand.MagnitudeEstimate.Max + One;
-                Coefficient.RefineMagnitudeErrorInterval(errorIntervalSize);
                 Integer three = new Integer(3);
                 Radicand.RefineMagnitudeErrorInterval(
                     Solver.Exponentiate(errorIntervalSize, Index) / three);
                 errorIntervalSize /= three;                
-                MagnitudeEstimate = new Interval<Float>(Coefficient.MagnitudeEstimate.Min *
+                MagnitudeEstimate = new Interval<Float>(
                     Radicand.MagnitudeEstimate.Min.EstimateRoot(errorIntervalSize, Index).Min,
-                    Coefficient.MagnitudeEstimate.Max *
                     Radicand.MagnitudeEstimate.Max.EstimateRoot(errorIntervalSize, Index).Max);
             }
             public override string ToString()
             {
                 if (Radicand is Integer integer && integer > Zero)
-                    return Coefficient.InsertString(Radicand + "^(1/" + Index + ')');
-                return Coefficient.InsertString("(" + Radicand + ')' + "^(1/" + Index + ')');
+                    return Radicand + "^(1/" + Index + ')';
+                return "(" + Radicand + ')' + "^(1/" + Index + ')';
+            }
+        }
+        class Product : Term
+        {
+            public Rational Coefficient { get; }
+            public List<Surd> Factors { get; }
+            public Product(Rational coefficient, List<Surd> factors)
+            {
+                Coefficient = coefficient;
+                Factors = factors;
+                Factors.Sort();
+            }
+            public override Term Copy()
+            {
+                Product copy = new Product(Coefficient, Factors);
+                copy.RealPartEstimate = RealPartEstimate;
+                copy.ImaginaryPartEstimate = ImaginaryPartEstimate;
+                copy.ArgumentEstimate = ArgumentEstimate;
+                copy.MagnitudeEstimate = MagnitudeEstimate;
+                return copy;
+            }
+            public override Number Reciprocal()
+            {
+                Number output = Coefficient.Reciprocal();
+                foreach (Surd factor in Factors)
+                    output *= factor.Reciprocal();
+                return output;
+            }
+            public override Rational RationalFactor()
+            {
+                return Coefficient;
+            }
+            protected override Term TimesRational(Rational a)
+            {
+                if (a == Zero)
+                    return Zero;
+                if (a == One)
+                    return this;
+                Rational coefficient = Coefficient * a;
+                if (Factors.Count == 1 && coefficient == One)
+                    return Factors[0];
+                return new Product(coefficient, Factors);
+            }
+            public override Number Times(Number a)
+            {
+                if (a is Rational rational)
+                    return TimesRational(rational);
+                if (a is Surd surd)
+                {
+                    List<Surd> factors = new List<Surd>(Factors);
+                    for (int i = 0; i < Factors.Count; ++i) 
+                    {
+                        Number factorProduct = surd * Factors[i];
+                        if (factorProduct !=
+                            new Product(Coefficient, new List<Surd> { surd, Factors[i] }))
+                        {
+                            factors.RemoveAt(i);
+                            if (factors.Count == 0)
+                                return Coefficient * factorProduct;
+                            if (factors.Count == 1 && Coefficient == One)
+                                return factors[0] * factorProduct;
+                            return new Product(Coefficient, factors) * factorProduct;
+                        }
+                    }
+                    factors.Add(surd);
+                    return new Product(Coefficient, factors);
+                }
+                if (a is Product product)
+                {
+                    Number output = product.Coefficient * this;
+                    foreach (Surd factor in product.Factors)
+                        output *= factor;
+                    return output;
+                }
+                return a * this;
+            }
+            public override int CompareTo(object obj)
+            {
+                int comparison = base.CompareTo(obj);
+                if (comparison != 0)
+                    return comparison;
+                Product product = (Product)obj;
+                comparison = Factors.Count - product.Factors.Count;
+                if (comparison != 0)
+                    return comparison;
+                for (int i = 0; i < Factors.Count; ++i)
+                {
+                    comparison = Factors[i].CompareTo(product.Factors[i]);
+                    if (comparison != 0)
+                        return comparison;
+                }
+                return Coefficient.CompareTo(product.Coefficient);
+            }
+            public override Number Exponentiate(Rational exponent)
+            {
+                Number output = Coefficient.Exponentiate(exponent);
+                foreach (Surd factor in Factors)
+                    output *= factor.Exponentiate(exponent);
+                return output;
+            }
+            public override int GetHashCode()
+            {
+                int output = Coefficient.GetHashCode();
+                foreach (Surd surd in Factors)
+                    output ^= surd.GetHashCode();
+                return output;
+            }
+            protected override RationalPolynomial CalculateMinimalPolynomial()
+            {
+                RationalPolynomial[] minimalPolynomials = new RationalPolynomial[Factors.Count];
+                int[] indicies = new int[Factors.Count];
+                for (int i = 0; i < Factors.Count; ++i)
+                {
+                    minimalPolynomials[i] = Factors[i].MinimalPolynomial;
+                    indicies[i] = 1;
+                }
+                MultivariatePolynomial variableForm =
+                    new MultivariatePolynomial(minimalPolynomials);
+                variableForm.SetCoefficient(indicies, Coefficient);
+                return variableForm.CalculateValueMinimalPolynomialInfo(this);                
+            }
+            public override List<Number> GetConjugates()
+            {
+                List<List<Number>> factorConjugates = new List<List<Number>>();
+                foreach (Surd factor in Factors)
+                    factorConjugates.Add(factor.GetConjugates());
+                List<List<Number>> conjugateCombinations =
+                    GetCartesianProduct(factorConjugates);
+                List<Number> conjugateCandidates = new List<Number>();
+                foreach (List<Number> combination in conjugateCombinations)
+                {
+                    Number conjugate = Coefficient;
+                    foreach (Number number in combination)
+                        conjugate *= number;
+                    conjugateCandidates.Add(conjugate);
+                }
+                RemoveNonConjugates(conjugateCandidates);
+                return conjugateCandidates;
+            }
+            protected override int GetTypeIndex()
+            {
+                return 4;
+            }
+            void RefineRectangularEstimateErrorInterval(Rational errorIntervalSize)
+            {
+                if (RealPartEstimate.Min != null && (Rational)(RealPartEstimate.Max -
+                    RealPartEstimate.Min) <= errorIntervalSize)
+                    return;
+                Coefficient.RefineRealPartErrorInterval(One);
+                Float errorScale =
+                    GetMagnitudeInterval(Coefficient.RealPartEstimate).Max + Float.One;
+                Float termToSubtract = Float.One;
+                foreach (Surd factor in Factors) 
+                {
+                    factor.RefineRealPartErrorInterval(One);
+                    factor.RefineImaginaryPartErrorInterval(One);
+                    Float realBound = GetMagnitudeInterval(factor.RealPartEstimate).Max;
+                    Float imaginaryBound = GetMagnitudeInterval(factor.ImaginaryPartEstimate).Max;
+                    if (realBound > imaginaryBound)
+                    {
+                        errorScale *= realBound + Float.One;
+                        termToSubtract *= realBound;
+                    }
+                    else
+                    {
+                        errorScale *= imaginaryBound + Float.One;
+                        termToSubtract *= imaginaryBound;
+                    }
+                }
+                errorIntervalSize /= (Rational)(errorScale - termToSubtract);
+                Coefficient.RefineRealPartErrorInterval(errorIntervalSize);
+                List<List<Interval<Float>>> terms =
+                    new List<List<Interval<Float>>> { new List<Interval<Float>>() };
+                List<int> termPowerOfIFactors = new List<int> { 0 };
+                foreach (Surd factor in Factors)
+                {
+                    factor.RefineRealPartErrorInterval(errorIntervalSize);
+                    factor.RefineImaginaryPartErrorInterval(errorIntervalSize);
+                    int currentTermCount = terms.Count;
+                    for (int i = 0; i < currentTermCount; ++i)
+                    {
+                        List<Interval<Float>> term = new List<Interval<Float>>(terms[i]);
+                        terms[i].Add(Factors[i].RealPartEstimate);
+                        term.Add(Factors[i].ImaginaryPartEstimate);
+                        terms.Add(term);
+                        termPowerOfIFactors.Add(termPowerOfIFactors[i] + 1);
+                    }
+                }
+                List<Float> realBoundCandidates = new List<Float> {
+                    Coefficient.RealPartEstimate.Min, Coefficient.RealPartEstimate.Max };
+                List<Float> imaginaryBoundCandidates = new List<Float> {
+                    Coefficient.RealPartEstimate.Min, Coefficient.RealPartEstimate.Max };
+                for (int i = 0; i < terms.Count; ++i)  
+                {
+                    List<Float> boundCandidates = null;
+                    switch (termPowerOfIFactors[i] % 4)
+                    {
+                        case 0:
+                            boundCandidates = realBoundCandidates;
+                            break;
+                        case 1:
+                            boundCandidates = imaginaryBoundCandidates;
+                            break;
+                        case 2:
+                            boundCandidates = new List<Float>();
+                            foreach (Float candidate in realBoundCandidates)
+                                boundCandidates.Add(-candidate);
+                            break;
+                        case 3:
+                            boundCandidates = new List<Float>();
+                            foreach (Float candidate in imaginaryBoundCandidates)
+                                boundCandidates.Add(-candidate);
+                            break;
+                    }
+                    for (int j = 0; j < terms[i].Count; ++j) 
+                    {
+                        int currentBoundCandidateCount = boundCandidates.Count;
+                        for (int k = 0; k < currentBoundCandidateCount; ++k)
+                        {
+                            Float boundCandidate = boundCandidates[k];
+                            boundCandidates[k] *= terms[i][j].Min;
+                            boundCandidate *= terms[i][j].Max;
+                            boundCandidates.Add(boundCandidate);
+                        }
+                    }
+                }
+                Interval<Float> realEstimate =
+                    new Interval<Float>(realBoundCandidates[0], realBoundCandidates[0]);
+                for (int i = 1; i < realBoundCandidates.Count; ++i)                
+                    if (realBoundCandidates[i] < realEstimate.Min)
+                        realEstimate.Min = realBoundCandidates[i];
+                    else if(realBoundCandidates[i] > realEstimate.Max)
+                        realEstimate.Max = realBoundCandidates[i];
+                RealPartEstimate = realEstimate;
+                Interval<Float> imaginaryEstimate =
+                    new Interval<Float>(imaginaryBoundCandidates[0], imaginaryBoundCandidates[0]);
+                for (int i = 1; i < imaginaryBoundCandidates.Count; ++i)
+                    if (imaginaryBoundCandidates[i] < imaginaryEstimate.Min)
+                        imaginaryEstimate.Min = imaginaryBoundCandidates[i];
+                    else if (imaginaryBoundCandidates[i] > imaginaryEstimate.Max)
+                        imaginaryEstimate.Max = imaginaryBoundCandidates[i];
+                ImaginaryPartEstimate = imaginaryEstimate;
+            }
+            public override void RefineRealPartErrorInterval(Rational errorIntervalSize)
+            {
+                RefineRectangularEstimateErrorInterval(errorIntervalSize);
+            }
+            public override void RefineImaginaryPartErrorInterval(Rational errorIntervalSize)
+            {
+                RefineRectangularEstimateErrorInterval(errorIntervalSize);
+            }
+            public override void RefineArgumentErrorInterval(Rational errorIntervalSize)
+            {
+                if (ArgumentEstimate.Min != null && (Rational)(ArgumentEstimate.Max -
+                    ArgumentEstimate.Min) <= errorIntervalSize)
+                    return;
+                List<Term> terms = new List<Term>(Factors);
+                terms.Add(Coefficient);
+                ArgumentEstimate = EstimatePartSum(terms, errorIntervalSize,
+                    delegate (Primitive a) { return a.ArgumentEstimate; }, delegate (Primitive a,
+                    Rational error) { a.RefineArgumentErrorInterval(error); });
+            }
+            public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
+            {
+                if (MagnitudeEstimate.Min != null && (Rational)(MagnitudeEstimate.Max -
+                    MagnitudeEstimate.Min) <= errorIntervalSize)
+                    return;
+                Coefficient.RefineMagnitudeErrorInterval(One);
+                Float errorScale = Coefficient.MagnitudeEstimate.Max + Float.One;
+                foreach (Surd factor in Factors)
+                {
+                    factor.RefineMagnitudeErrorInterval(One);
+                    errorScale *= factor.MagnitudeEstimate.Max + Float.One;
+                }
+                errorIntervalSize /= (Rational)errorScale;
+                Coefficient.RefineMagnitudeErrorInterval(errorIntervalSize);
+                Interval<Float> productMagnitude = Coefficient.MagnitudeEstimate;
+                foreach (Surd factor in Factors)
+                {
+                    factor.RefineMagnitudeErrorInterval(errorIntervalSize);
+                    productMagnitude.Min *= factor.MagnitudeEstimate.Min;
+                    productMagnitude.Max *= factor.MagnitudeEstimate.Max;
+                }
+                MagnitudeEstimate = productMagnitude;
+            }
+            public override string ToString()
+            {
+                StringBuilder output = new StringBuilder(Factors[0].ToString());
+                for (int i = 1; i < Factors.Count; ++i)
+                    output.Append('*' + Factors[i].ToString());
+                return Coefficient.InsertString(output.ToString());
             }
         }
         class PolynomialIndependentSum : Primitive
@@ -1557,10 +1843,10 @@ namespace Solver
             protected override RationalPolynomial CalculateMinimalPolynomial()
             {
                 MultivariatePolynomial variableForm;
+                RationalPolynomial[] minimalPolynomials;
                 if (Terms[0] is Rational rational)
                 {
-                    RationalPolynomial[] minimalPolynomials =
-                        new RationalPolynomial[Terms.Count - 1];
+                    minimalPolynomials = new RationalPolynomial[Terms.Count - 1];
                     for (int i = 1; i < Terms.Count; ++i)
                     {
                         RationalPolynomial polynomial = Terms[i].MinimalPolynomial;
@@ -1571,7 +1857,7 @@ namespace Solver
                 }
                 else
                 {
-                    RationalPolynomial[] minimalPolynomials = new RationalPolynomial[Terms.Count];
+                    minimalPolynomials = new RationalPolynomial[Terms.Count];
                     for (int i = 0; i < Terms.Count; ++i)
                     {
                         RationalPolynomial polynomial = Terms[i].MinimalPolynomial;
@@ -1585,7 +1871,7 @@ namespace Solver
                     indices[i] = 1;
                     variableForm.SetCoefficient(indices, Number.One);
                 }
-                return variableForm.GetMinimalPolynomial();
+                return variableForm.CalculateValueMinimalPolynomialInfo(this);
             }
             public override List<Number> GetConjugates()
             {
@@ -1593,11 +1879,11 @@ namespace Solver
             }
             public override void RefineRealPartErrorInterval(Rational errorIntervalSize)
             {
-                RealPartEstimate = EstimateSumRealPart(Terms, errorIntervalSize);
+                RealPartEstimate = EstimateRealPartSum(Terms, errorIntervalSize);
             }
             public override void RefineImaginaryPartErrorInterval(Rational errorIntervalSize)
             {
-                ImaginaryPartEstimate = EstimateSumImaginaryPart(Terms, errorIntervalSize);
+                ImaginaryPartEstimate = EstimateImaginaryPartSum(Terms, errorIntervalSize);
             }
         }
         static Interval<Float> GetMagnitudeInterval(Interval<Float> interval)
@@ -1664,23 +1950,6 @@ namespace Solver
                             return PrimitiveElement_;
                         ++k;
                     }
-                }
-            }
-            RationalPolynomial VariableForm_ = null;
-            RationalPolynomial VariableForm
-            {
-                get
-                {
-                    if (VariableForm_ == null)
-                    {
-                        List<Rational> variableFormCoefficients = new List<Rational>();
-                        foreach (Term term in Terms)
-                            variableFormCoefficients = CoefficientAdd(variableFormCoefficients,
-                                term.ThisInTermsOfParentSumPrimitiveElement.Coefficients);
-                        VariableForm_ = new RationalPolynomial(variableFormCoefficients,
-                            PrimitiveElement.MinimalPolynomial);
-                    }
-                    return VariableForm_;
                 }
             }
             public LinearlyIndependentSum(List<Term> terms, Primitive primitiveElement)
@@ -1881,14 +2150,14 @@ namespace Solver
                         One / exponent.Denominator);
                 Rational rationalFactor = RationalFactor();
                 Number coefficientExponentiation = rationalFactor.Exponentiate(exponent);
-                if (coefficientExponentiation is Surd surd && surd.Coefficient == One)
-                    return new Surd(One, this, exponent.Denominator);
+                if (coefficientExponentiation is Surd surd)
+                    return new Surd(this, exponent.Denominator);
                 return coefficientExponentiation *
-                    new Surd(One, this / rationalFactor, exponent.Denominator);
+                    new Surd(this / rationalFactor, exponent.Denominator);
             }
             protected override int GetTypeIndex()
             {
-                return 4;
+                return 5;
             }
             public override int CompareTo(object obj)
             {
@@ -1916,7 +2185,12 @@ namespace Solver
             }
             protected override RationalPolynomial CalculateMinimalPolynomial()
             {
-                return VariableForm.GetMinimalPolynomial();
+                List<Rational> variableFormCoefficients = new List<Rational>();
+                foreach (Term term in Terms)
+                    variableFormCoefficients = CoefficientAdd(variableFormCoefficients,
+                        term.ThisInTermsOfParentSumPrimitiveElement.Coefficients);
+                return new RationalPolynomial(variableFormCoefficients,
+                    PrimitiveElement.MinimalPolynomial).GetValueMinimalPolynomial();
             }
             public override List<Number> GetConjugates()
             {
@@ -1924,11 +2198,11 @@ namespace Solver
             }
             public override void RefineRealPartErrorInterval(Rational errorIntervalSize)
             {
-                RealPartEstimate = EstimateSumRealPart(Terms, errorIntervalSize);
+                RealPartEstimate = EstimateRealPartSum(Terms, errorIntervalSize);
             }
             public override void RefineImaginaryPartErrorInterval(Rational errorIntervalSize)
             {
-                ImaginaryPartEstimate = EstimateSumImaginaryPart(Terms, errorIntervalSize);
+                ImaginaryPartEstimate = EstimateImaginaryPartSum(Terms, errorIntervalSize);
             }
             public override void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
             {
@@ -1994,7 +2268,7 @@ namespace Solver
                         localErrorIntervalSize /= Two;
                     }
                 }
-                Number thisTimesI = this * new Surd(One, -One, Two);
+                Number thisTimesI = this * new Surd(-One, Two);
                 if (hasZeroImaginaryPart(this))
                 {
                     if (hasZeroImaginaryPart(thisTimesI))
@@ -2016,6 +2290,7 @@ namespace Solver
                     return new Interval<Rational>(threeOverTwo * Pi.LowEstimate,
                         threeOverTwo * Pi.HighEstimate);
                 }
+                RefineRealPartErrorInterval(One);
                 Interval<Float> realMagnitudeInterval =
                     GetMagnitudeInterval(RealPartEstimate);
                 Interval<Float> imaginaryMagnitudeInterval =
@@ -2678,6 +2953,8 @@ namespace Solver
                         {
                             Integer remainder = polynomial.Coefficients[i].EuclideanDivideBy(
                                 characteristicPower).Remainder;
+                            if (remainder < Number.Zero)
+                                remainder += characteristicPower;
                             if (remainder * Number.Two <= characteristicPower)
                                 polynomial.Coefficients[i] = remainder;
                             else
@@ -3204,7 +3481,7 @@ namespace Solver
             {
                 return a.EuclideanDivideBy(b).Remainder;
             }
-            public static implicit operator RationalPolynomial(IntegerPolynomial a)
+            public static explicit operator RationalPolynomial(IntegerPolynomial a)
             {
                 List<Rational> coefficients = new List<Rational>();
                 foreach (Rational coefficient in a.Coefficients)
@@ -3369,9 +3646,10 @@ namespace Solver
             }
             public static RationalPolynomial GetGCD(RationalPolynomial a, RationalPolynomial b)
             {
-                return IntegerPolynomial.GetGCD(a.GetPrimitivePart(), b.GetPrimitivePart());
+                return (RationalPolynomial)IntegerPolynomial.GetGCD(a.GetPrimitivePart(),
+                    b.GetPrimitivePart());
             }
-            public RationalPolynomial GetMinimalPolynomial()
+            public RationalPolynomial GetValueMinimalPolynomial()
             {
                 List<RationalPolynomial> powers = new List<RationalPolynomial>();
                 RationalPolynomial power = GetMultiplicativeIdentity();
@@ -3928,7 +4206,7 @@ namespace Solver
             {
                 return b * a;
             }
-            public RationalPolynomial GetMinimalPolynomial()
+            public RationalPolynomial CalculateValueMinimalPolynomialInfo(Primitive value)
             {
                 List<List<Rational>> matrixCoefficients = new List<List<Rational>>();
                 List<int[]> termsPresent = new List<int[]> { new int[MinimalPolynomials.Length] };
@@ -3961,12 +4239,13 @@ namespace Solver
                                 matrixCoefficients[i].Add(Number.Zero);
                             matrixRow.Add(power.Coefficients[indices]);
                         }
-                    }
-                    matrixRow.Reverse();
+                    }                    
                     matrixCoefficients.Add(matrixRow);
                     if (matrixRow[0] != Number.Zero)
                         constantIsPresent = true;
                 }
+                foreach (List<Rational> row in matrixCoefficients)
+                    row.Reverse();
                 Matrix matrix = new Matrix(matrixCoefficients);
                 List<RationalPolynomial> augmentation = new List<RationalPolynomial>();
                 List<Integer> augmentationRow = new List<Integer> { Number.One };
@@ -3983,20 +4262,28 @@ namespace Solver
                 IntegerPolynomial minimalPolynomial =
                     new RationalPolynomial(annullingPolynomialCoefficients).GetPrimitivePart();
                 List<IntegerPolynomial> factors = minimalPolynomial.GetFactors();
+                List<RationalPolynomial> rationalFactors = new List<RationalPolynomial>();
                 foreach (IntegerPolynomial factor in factors)
+                    rationalFactors.Add((RationalPolynomial)factor);
+                Rational errorIntervalSize = Number.One;
+                while (rationalFactors.Count > 1)
                 {
-                    MultivariatePolynomial sum = new MultivariatePolynomial(MinimalPolynomials);
-                    sum.Coefficients.Add(new int[MinimalPolynomials.Length],
-                        factor.Coefficients[0]);
-                    for (int i = 1; i < factor.Coefficients.Count; ++i)
-                        sum += factor.Coefficients[i] * powers[i - 1];
-                    if (sum.Coefficients.Keys.Count == 0)
+                    for (int i = 0; i < rationalFactors.Count;)
                     {
-                        minimalPolynomial = factor;
-                        break;
+                        RectangularEstimate factorEvaluatedAtThis =
+                            rationalFactors[i].EstimateEvaluation(value, errorIntervalSize);
+                        if (factorEvaluatedAtThis.RealPart.Max < Float.Zero ||
+                            factorEvaluatedAtThis.RealPart.Min > Float.Zero ||
+                            factorEvaluatedAtThis.ImaginaryPart.Max < Float.Zero ||
+                            factorEvaluatedAtThis.ImaginaryPart.Min > Float.Zero)
+                            rationalFactors.RemoveAt(i);
+                        else
+                            ++i;
                     }
+                    errorIntervalSize /= Number.Two;
                 }
-                return new RationalPolynomial(GetMonicCoefficients(minimalPolynomial.Coefficients));
+                return new RationalPolynomial(
+                    GetMonicCoefficients(rationalFactors[0].Coefficients));
             }
         }
         class Float : IRingElement<Float>
@@ -4179,6 +4466,18 @@ namespace Solver
                 List<Number> nthRoots = new List<Number>();
                 Division<Integer> division;
                 Integer half = n.EuclideanDivideBy(Number.Two).Quotient;
+                void sortRoots(List<Number> roots, Integer rootIndex)
+                {
+                    Rational errorIntervalSize = Pi.LowEstimate / rootIndex;
+                    foreach (Number root in roots)
+                        root.RefineArgumentErrorInterval(errorIntervalSize);
+                    roots.Sort(delegate (Number a, Number b)
+                    {
+                        if (a.ArgumentEstimate.Max < b.ArgumentEstimate.Min)
+                            return -1;
+                        return 1;
+                    });
+                }
                 foreach (Integer prime in Primes())
                 {
                     if (prime > half)
@@ -4192,7 +4491,8 @@ namespace Solver
                         foreach (List<Number> combination in rootCombinations)
                             nthRoots.Add(combination[0] * combination[1].Exponentiate(
                                 new Fraction(Number.One, prime)));
-                        NthRoots.Add(n, nthRoots);
+                        sortRoots(nthRoots, n);
+                        NthRoots.Add(n, nthRoots);                        
                         return nthRoots;
                     }
                 }
@@ -4294,16 +4594,7 @@ namespace Solver
                             resolventMultiplesInTermsOfNMinusFirstRoots[i][key[0]] -=
                                 resolventProduct.Coefficients[key];
                 }
-                List<Number> nMinusFirstRoots = GetNthRoots(nMinusOne);
-                Pi.RefineErrorInterval(Pi.LowEstimate / (Number.Two * nMinusOne));
-                foreach (Number root in nMinusFirstRoots)
-                    root.RefineArgumentErrorInterval(Pi.LowEstimate);
-                nMinusFirstRoots.Sort(delegate (Number a, Number b)
-                {
-                    if (a.ArgumentEstimate.Max <= b.ArgumentEstimate.Min)
-                        return -1;
-                    return 1;
-                });
+                List<Number> nMinusFirstRoots = GetNthRoots(nMinusOne);                
                 List<Number> resolventProductValues = new List<Number>();
                 foreach (List<Rational> coefficients in resolventMultiplesInTermsOfNMinusFirstRoots)
                 {
@@ -4328,6 +4619,8 @@ namespace Solver
                     }
                     nthRoots.Add(nthRoot / nMinusOne);
                 }
+                sortRoots(nthRoots, n);
+                NthRoots.Add(n, nthRoots);
                 return nthRoots;
             }
         }
@@ -4671,7 +4964,7 @@ namespace Solver
                 }
             }
 #if DEBUG
-            EvaluateString("1/(1+2^(1/3))");
+            EvaluateString("3^(1/2)*2^(1/3)");
 #else
             while (true)
             {
