@@ -554,7 +554,7 @@ namespace Solver
         }
         abstract class Term : Number
         {
-            public RationalPolynomial ThisInTermsOfParentSumPrimitiveElement = null;
+            public RationalPolynomial ThisInTermsOfParentSumPrimitiveElement;
             public abstract Term Copy();
             public override Number Plus(Number a)
             {
@@ -590,7 +590,7 @@ namespace Solver
                     termB = term.Copy();
                     termA.ThisInTermsOfParentSumPrimitiveElement = null;
                     termB.ThisInTermsOfParentSumPrimitiveElement = null;
-                    return new LinearlyIndependentSum(term, this);
+                    return new LinearlyIndependentSum(termB, termA);
                 }
                 return a + this;
             }
@@ -1727,32 +1727,12 @@ namespace Solver
                         termPowerOfIFactors.Add(termPowerOfIFactors[i] + 1);
                     }
                 }
-                List<Float> realBoundCandidates = new List<Float> {
-                    Coefficient.RealPartEstimate.Min, Coefficient.RealPartEstimate.Max };
-                List<Float> imaginaryBoundCandidates = new List<Float> {
-                    Coefficient.RealPartEstimate.Min, Coefficient.RealPartEstimate.Max };
+                Interval<Float> realEstimate = new Interval<Float>(Float.Zero, Float.Zero);
+                Interval<Float> imaginaryEstimate = new Interval<Float>(Float.Zero, Float.Zero);
                 for (int i = 0; i < terms.Count; ++i)  
-                {
-                    List<Float> boundCandidates = null;
-                    switch (termPowerOfIFactors[i] % 4)
-                    {
-                        case 0:
-                            boundCandidates = realBoundCandidates;
-                            break;
-                        case 1:
-                            boundCandidates = imaginaryBoundCandidates;
-                            break;
-                        case 2:
-                            boundCandidates = new List<Float>();
-                            foreach (Float candidate in realBoundCandidates)
-                                boundCandidates.Add(-candidate);
-                            break;
-                        case 3:
-                            boundCandidates = new List<Float>();
-                            foreach (Float candidate in imaginaryBoundCandidates)
-                                boundCandidates.Add(-candidate);
-                            break;
-                    }
+                {                    
+                    List<Float> boundCandidates = new List<Float> {
+                        Coefficient.RealPartEstimate.Min, Coefficient.RealPartEstimate.Max };
                     for (int j = 0; j < terms[i].Count; ++j) 
                     {
                         int currentBoundCandidateCount = boundCandidates.Count;
@@ -1764,22 +1744,34 @@ namespace Solver
                             boundCandidates.Add(boundCandidate);
                         }
                     }
-                }
-                Interval<Float> realEstimate =
-                    new Interval<Float>(realBoundCandidates[0], realBoundCandidates[0]);
-                for (int i = 1; i < realBoundCandidates.Count; ++i)                
-                    if (realBoundCandidates[i] < realEstimate.Min)
-                        realEstimate.Min = realBoundCandidates[i];
-                    else if(realBoundCandidates[i] > realEstimate.Max)
-                        realEstimate.Max = realBoundCandidates[i];
+                    Interval<Float> termEstimate =
+                        new Interval<Float>(boundCandidates[0], boundCandidates[0]);
+                    for (int j = 1; j < boundCandidates.Count; ++j)
+                        if (boundCandidates[j] < termEstimate.Min)
+                            termEstimate.Min = boundCandidates[j];
+                        else if (boundCandidates[j] > termEstimate.Max)
+                            termEstimate.Max = boundCandidates[j];
+                    switch (termPowerOfIFactors[i] % 4)
+                    {
+                        case 0:
+                            realEstimate.Min += termEstimate.Min;
+                            realEstimate.Max += termEstimate.Max;
+                            break;
+                        case 1:
+                            imaginaryEstimate.Min += termEstimate.Min;
+                            imaginaryEstimate.Max += termEstimate.Max;
+                            break;
+                        case 2:
+                            realEstimate.Min -= termEstimate.Min;
+                            realEstimate.Max -= termEstimate.Max;
+                            break;
+                        case 3:
+                            imaginaryEstimate.Min -= termEstimate.Min;
+                            imaginaryEstimate.Max -= termEstimate.Max;
+                            break;
+                    }
+                }                
                 RealPartEstimate = realEstimate;
-                Interval<Float> imaginaryEstimate =
-                    new Interval<Float>(imaginaryBoundCandidates[0], imaginaryBoundCandidates[0]);
-                for (int i = 1; i < imaginaryBoundCandidates.Count; ++i)
-                    if (imaginaryBoundCandidates[i] < imaginaryEstimate.Min)
-                        imaginaryEstimate.Min = imaginaryBoundCandidates[i];
-                    else if (imaginaryBoundCandidates[i] > imaginaryEstimate.Max)
-                        imaginaryEstimate.Max = imaginaryBoundCandidates[i];
                 ImaginaryPartEstimate = imaginaryEstimate;
             }
             public override void RefineRealPartErrorInterval(Rational errorIntervalSize)
@@ -4964,7 +4956,7 @@ namespace Solver
                 }
             }
 #if DEBUG
-            EvaluateString("3^(1/2)*2^(1/3)");
+            EvaluateString("1/(1+2^(1/3))");
 #else
             while (true)
             {
