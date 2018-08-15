@@ -1982,21 +1982,21 @@ namespace Solver
                         while (augmentation.Count < matrix.Rows.Count)
                             augmentation.Add(Zero);
                         matrix.GetRowEchelonForm(augmentation);
-                        for (int i = Terms.Count; i < augmentation.Count; ++i)
+                        for (int i = augmentation.Count - 1; i >= Terms.Count; --i)
                             if (augmentation[i] != Zero)
                             {
                                 outputTerms = new List<Term>(termsInTermsOfNewPrimitiveElement);
                                 outputTerms.Add(term);
                                 return new LinearlyIndependentSum(outputTerms, newPrimitiveElement);
                             }
-                        for (int i = Terms.Count - 1; i >= 0; --i)
-                        {
-                            augmentation[i] /= matrix.Rows[i][i];
-                            for (int j = 0; j < i; ++j)                            
-                                augmentation[j] -= augmentation[i] * matrix.Rows[i][j];
-                        }                        
+                            else
+                            {
+                                augmentation.RemoveAt(i);
+                                matrix.Rows.RemoveAt(i);
+                            }
+                        matrix.Diagonalize(augmentation);                       
                         Integer minusOne = -One;
-                        for (int i = 0; i < Terms.Count; ++i)
+                        for (int i = 0; i < augmentation.Count; ++i)
                             if (augmentation[i] != minusOne)
                             {
                                 Rational scale = One + augmentation[i];
@@ -2178,6 +2178,7 @@ namespace Solver
             protected override RationalPolynomial CalculateMinimalPolynomial()
             {
                 List<Rational> variableFormCoefficients = new List<Rational>();
+                Primitive ensurePrimitiveElementHasBeenFound = PrimitiveElement;
                 foreach (Term term in Terms)
                     variableFormCoefficients = CoefficientAdd(variableFormCoefficients,
                         term.ThisInTermsOfParentSumPrimitiveElement.Coefficients);
@@ -2208,14 +2209,13 @@ namespace Solver
                     (four * (Rational)GetMagnitudeInterval(ImaginaryPartEstimate).Max + Two));
                 Interval<Float> realPartInterval = GetMagnitudeInterval(RealPartEstimate);
                 Interval<Float> imaginaryPartInterval = GetMagnitudeInterval(ImaginaryPartEstimate);
-                Fraction half = new Fraction(One, Two);
-                Number magnitudeUnderestimate =
-                    ((Rational)(realPartInterval.Min * realPartInterval.Min +
-                    imaginaryPartInterval.Min * imaginaryPartInterval.Min)).Exponentiate(half);
+                Surd magnitudeUnderestimate =
+                    new Surd((Rational)(realPartInterval.Min * realPartInterval.Min +
+                    imaginaryPartInterval.Min * imaginaryPartInterval.Min), Two);
                 magnitudeUnderestimate.RefineRealPartErrorInterval(errorIntervalSize);
-                Number magnitudeOverestimate =
-                    ((Rational)(realPartInterval.Max * realPartInterval.Max +
-                    imaginaryPartInterval.Max * imaginaryPartInterval.Max)).Exponentiate(half);
+                Surd magnitudeOverestimate =
+                    new Surd((Rational)(realPartInterval.Max * realPartInterval.Max +
+                    imaginaryPartInterval.Max * imaginaryPartInterval.Max), Two);
                 magnitudeOverestimate.RefineRealPartErrorInterval(errorIntervalSize);
                 MagnitudeEstimate = new Interval<Float>(magnitudeUnderestimate.RealPartEstimate.Min,
                     magnitudeOverestimate.RealPartEstimate.Max);
@@ -2242,7 +2242,17 @@ namespace Solver
                                 a.RealPartEstimate.Max < conjugates[i].RealPartEstimate.Min)
                                 conjugates.RemoveAt(i);
                             else
-                                ++i;
+                            {
+                                a.RefineImaginaryPartErrorInterval(localErrorIntervalSize);
+                                conjugates[i].RefineImaginaryPartErrorInterval(
+                                    localErrorIntervalSize);
+                                if (-conjugates[i].ImaginaryPartEstimate.Min <
+                                    a.ImaginaryPartEstimate.Min || a.ImaginaryPartEstimate.Max <
+                                    -conjugates[i].ImaginaryPartEstimate.Max)
+                                    conjugates.RemoveAt(i);
+                                else
+                                    ++i;
+                            }
                         }
                         localErrorIntervalSize /= Two;
                     }
