@@ -2061,12 +2061,11 @@ namespace Solver
                             PrimitiveElement_.ArgumentInTermsOfThis(term);
                         if (termInTermsOfPrimitive != null)
                         {
-                            Term copiedTerm = term.Copy();
-                            copiedTerm.ThisInTermsOfParentSumPrimitiveElement =
-                                termInTermsOfPrimitive;
+                            term.ThisInTermsOfParentSumPrimitiveElement = termInTermsOfPrimitive;
                             RationalPolynomial oldPrimitiveInTermsOfNewPrimitive =
                                 x - k * termInTermsOfPrimitive;
-                            return thisPlusTerm(copiedTerm, convertTermsToNewPrimitiveElement(
+                            return thisPlusTerm(PrimitiveElement_,
+                                convertTermsToNewPrimitiveElement(
                                 oldPrimitiveInTermsOfNewPrimitive));
                         }
                         ++k;
