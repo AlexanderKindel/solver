@@ -2,7 +2,7 @@ Solver is a symbolic computation program that converts radical expressions to as
 
 For each input expression, the program returns an expression equal to that input. The context in which each operation is allowed is limited in output expressions; which expression the program will choose for the output can be understood in terms of these limitations. 
 
-#Addition and Subtraction
+# Addition and Subtraction
 
 The terms of any sums are linearly indepedent over the rationals:
 
@@ -12,7 +12,7 @@ Note that the program doesn't attempt to make a canonical choice of which terms 
 
 (5+2\*6^(1/2))^(1/2)+2^(1/2)+3^(1/2)=2(5+2\*6^(1/2))^(1/2)
 
-#Multiplication
+# Multiplication
 
 The factors of any product consist of one or more surds, or a rational number and one or more surds. Thus all products of rational numbers are consolidated, and all products involving one or more sums are distributed:
 
@@ -24,7 +24,7 @@ The program attempts to consolidate the factors of products of surds as much as 
 
 For complex-valued surds, however, the exponentiation identity used for such consolidation is true only up to multiplication by a root of unity. Roughly speaking, roots of unity other than 1 come into play in cases where the sum of the complex arguments of two terms in a multiplication is greater than or equal to 2pi. In general, performing the consolidation then multiplying by the necessary root of unity causes infinite looping problems. These problems don't arise in products of surds of the same index, so the program consolidates all surds of the same index, then consolidates the resulting distinct-index factors in pairs until no two factors have arguments whose sum is less than 2pi.
 
-#Division
+# Division
 
 The denominator of any division is a positive integer. Thus all denominators are rationalized: 
 
@@ -46,7 +46,7 @@ and no numerator has an integer factor that is divisible by the denominator:
 
 6\*2^(1/2)/4=3\*2^(1/2)/2
 
-#Exponentiation
+# Exponentiation
 
 Any exponent is a fraction with numerator 1:
 
