@@ -828,7 +828,7 @@ namespace Solver
                     throw new DivideByZeroException();
                 if (Magnitude() == One)
                     return this;
-                return new Fraction(One, this);
+                return Create(One, this);
             }
             public Integer Reciprocal(Integer characteristic)
             {
@@ -2100,24 +2100,12 @@ namespace Solver
             {
                 List<Number> conjugates = GetConjugates();
                 conjugates.Remove(this);
-                Number numerator = One;
+                Number output = One;
                 foreach (Number conjugate in conjugates)
-                    numerator *= conjugate;
-                List<List<Rational>> matrixRows = new List<List<Rational>> { new List<Rational>() };
-                for (int i = 0; i < MinimalPolynomial.Coefficients.Count - 2; ++i)
-                    matrixRows[0].Add(Zero);
-                matrixRows[0].Add(-MinimalPolynomial.Coefficients[0]);
-                for (int i = 1; i < MinimalPolynomial.Coefficients.Count - 1; ++i)
-                {
-                    List<Rational> row = new List<Rational>();
-                    for (int j = 0; j < MinimalPolynomial.Coefficients.Count - 2; ++j)
-                        row.Add(Zero);
-                    row[i - 1] = One;
-                    row.Add(-MinimalPolynomial.Coefficients[i]);
-                    matrixRows.Add(row);
-                }
-                Matrix transformMatrix = new Matrix(matrixRows);
-                return numerator / transformMatrix.GetDeterminant();
+                    output *= conjugate;
+                if (MinimalPolynomial.Coefficients.Count % 2 == 0)
+                    return -output / MinimalPolynomial.Coefficients[0];
+                return output / MinimalPolynomial.Coefficients[0];
             }
             public override Rational RationalFactor()
             {
@@ -2553,34 +2541,6 @@ namespace Solver
                         Rows[j][i] = Number.Zero;
                     }
                 }
-            }
-            public Rational GetDeterminant()
-            {//Mutates *this.
-                Rational determinant = -Number.One;
-                for (int i = 1; i < Rows.Count; ++i)
-                    for (int j = i; j < Rows.Count; ++j)
-                        if (Rows[i - 1][Rows.Count - i] == Number.Zero)
-                        {
-                            List<Rational> tempRow = Rows[j];
-                            Rows[j] = Rows[i - 1];
-                            Rows[i - 1] = tempRow;
-                            determinant = -determinant;
-                        }
-                        else
-                        {
-                            determinant *= Rows[i - 1][Rows.Count - i];
-                            for (int k = i; k < Rows.Count; ++k)
-                                if (Rows[k][Rows.Count - i] != Number.Zero)
-                                {
-                                    Rational scalar = Rows[k][Rows.Count - i] /
-                                        Rows[i - 1][Rows.Count - i];
-                                    for (int l = 0; l < Rows.Count; ++l)
-                                        Rows[k][l] -= Rows[i - 1][l] * scalar;
-                                    determinant *= Rows[i - 1][Rows.Count - i];
-                                }
-                            break;
-                        }
-                return determinant;
             }
         }
         static List<T> CoefficientAdd<T>(List<T> coefficientsA, List<T> coefficientsB)
@@ -4947,7 +4907,7 @@ namespace Solver
                 }
             }
 #if DEBUG
-            EvaluateString("2^(1/2)+3^(1/2)+(5+2*6^(1/2))^(1/2)");
+            EvaluateString("1/(1+2^(1/3))");
 #else
             while (true)
             {
