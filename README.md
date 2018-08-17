@@ -28,7 +28,7 @@ For complex-valued surds, however, the exponentiation identity used for such con
 
 The denominator of any division is a positive integer. Thus all denominators are rationalized: 
 
-1/(1+2^(1/2))=-1/2+2^(1/2)/2
+1/(1+2^(1/3))=1/3-2^(1/3)/3+4^(1/3)/3
 
 and the signs of negative denominators are transferred to the numerators:
 
