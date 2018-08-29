@@ -300,11 +300,11 @@ namespace Solver
             public abstract Number Exponentiate(Rational exponent);
             protected abstract int GetTypeIndex();
             public virtual int CompareTo(object obj)
-            {//Uses a cheap lexicographic scheme that is guaranteed to detect numerical equality for
-             //Rationals, but for other derived types is only good for enabling superficial sorting
-             //operations. To test for numerical equality of arbitrary Numbers, check whether the
-             //minimal polynomial of their difference is x, and to numerically compare unequal
-             //Numbers, compare their Estimate fields.
+            {//Essentially a cheap way to check ToString() == obj.ToString(), which is guaranteed to
+             //correspond to numerical equality for Rationals, but not for other derived types. To
+             //test for numerical equality of arbitrary Numbers, check whether their difference
+             //evaluates to Zero, and to numerically compare unequal Numbers, compare their Estimate
+             //fields.
                 Number number = obj as Number;
                 if (ReferenceEquals(number, null))
                     return 1;
@@ -3163,7 +3163,7 @@ namespace Solver
                 ModdedPolynomial V = this;
                 ModdedPolynomial W = new ModdedPolynomial(Characteristic, Number.Zero, Number.One);
                 int d = 0;
-                while (d < (Coefficients.Count + 1) / 2)
+                while (2 * d <= Coefficients.Count - 3) 
                 {
                     ++d;
                     W = Exponentiate(W, Characteristic) % this;
@@ -3176,6 +3176,8 @@ namespace Solver
                         W %= V;
                     }
                 }
+                if (V.Coefficients.Count > 1)
+                    distinctDegreeFactors.Add(V.Coefficients.Count - 1, V);
                 List<ModdedPolynomial> irreducibleFactors = new List<ModdedPolynomial>();
                 void cantorZassenhausSplit(ModdedPolynomial factorProduct, int degree)
                 {
@@ -4907,7 +4909,7 @@ namespace Solver
                 }
             }
 #if DEBUG
-            EvaluateString("1/(1+2^(1/3))");
+            EvaluateString("2^(1/2)+3^(1/2)+(5+6*2^(1/2))^(1/2)");
 #else
             while (true)
             {
