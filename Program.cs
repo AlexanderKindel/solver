@@ -137,7 +137,7 @@ namespace Solver
                 {
                     List<Number> candidateConjugates = new List<Number>(conjugates);
                     bool factorEqualsA()
-                    {                        
+                    {
                         while (candidateConjugates.Count > 0)
                         {
                             a.RefineRealPartErrorInterval(errorIntervalSize);
@@ -352,13 +352,13 @@ namespace Solver
             public static bool operator !=(Number a, Number b)
             {
                 return !(a == b);
-            }            
+            }
             protected virtual Interval<Rational> GetRationalMagnitudeEstimate(
                 Rational errorIntervalSize)
             {
                 throw new NotImplementedException("Any derived class that doesn't override " +
                     "GetRationalMagnitudeEstimate should override RefineMagnitudeErrorInterval.");
-            }            
+            }
             public virtual void RefineMagnitudeErrorInterval(Rational errorIntervalSize)
             {
                 if (MagnitudeEstimate.Min == null || (Rational)(MagnitudeEstimate.Max -
@@ -554,43 +554,27 @@ namespace Solver
         }
         abstract class Term : Number
         {
-            public RationalPolynomial ThisInTermsOfParentSumPrimitiveElement;
-            public abstract Term Copy();
             public override Number Plus(Number a)
             {
                 if (a == Zero)
                     return this;
                 RationalPolynomial x = new RationalPolynomial(null, Zero, One);
-                if (a is Rational rational)
-                {
-                    Term termA = Copy();
-                    Term termB = rational.Copy();
-                    termA.ThisInTermsOfParentSumPrimitiveElement = x;
-                    termB.ThisInTermsOfParentSumPrimitiveElement =
-                        new RationalPolynomial(null, rational);
-                    return new LinearlyIndependentSum(new List<Term> { termA, termB }, this);
-                }
+                if (a is Rational rational)                    
+                    return new LinearlyIndependentSum(new List<Term> { this, rational },
+                        new List<RationalPolynomial> { x, new RationalPolynomial(null, rational) },
+                        this);                
                 if (a is Term term)
                 {
-                    Term termA;
-                    Term termB;
                     RationalPolynomial termInTermsOfThis = ArgumentInTermsOfThis(term);
                     if (termInTermsOfThis != null)
                     {
                         if (termInTermsOfThis.Coefficients.Count == 2 &&
                             termInTermsOfThis.Coefficients[0] == Zero)
                             return (termInTermsOfThis.Coefficients[1] + One) * this;
-                        termA = Copy();
-                        termB = term.Copy();
-                        termA.ThisInTermsOfParentSumPrimitiveElement = x;
-                        termB.ThisInTermsOfParentSumPrimitiveElement = termInTermsOfThis;
-                        return new LinearlyIndependentSum(new List<Term> { termA, termB }, this);
+                        return new LinearlyIndependentSum(new List<Term> { this, term },
+                            new List<RationalPolynomial> {x, termInTermsOfThis }, this);
                     }
-                    termA = Copy();
-                    termB = term.Copy();
-                    termA.ThisInTermsOfParentSumPrimitiveElement = null;
-                    termB.ThisInTermsOfParentSumPrimitiveElement = null;
-                    return new LinearlyIndependentSum(termB, termA);
+                    return new LinearlyIndependentSum(this, term);
                 }
                 return a + this;
             }
@@ -779,12 +763,6 @@ namespace Solver
                     Sign = -1;
                     Values = new uint[] { (uint)-value };
                 }
-            }
-            public override Term Copy()
-            {
-                Integer copy = new Integer(Values, Sign);
-                copy.ArgumentEstimate = ArgumentEstimate;
-                return new Integer(Values, Sign);
             }
             public static Integer Parse(string decimalString)
             {
@@ -1201,7 +1179,7 @@ namespace Solver
                 if (this != One)
                     if (this == -One)
                         return '-' + str;
-                    else if (str.Length == 0 || str[0] == '(') 
+                    else if (str.Length == 0 || str[0] == '(')
                         return ToString() + str;
                     else
                         return ToString() + '*' + str;
@@ -1243,12 +1221,6 @@ namespace Solver
              //fraction. Otherwise, use numerator / denominator instead.
                 Numerator_ = numerator;
                 Denominator_ = denominator;
-            }
-            public override Term Copy()
-            {
-                Fraction copy = new Fraction(Numerator, Denominator);
-                copy.ArgumentEstimate = ArgumentEstimate;
-                return copy;
             }
             new public Fraction GetNegative()
             {
@@ -1372,15 +1344,6 @@ namespace Solver
                 Radicand = radicand;
                 Index = index;
             }
-            public override Term Copy()
-            {
-                Surd copy = new Surd(Radicand, Index);
-                copy.RealPartEstimate = RealPartEstimate;
-                copy.ImaginaryPartEstimate = ImaginaryPartEstimate;
-                copy.ArgumentEstimate = ArgumentEstimate;
-                copy.MagnitudeEstimate = MagnitudeEstimate;
-                return copy;
-            }
             public override Number Reciprocal()
             {
                 return Radicand.Exponentiate(new Fraction(Index - One, Index)) / Radicand;
@@ -1411,7 +1374,7 @@ namespace Solver
                     radicandFactorA.RefineArgumentErrorInterval(One);
                     radicandFactorB.RefineArgumentErrorInterval(One);
                     if (surd.Index != Index)
-                    {                        
+                    {
                         RefineArgumentErrorInterval(Pi.LowEstimate / productIndex);
                         surd.RefineArgumentErrorInterval(Pi.LowEstimate / productIndex);
                         if ((Rational)radicandFactorA.ArgumentEstimate.Max / productIndex <
@@ -1529,7 +1492,7 @@ namespace Solver
                 Integer three = new Integer(3);
                 Radicand.RefineMagnitudeErrorInterval(
                     Solver.Exponentiate(errorIntervalSize, Index) / three);
-                errorIntervalSize /= three;                
+                errorIntervalSize /= three;
                 MagnitudeEstimate = new Interval<Float>(
                     Radicand.MagnitudeEstimate.Min.EstimateRoot(errorIntervalSize, Index).Min,
                     Radicand.MagnitudeEstimate.Max.EstimateRoot(errorIntervalSize, Index).Max);
@@ -1550,15 +1513,6 @@ namespace Solver
                 Coefficient = coefficient;
                 Factors = factors;
                 Factors.Sort();
-            }
-            public override Term Copy()
-            {
-                Product copy = new Product(Coefficient, Factors);
-                copy.RealPartEstimate = RealPartEstimate;
-                copy.ImaginaryPartEstimate = ImaginaryPartEstimate;
-                copy.ArgumentEstimate = ArgumentEstimate;
-                copy.MagnitudeEstimate = MagnitudeEstimate;
-                return copy;
             }
             public override Number Reciprocal()
             {
@@ -1589,7 +1543,7 @@ namespace Solver
                 if (a is Surd surd)
                 {
                     List<Surd> factors = new List<Surd>(Factors);
-                    for (int i = 0; i < Factors.Count; ++i) 
+                    for (int i = 0; i < Factors.Count; ++i)
                     {
                         Number factorProduct = surd * Factors[i];
                         if (factorProduct !=
@@ -1658,7 +1612,7 @@ namespace Solver
                 MultivariatePolynomial variableForm =
                     new MultivariatePolynomial(minimalPolynomials);
                 variableForm.SetCoefficient(indicies, Coefficient);
-                return variableForm.CalculateValueMinimalPolynomialInfo(this);                
+                return variableForm.CalculateValueMinimalPolynomial(this);
             }
             public override List<Number> GetConjugates()
             {
@@ -1691,7 +1645,7 @@ namespace Solver
                 Float errorScale =
                     GetMagnitudeInterval(Coefficient.RealPartEstimate).Max + Float.One;
                 Float termToSubtract = Float.One;
-                foreach (Surd factor in Factors) 
+                foreach (Surd factor in Factors)
                 {
                     factor.RefineRealPartErrorInterval(One);
                     factor.RefineImaginaryPartErrorInterval(One);
@@ -1729,11 +1683,11 @@ namespace Solver
                 }
                 Interval<Float> realEstimate = new Interval<Float>(Float.Zero, Float.Zero);
                 Interval<Float> imaginaryEstimate = new Interval<Float>(Float.Zero, Float.Zero);
-                for (int i = 0; i < terms.Count; ++i)  
-                {                    
+                for (int i = 0; i < terms.Count; ++i)
+                {
                     List<Float> boundCandidates = new List<Float> {
                         Coefficient.RealPartEstimate.Min, Coefficient.RealPartEstimate.Max };
-                    for (int j = 0; j < terms[i].Count; ++j) 
+                    for (int j = 0; j < terms[i].Count; ++j)
                     {
                         int currentBoundCandidateCount = boundCandidates.Count;
                         for (int k = 0; k < currentBoundCandidateCount; ++k)
@@ -1770,7 +1724,7 @@ namespace Solver
                             imaginaryEstimate.Max -= termEstimate.Max;
                             break;
                     }
-                }                
+                }
                 RealPartEstimate = realEstimate;
                 ImaginaryPartEstimate = imaginaryEstimate;
             }
@@ -1863,7 +1817,7 @@ namespace Solver
                     indices[i] = 1;
                     variableForm.SetCoefficient(indices, Number.One);
                 }
-                return variableForm.CalculateValueMinimalPolynomialInfo(this);
+                return variableForm.CalculateValueMinimalPolynomial(this);
             }
             public override List<Number> GetConjugates()
             {
@@ -1889,6 +1843,7 @@ namespace Solver
         class LinearlyIndependentSum : Number
         {
             public List<Term> Terms { get; }
+            public List<RationalPolynomial> TermsInTermsOfPrimitiveElement { get; }
             Term PrimitiveCandidate;
             Primitive PrimitiveElement_ = null;
             public Primitive PrimitiveElement
@@ -1897,38 +1852,37 @@ namespace Solver
                 {
                     if (PrimitiveElement_ != null)
                         return PrimitiveElement_;
-                    bool candidateIsPrimitive(Term candidate, Term otherTerm)
+                    bool candidateIsPrimitive(int candidateIndex, int otherTermIndex)
                     {
                         RationalPolynomial otherTermInTermsOfCandidate =
-                            candidate.ArgumentInTermsOfThis(otherTerm);
+                            Terms[candidateIndex].ArgumentInTermsOfThis(Terms[otherTermIndex]);
                         if (otherTermInTermsOfCandidate != null)
                         {
-                            candidate.ThisInTermsOfParentSumPrimitiveElement =
+                            TermsInTermsOfPrimitiveElement[candidateIndex] =
                                 new RationalPolynomial(null, Zero, One);
-                            otherTerm.ThisInTermsOfParentSumPrimitiveElement =
+                            TermsInTermsOfPrimitiveElement[otherTermIndex] =
                                 otherTermInTermsOfCandidate;
-                            PrimitiveElement_ = candidate;
+                            PrimitiveElement_ = Terms[candidateIndex];
                             return true;
                         }
                         return false;
                     }
-                    if (Terms[0] == PrimitiveCandidate &&
-                        candidateIsPrimitive(Terms[0], Terms[1]))
+                    if (Terms[0] == PrimitiveCandidate && candidateIsPrimitive(0, 1))
                         return PrimitiveElement_;
-                    else if (candidateIsPrimitive(Terms[1], Terms[0]))
+                    else if (candidateIsPrimitive(1, 0))
                         return PrimitiveElement_;
                     RationalPolynomial x = new RationalPolynomial(null, Zero, One);
                     Integer k = One;
-                    bool primitiveElementFound(Term termA, Term termB)
+                    bool primitiveElementFound(int termIndexA, int termIndexB)
                     {
-                        PrimitiveElement_ =
-                            new PolynomialIndependentSum(new List<Term> { k * termA, termB });
+                        PrimitiveElement_ = new PolynomialIndependentSum(
+                            new List<Term> { k * Terms[termIndexA], Terms[termIndexB] });
                         RationalPolynomial termAInTermsOfPrimitive =
-                            PrimitiveElement_.ArgumentInTermsOfThis(termA);
+                            PrimitiveElement_.ArgumentInTermsOfThis(Terms[termIndexA]);
                         if (termAInTermsOfPrimitive != null)
                         {
-                            termA.ThisInTermsOfParentSumPrimitiveElement = termAInTermsOfPrimitive;
-                            termB.ThisInTermsOfParentSumPrimitiveElement =
+                            TermsInTermsOfPrimitiveElement[termIndexA] = termAInTermsOfPrimitive;
+                            TermsInTermsOfPrimitiveElement[termIndexB] =
                                 x - k * termAInTermsOfPrimitive;
                             return true;
                         }
@@ -1936,24 +1890,42 @@ namespace Solver
                     }
                     while (true)
                     {
-                        if (primitiveElementFound(Terms[0], Terms[1]))
+                        if (primitiveElementFound(0, 1))
                             return PrimitiveElement_;
-                        if (primitiveElementFound(Terms[1], Terms[0]))
+                        if (primitiveElementFound(1, 0))
                             return PrimitiveElement_;
                         ++k;
                     }
                 }
             }
-            public LinearlyIndependentSum(List<Term> terms, Primitive primitiveElement)
+            public LinearlyIndependentSum(List<Term> terms,
+                List<RationalPolynomial> termsInTermsOfPrimitiveElement, Primitive primitiveElement)
             {
-                Terms = terms;
-                Terms.Sort();
+                List<Tuple<Term, RationalPolynomial>> termsWithPrimitiveElementRepresentations =
+                    new List<Tuple<Term, RationalPolynomial>>();
+                for (int i = 0; i < terms.Count; ++i)
+                    termsWithPrimitiveElementRepresentations.Add(new Tuple<Term,
+                        RationalPolynomial>(terms[i], termsInTermsOfPrimitiveElement[i]));
+                termsWithPrimitiveElementRepresentations.Sort(delegate (
+                    Tuple<Term, RationalPolynomial> a, Tuple<Term, RationalPolynomial> b)
+                    { return a.Item1.CompareTo(b.Item1); });
+                Terms = new List<Term>();
+                TermsInTermsOfPrimitiveElement = new List<RationalPolynomial>();
+                for (int i = 0; i < termsWithPrimitiveElementRepresentations.Count; ++i)
+                {
+                    Terms.Add(termsWithPrimitiveElementRepresentations[i].Item1);
+                    TermsInTermsOfPrimitiveElement.Add(
+                        termsWithPrimitiveElementRepresentations[i].Item2);
+                }
                 PrimitiveElement_ = primitiveElement;
             }
             public LinearlyIndependentSum(Term primitiveCandidateTerm, Term otherTerm)
             {
-                Terms = new List<Term> { primitiveCandidateTerm, otherTerm };
-                Terms.Sort();
+                if (primitiveCandidateTerm.CompareTo(otherTerm) < 0)
+                    Terms = new List<Term> { primitiveCandidateTerm, otherTerm };
+                else
+                    Terms = new List<Term> { otherTerm, primitiveCandidateTerm };
+                TermsInTermsOfPrimitiveElement = new List<RationalPolynomial> { null, null };
                 PrimitiveCandidate = primitiveCandidateTerm;
             }
             public override Number Plus(Number a)
@@ -1961,96 +1933,98 @@ namespace Solver
                 if (a is Term term)
                 {
                     Number thisPlusTerm(Primitive newPrimitiveElement,
-                        List<Term> termsInTermsOfNewPrimitiveElement)
+                        List<RationalPolynomial> oldTermsInTermsOfNewPrimitiveElement,
+                        RationalPolynomial newTermInTermsOfNewPrimitiveElement)
                     {
-                        List<RationalPolynomial> termsInTermsOfPrimitiveElement =
-                            new List<RationalPolynomial>();
-                        foreach (Term t in termsInTermsOfNewPrimitiveElement)                        
-                            termsInTermsOfPrimitiveElement.Add(
-                                t.ThisInTermsOfParentSumPrimitiveElement);                        
-                        Matrix matrix = new Matrix(termsInTermsOfPrimitiveElement).GetTranspose();
-                        List<Term> outputTerms = new List<Term>();
-                        if (term.ThisInTermsOfParentSumPrimitiveElement.Coefficients.Count >
+                        Matrix matrix =
+                            new Matrix(oldTermsInTermsOfNewPrimitiveElement).GetTranspose();
+                        List<Term> outputTerms;
+                        if (newTermInTermsOfNewPrimitiveElement.Coefficients.Count >
                             matrix.Rows.Count)
                         {
-                            outputTerms = new List<Term>(termsInTermsOfNewPrimitiveElement);
+                            outputTerms = new List<Term>(Terms);
                             outputTerms.Add(term);
-                            return new LinearlyIndependentSum(outputTerms, newPrimitiveElement);
+                            oldTermsInTermsOfNewPrimitiveElement.Add(
+                                newTermInTermsOfNewPrimitiveElement);
+                            return new LinearlyIndependentSum(outputTerms,
+                                oldTermsInTermsOfNewPrimitiveElement, newPrimitiveElement);
                         }
-                        List<Rational> augmentation = new List<Rational>(
-                            term.ThisInTermsOfParentSumPrimitiveElement.Coefficients);
+                        List<Rational> augmentation =
+                            new List<Rational>(newTermInTermsOfNewPrimitiveElement.Coefficients);
                         while (augmentation.Count < matrix.Rows.Count)
                             augmentation.Add(Zero);
                         matrix.GetRowEchelonForm(augmentation);
                         for (int i = augmentation.Count - 1; i >= Terms.Count; --i)
                             if (augmentation[i] != Zero)
                             {
-                                outputTerms = new List<Term>(termsInTermsOfNewPrimitiveElement);
+                                outputTerms = new List<Term>(Terms);
                                 outputTerms.Add(term);
-                                return new LinearlyIndependentSum(outputTerms, newPrimitiveElement);
+                                oldTermsInTermsOfNewPrimitiveElement.Add(
+                                newTermInTermsOfNewPrimitiveElement);
+                                return new LinearlyIndependentSum(outputTerms,
+                                    oldTermsInTermsOfNewPrimitiveElement, newPrimitiveElement);
                             }
                             else
                             {
                                 augmentation.RemoveAt(i);
                                 matrix.Rows.RemoveAt(i);
                             }
-                        matrix.Diagonalize(augmentation);                       
+                        matrix.Diagonalize(augmentation);
                         Integer minusOne = -One;
+                        outputTerms = new List<Term>();
+                        List<RationalPolynomial> outputTermsInTermsOfNewPrimitiveElement =
+                            new List<RationalPolynomial>();
                         for (int i = 0; i < augmentation.Count; ++i)
                             if (augmentation[i] != minusOne)
                             {
                                 Rational scale = One + augmentation[i];
                                 Term outputTerm = scale * Terms[i];
-                                outputTerm.ThisInTermsOfParentSumPrimitiveElement =
-                                    scale * Terms[i].ThisInTermsOfParentSumPrimitiveElement;
                                 outputTerms.Add(outputTerm);
+                                outputTermsInTermsOfNewPrimitiveElement.Add(
+                                    scale * oldTermsInTermsOfNewPrimitiveElement[i]);
                             }
                         if (outputTerms.Count == 0)
                             return Zero;
                         if (outputTerms.Count == 1)
                             return outputTerms[0];
-                        return new LinearlyIndependentSum(outputTerms, newPrimitiveElement);
+                        return new LinearlyIndependentSum(outputTerms,
+                            outputTermsInTermsOfNewPrimitiveElement, newPrimitiveElement);
                     }
                     RationalPolynomial termInTermsOfPrimitiveElement =
                         PrimitiveElement.ArgumentInTermsOfThis(term);
                     if (termInTermsOfPrimitiveElement != null)
-                    {
-                        term.ThisInTermsOfParentSumPrimitiveElement = termInTermsOfPrimitiveElement;
-                        return thisPlusTerm(PrimitiveElement, Terms);
-                    }
+                        return thisPlusTerm(PrimitiveElement, TermsInTermsOfPrimitiveElement,
+                            termInTermsOfPrimitiveElement);                    
                     RationalPolynomial x = new RationalPolynomial(null, Zero, One);
-                    List<Term> convertTermsToNewPrimitiveElement(
+                    List<RationalPolynomial> convertTermsToNewPrimitiveElement(
                         RationalPolynomial newPrimitiveElementInTermsOfOld)
                     {
-                        List<Term> convertedTerms = new List<Term>();
+                        List<RationalPolynomial> termsInTermsOfNewPrimitiveElement =
+                            new List<RationalPolynomial>();
                         List<RationalPolynomial> powers = new List<RationalPolynomial> {
                             newPrimitiveElementInTermsOfOld.GetMultiplicativeIdentity() };
                         for (int i = 0; i < Terms.Count; ++i)
                         {
-                            Term copiedTerm = Terms[i].Copy();
-                            copiedTerm.ThisInTermsOfParentSumPrimitiveElement =
+                            RationalPolynomial termInTermsOfNewPrimitiveElement =
                                 newPrimitiveElementInTermsOfOld.GetAdditiveIdentity();
-                            for (int j = 0; j < Terms[i].
-                                ThisInTermsOfParentSumPrimitiveElement.Coefficients.Count; ++j)
+                            for (int j = 0;
+                                j < TermsInTermsOfPrimitiveElement[i].Coefficients.Count; ++j)
                             {
                                 if (j >= powers.Count)
                                     powers.Add(powers[powers.Count - 1] *
                                         newPrimitiveElementInTermsOfOld);
-                                copiedTerm.ThisInTermsOfParentSumPrimitiveElement += powers[j] *
-                                    Terms[i].ThisInTermsOfParentSumPrimitiveElement.Coefficients[j];
+                                termInTermsOfNewPrimitiveElement += powers[j] *
+                                    TermsInTermsOfPrimitiveElement[i].Coefficients[j];
                             }
-                            convertedTerms.Add(copiedTerm);
+                            termsInTermsOfNewPrimitiveElement.Add(termInTermsOfNewPrimitiveElement);
                         }
-                        return convertedTerms;
+                        return termsInTermsOfNewPrimitiveElement;
                     }
                     RationalPolynomial primitiveElementInTermsOfTerm =
                         term.ArgumentInTermsOfThis(PrimitiveElement);
-                    if (primitiveElementInTermsOfTerm != null)
-                    {
-                        term.ThisInTermsOfParentSumPrimitiveElement = x;
+                    if (primitiveElementInTermsOfTerm != null)                    
                         return thisPlusTerm(term,
-                            convertTermsToNewPrimitiveElement(primitiveElementInTermsOfTerm));
-                    }
+                            convertTermsToNewPrimitiveElement(primitiveElementInTermsOfTerm), x);                    
                     Integer k = One;
                     while (true)
                     {
@@ -2059,22 +2033,17 @@ namespace Solver
                         PrimitiveElement_ = new PolynomialIndependentSum(primitiveElementTerms);
                         RationalPolynomial termInTermsOfPrimitive =
                             PrimitiveElement_.ArgumentInTermsOfThis(term);
-                        if (termInTermsOfPrimitive != null)
-                        {
-                            term.ThisInTermsOfParentSumPrimitiveElement = termInTermsOfPrimitive;
-                            RationalPolynomial oldPrimitiveInTermsOfNewPrimitive =
-                                x - k * termInTermsOfPrimitive;
+                        if (termInTermsOfPrimitive != null)                        
                             return thisPlusTerm(PrimitiveElement_,
-                                convertTermsToNewPrimitiveElement(
-                                oldPrimitiveInTermsOfNewPrimitive));
-                        }
+                                convertTermsToNewPrimitiveElement(x - k * termInTermsOfPrimitive),
+                                termInTermsOfPrimitive);                        
                         ++k;
                     }
                 }
                 LinearlyIndependentSum sum = (LinearlyIndependentSum)a;
                 Number output = this;
                 foreach (Term t in sum.Terms)
-                    output = output + t;
+                    output += t;
                 return output;
             }
             public override Number Times(Number a)
@@ -2166,9 +2135,9 @@ namespace Solver
             {
                 List<Rational> variableFormCoefficients = new List<Rational>();
                 Primitive ensurePrimitiveElementHasBeenFound = PrimitiveElement;
-                foreach (Term term in Terms)
-                    variableFormCoefficients = CoefficientAdd(variableFormCoefficients,
-                        term.ThisInTermsOfParentSumPrimitiveElement.Coefficients);
+                foreach (RationalPolynomial polynomial in TermsInTermsOfPrimitiveElement)
+                    variableFormCoefficients =
+                        CoefficientAdd(variableFormCoefficients, polynomial.Coefficients);
                 return new RationalPolynomial(variableFormCoefficients,
                     PrimitiveElement.MinimalPolynomial).GetValueMinimalPolynomial();
             }
@@ -2904,10 +2873,10 @@ namespace Solver
                         liftedFactors.Add(A);
                         unmoddedATimesB = B;
                     }
-                    liftedFactors.Add(unmoddedATimesB);                    
+                    liftedFactors.Add(unmoddedATimesB);
                     IntegerPolynomial factorTimesLeadingCoefficient =
                         factor * factor.Coefficients[factor.Coefficients.Count - 1];
-                    List<IntegerPolynomial> factorSplit = new List<IntegerPolynomial>();                    
+                    List<IntegerPolynomial> factorSplit = new List<IntegerPolynomial>();
                     void BoundCoefficients(IntegerPolynomial polynomial)
                     {
                         for (int i = 0; i < polynomial.Coefficients.Count; ++i)
@@ -2935,7 +2904,7 @@ namespace Solver
                             Division<IntegerPolynomial> division =
                                 factorTimesLeadingCoefficient.EuclideanDivideBy(v);
                             if (division.Remainder != null &&
-                                division.Remainder.Coefficients.Count == 0) 
+                                division.Remainder.Coefficients.Count == 0)
                             {
                                 while (division.Remainder != null &&
                                     division.Remainder.Coefficients.Count == 0)
@@ -2970,9 +2939,9 @@ namespace Solver
                             ;
                         ++combinationSize;
                     }
-                    if (2 * combinationSize == liftedFactors.Count)                    
+                    if (2 * combinationSize == liftedFactors.Count)
                         if (testFactorCombination(combinationSize - 1, 0, new List<int> { 0 }))
-                            liftedFactors.RemoveAt(0);                    
+                            liftedFactors.RemoveAt(0);
                     IntegerPolynomial finalFactor = new IntegerPolynomial(null,
                         factor.Coefficients[factor.Coefficients.Count - 1]);
                     foreach (IntegerPolynomial liftedFactor in liftedFactors)
@@ -3163,7 +3132,7 @@ namespace Solver
                 ModdedPolynomial V = this;
                 ModdedPolynomial W = new ModdedPolynomial(Characteristic, Number.Zero, Number.One);
                 int d = 0;
-                while (2 * d <= Coefficients.Count - 3) 
+                while (2 * d <= Coefficients.Count - 3)
                 {
                     ++d;
                     W = Exponentiate(W, Characteristic) % this;
@@ -3543,7 +3512,7 @@ namespace Solver
                         List<Rational> termBoundCandidates = new List<Rational> {
                             coefficient * realPartMinPower * imaginaryPartMaxPower,
                             coefficient * realPartMaxPower * imaginaryPartMinPower,
-                            coefficient * realPartMaxPower * imaginaryPartMaxPower };                        
+                            coefficient * realPartMaxPower * imaginaryPartMaxPower };
                         foreach (Rational candidate in termBoundCandidates)
                             if (candidate > termInterval.Max)
                                 termInterval.Max = candidate;
@@ -3574,7 +3543,7 @@ namespace Solver
                         imaginaryPartMinPower *= imaginaryPartMin;
                         imaginaryPartMaxPower *= imaginaryPartMax;
                     }
-                }                
+                }
                 evaluationRealPart.Min.RefineRealPartErrorInterval(errorIntervalSize);
                 evaluationRealPart.Max.RefineRealPartErrorInterval(errorIntervalSize);
                 evaluationImaginaryPart.Min.RefineRealPartErrorInterval(errorIntervalSize);
@@ -3648,17 +3617,6 @@ namespace Solver
                     }
                 }
                 return new RationalPolynomial(GetMonicCoefficients(minimalPolynomial.Coefficients));
-            }
-            public RationalPolynomial GetMinimalPolynomialOfKTimesRootOfThis(Rational k)
-            {
-                List<Rational> coefficients = new List<Rational>();
-                Rational power = Number.One;
-                foreach (Rational coefficient in Coefficients)
-                {
-                    coefficients.Add(power * coefficient);
-                    power /= k;
-                }
-                return new RationalPolynomial(GetMonicCoefficients(coefficients));
             }
 #if DEBUG
             public override string ToString()
@@ -4088,9 +4046,9 @@ namespace Solver
                         {
                             int termFactorDegree = aIndices[i] + bIndices[i];
                             if (a.MinimalPolynomials[i] == null ||
-                                termFactorDegree < a.MinimalPolynomials[i].Coefficients.Count - 1)                            
+                                termFactorDegree < a.MinimalPolynomials[i].Coefficients.Count - 1)
                                 foreach (int[] indices in term.Coefficients.Keys)
-                                    indices[i] = termFactorDegree;                            
+                                    indices[i] = termFactorDegree;
                             else
                             {
                                 MultivariatePolynomial termFactor =
@@ -4129,7 +4087,7 @@ namespace Solver
             {
                 return b * a;
             }
-            public RationalPolynomial CalculateValueMinimalPolynomialInfo(Primitive value)
+            public RationalPolynomial CalculateValueMinimalPolynomial(Primitive value)
             {
                 List<List<Rational>> matrixCoefficients = new List<List<Rational>>();
                 List<int[]> termsPresent = new List<int[]> { new int[MinimalPolynomials.Length] };
@@ -4162,7 +4120,7 @@ namespace Solver
                                 matrixCoefficients[i].Add(Number.Zero);
                             matrixRow.Add(power.Coefficients[indices]);
                         }
-                    }                    
+                    }
                     matrixCoefficients.Add(matrixRow);
                     if (matrixRow[0] != Number.Zero)
                         constantIsPresent = true;
@@ -4437,7 +4395,7 @@ namespace Solver
                             nthRoots.Add(combination[0] * combination[1].Exponentiate(
                                 new Fraction(Number.One, prime)));
                         sortRoots(nthRoots, n);
-                        NthRoots.Add(n, nthRoots);                        
+                        NthRoots.Add(n, nthRoots);
                         return nthRoots;
                     }
                 }
@@ -4539,7 +4497,7 @@ namespace Solver
                             resolventMultiplesInTermsOfNMinusFirstRoots[i][key[0]] -=
                                 resolventProduct.Coefficients[key];
                 }
-                List<Number> nMinusFirstRoots = GetNthRoots(nMinusOne);                
+                List<Number> nMinusFirstRoots = GetNthRoots(nMinusOne);
                 List<Number> resolventProductValues = new List<Number>();
                 foreach (List<Rational> coefficients in resolventMultiplesInTermsOfNMinusFirstRoots)
                 {
@@ -4908,14 +4866,14 @@ namespace Solver
                     Console.WriteLine(e.Message);
                 }
             }
-#if DEBUG
-            EvaluateString("2^(1/2)+3^(1/2)+(5+6*2^(1/2))^(1/2)");
+#if DEBUG            
+            EvaluateString("((-3)^(1/2)*2^(1/3)/2)-2^(1/3)/2");            
 #else
             while (true)
             {
                 string input = Console.ReadLine();
                 if (input[0] == 'q')
-                    return;
+                    return;                
                 EvaluateString(input);
             }
 #endif
