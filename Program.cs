@@ -128,7 +128,7 @@ namespace Solver
             {
                 if (a is Rational rational)
                 {
-                    return new RationalPolynomial(null, rational);
+                    return new RationalPolynomial(MinimalPolynomial, rational);
                 }
                 if ((MinimalPolynomial.Coefficients.Count - 1) %
                     (a.MinimalPolynomial.Coefficients.Count - 1) != 0)
@@ -200,7 +200,8 @@ namespace Solver
                     }
                     if (factorEqualsA())
                     {
-                        return candidateFactors[i];
+                        return new RationalPolynomial(candidateFactors[i].Coefficients,
+                            MinimalPolynomial);
                     }
                 }
                 return null;
@@ -1044,7 +1045,7 @@ namespace Solver
                 return a * this;
             }            
             public Division<Integer> EuclideanDivideBy(Integer divisor)
-            {
+            {                
                 if (divisor.Sign == 0)
                 {
                     throw new DivideByZeroException();
@@ -2258,7 +2259,7 @@ namespace Solver
                                 outputTerms = new List<Term>(Terms);
                                 outputTerms.Add(term);
                                 oldTermsInTermsOfNewPrimitiveElement.Add(
-                                newTermInTermsOfNewPrimitiveElement);
+                                    newTermInTermsOfNewPrimitiveElement);
                                 return new LinearlyIndependentSum(outputTerms,
                                     oldTermsInTermsOfNewPrimitiveElement, newPrimitiveElement);
                             }
@@ -2302,7 +2303,6 @@ namespace Solver
                         return thisPlusTerm(PrimitiveElement, TermsInTermsOfPrimitiveElement,
                             termInTermsOfPrimitiveElement);
                     }
-                    RationalPolynomial x = new RationalPolynomial(null, Zero, One);
                     List<RationalPolynomial> convertTermsToNewPrimitiveElement(
                         RationalPolynomial newPrimitiveElementInTermsOfOld)
                     {
@@ -2334,7 +2334,8 @@ namespace Solver
                     if (primitiveElementInTermsOfTerm != null)
                     {
                         return thisPlusTerm(term,
-                            convertTermsToNewPrimitiveElement(primitiveElementInTermsOfTerm), x);
+                            convertTermsToNewPrimitiveElement(primitiveElementInTermsOfTerm),
+                            new RationalPolynomial(term.MinimalPolynomial, Zero, One));
                     }
                     Integer k = One;
                     while (true)
@@ -2347,8 +2348,9 @@ namespace Solver
                         if (termInTermsOfPrimitive != null)
                         {
                             return thisPlusTerm(PrimitiveElement_,
-                                convertTermsToNewPrimitiveElement(x - k * termInTermsOfPrimitive),
-                                termInTermsOfPrimitive);
+                                convertTermsToNewPrimitiveElement(new RationalPolynomial(
+                                PrimitiveElement_.MinimalPolynomial, Zero, One) -
+                                k * termInTermsOfPrimitive), termInTermsOfPrimitive);
                         }
                         ++k;
                     }
@@ -5277,45 +5279,66 @@ namespace Solver
             output.BOverGCD = a.GetAdditiveIdentity().Minus(output.BOverGCD);
             return output;
         }
+        abstract class Token
+        {
+            public virtual bool Equals(char a)
+            {
+                return false;
+            }
+        }
+        class NumericToken : Token
+        {
+            public Number Value;
+            public NumericToken(Number value)
+            {
+                Value = value;
+            }
+        }
+        class TextToken : Token
+        {
+            public char Value;
+            public TextToken(char value)
+            {
+                Value = value;
+            }
+            public override bool Equals(char a)
+            {
+                return Value == a;
+            }
+        }
         static void Main(string[] args)
         {
-            Number EvaluateExpression(List<char> operations, List<Number> numbers)
+            Number EvaluateExpression(List<Token> tokens)
             {
-                for (int i = 0; i < operations.Count;)
+                for (int i = 0; i < tokens.Count;)
                 {
-                    if (operations[i] == ')')
+                    if (tokens[i].Equals(')'))
                     {
                         throw new InvalidUserInput("Unmatched parentheses.");
                     }
-                    if (operations[i] == '(')
+                    if (tokens[i].Equals('('))
                     {
                         int numOfUnmatchedParens = 1;
                         int matchingParenIndex = i;
                         while (numOfUnmatchedParens > 0)
                         {
                             matchingParenIndex += 1;
-                            try
-                            {
-                                if (operations[matchingParenIndex] == '(')
-                                {
-                                    numOfUnmatchedParens += 1;
-                                }
-                                else if (operations[matchingParenIndex] == ')')
-                                {
-                                    numOfUnmatchedParens -= 1;
-                                }
-                            }
-                            catch (ArgumentOutOfRangeException)
+                            if (matchingParenIndex == tokens.Count)
                             {
                                 throw new InvalidUserInput("Unmatched parentheses.");
                             }
+                            if (tokens[matchingParenIndex].Equals('('))
+                            {
+                                numOfUnmatchedParens += 1;
+                            }
+                            else if (tokens[matchingParenIndex].Equals(')'))
+                            {
+                                numOfUnmatchedParens -= 1;
+                            }
                         }
-                        numbers[i] = EvaluateExpression(
-                            operations.GetRange(i + 1, matchingParenIndex - i - 1),
-                            numbers.GetRange(i + 1, matchingParenIndex - i - 1));
-                        operations[i] = ' ';
-                        numbers.RemoveRange(i + 1, matchingParenIndex - i);
-                        operations.RemoveRange(i + 1, matchingParenIndex - i);
+                        tokens[i] = new NumericToken(
+                            EvaluateExpression(tokens.GetRange(i + 1, matchingParenIndex - i - 1)));
+                        tokens.RemoveRange(i + 1, matchingParenIndex - i);
                     }
                     else
                     {
@@ -5324,42 +5347,83 @@ namespace Solver
                 }
                 void executeOperations()
                 {
-                    for (int i = 0; i < operations.Count;)
+                    int i = 0;
+                    while (i < tokens.Count)
                     {
-                        if (i == 0 || numbers[i - 1] == null)
+                        if (i == 0 || tokens[i - 1] is TextToken)
                         {
-                            if (operations[i] == '+')
+                            if (tokens[i].Equals('+'))
                             {
-                                if (numbers[i + 1] != null || operations[i + 1] == '+' ||
-                                    operations[i + 1] == '-')
-                                {
-                                    numbers.RemoveAt(i);
-                                    operations.RemoveAt(i);
-                                }
-                                else
+                                if (tokens.Count < i + 2 || (tokens[i + 1] is TextToken &&
+                                    !tokens[i + 1].Equals('+') && !tokens[i + 1].Equals('-')))
                                 {
                                     throw new InvalidUserInput("Operator missing operand.");
                                 }
+                                tokens.RemoveAt(i);
                             }
-                            else if (operations[i] == '-')
+                            else
                             {
-                                if (numbers[i + 1] != null)
+                                ++i;
+                            }
+                        }
+                        else
+                        {
+                            ++i;
+                        }
+                    }
+                    i = 0;
+                    while (i < tokens.Count)
+                    {
+                        if (tokens[i].Equals('^'))
+                        {
+                            if (tokens.Count < i + 2)
+                            {
+                                throw new InvalidUserInput("Operator missing operand.");
+                            }
+                            if (tokens[i + 1] is NumericToken n && n.Value is Rational exponent)
+                            {
+                                tokens[i - 1] = new NumericToken(
+                                    ((NumericToken)tokens[i - 1]).Value.Exponentiate(exponent));
+                            }
+                            else
+                            {
+                                throw new InvalidUserInput(
+                                    "The input expression contains an exponentiation\n" +
+                                    "whose exponent is not both real and rational;\n" +
+                                    "this program doesn't handle transcendental numbers.");
+                            }
+                            tokens.RemoveRange(i, 2);
+                        }
+                        else
+                        {
+                            ++i;
+                        }
+                    }
+                    i = 0;
+                    while (i < tokens.Count)
+                    {
+                        if (i == 0 || tokens[i - 1] is TextToken)
+                        {
+                            if (tokens[i].Equals('-'))
+                            {
+                                if (tokens.Count < i + 2)
                                 {
-                                    numbers[i + 1] = -numbers[i + 1];
-                                    numbers.RemoveAt(i);
-                                    operations.RemoveAt(i);
+                                    throw new InvalidUserInput("Operator missing operand.");
                                 }
-                                else if (operations[i + 1] == '+')
+                                if (tokens[i + 1] is NumericToken n)
                                 {
-                                    operations[i + 1] = '-';
-                                    numbers.RemoveAt(i);
-                                    operations.RemoveAt(i);
+                                    tokens[i + 1] = new NumericToken(-n.Value);
+                                    tokens.RemoveAt(i);
                                 }
-                                else if (operations[i + 1] == '-')
+                                else if (tokens[i + 1].Equals('+'))
                                 {
-                                    operations[i + 1] = '+';
-                                    numbers.RemoveAt(i);
-                                    operations.RemoveAt(i);
+                                    tokens[i + 1] = new TextToken('-');
+                                    tokens.RemoveAt(i);
+                                }
+                                else if (tokens[i + 1].Equals('-'))
+                                {
+                                    tokens[i + 1] = new TextToken('+');
+                                    tokens.RemoveAt(i);
                                 }
                                 else
                                 {
@@ -5376,61 +5440,56 @@ namespace Solver
                             ++i;
                         }
                     }
-                    for (int i = 0; i < operations.Count;)
+                    i = 0;
+                    while (i < tokens.Count)
                     {
-                        if (operations[i] == '^')
+                        if (tokens[i].Equals('*'))
                         {
-                            if (numbers[i + 1] is Rational exponent)
+                            if (tokens.Count < i + 2)
                             {
-                                numbers[i - 1] = numbers[i - 1].Exponentiate(exponent);
+                                throw new InvalidUserInput("Operator missing operand.");
                             }
-                            else
+                            tokens[i - 1] = new NumericToken(((NumericToken)tokens[i - 1]).Value *
+                                ((NumericToken)tokens[i + 1]).Value);
+                            tokens.RemoveRange(i, 2);
+                        }
+                        else if (tokens[i].Equals('/'))
+                        {
+                            if (tokens.Count < i + 2)
                             {
-                                throw new InvalidUserInput("The input expression contains an " +
-                                    "exponentiation\nwhose exponent is not both real and " +
-                                    "rational;\nthis program doesn't handle transcendental " +
-                                    "numbers.");
+                                throw new InvalidUserInput("Operator missing operand.");
                             }
-                            numbers.RemoveRange(i, 2);
-                            operations.RemoveRange(i, 2);
+                            tokens[i - 1] = new NumericToken(((NumericToken)tokens[i - 1]).Value /
+                                ((NumericToken)tokens[i + 1]).Value);
+                            tokens.RemoveRange(i, 2);
                         }
                         else
                         {
                             ++i;
                         }
                     }
-                    for (int i = 0; i < operations.Count;)
-                    {
-                        if (operations[i] == '*')
+                    i = 0;
+                    while (i < tokens.Count)
+                    {                        
+                        if (tokens[i].Equals('+'))
                         {
-                            numbers[i - 1] *= numbers[i + 1];
-                            numbers.RemoveRange(i, 2);
-                            operations.RemoveRange(i, 2);
+                            if (tokens.Count < i + 2)
+                            {
+                                throw new InvalidUserInput("Operator missing operand.");
+                            }
+                            tokens[i - 1] = new NumericToken(((NumericToken)tokens[i - 1]).Value +
+                                ((NumericToken)tokens[i + 1]).Value);
+                            tokens.RemoveRange(i, 2);
                         }
-                        else if (operations[i] == '/')
+                        else if (tokens[i].Equals('-'))
                         {
-                            numbers[i - 1] /= numbers[i + 1];
-                            numbers.RemoveRange(i, 2);
-                            operations.RemoveRange(i, 2);
-                        }
-                        else
-                        {
-                            ++i;
-                        }
-                    }
-                    for (int i = 0; i < operations.Count;)
-                    {
-                        if (operations[i] == '+')
-                        {
-                            numbers[i - 1] += numbers[i + 1];
-                            numbers.RemoveRange(i, 2);
-                            operations.RemoveRange(i, 2);
-                        }
-                        else if (operations[i] == '-')
-                        {
-                            numbers[i - 1] -= numbers[i + 1];
-                            numbers.RemoveRange(i, 2);
-                            operations.RemoveRange(i, 2);
+                            if (tokens.Count < i + 2)
+                            {
+                                throw new InvalidUserInput("Operator missing operand.");
+                            }
+                            tokens[i - 1] = new NumericToken(((NumericToken)tokens[i - 1]).Value -
+                                ((NumericToken)tokens[i + 1]).Value);
+                            tokens.RemoveRange(i, 2);
                         }
                         else
                         {
@@ -5438,28 +5497,12 @@ namespace Solver
                         }
                     }
                 }
-#if DEBUG
                 executeOperations();
-#else
-                try
-                {
-                    executeOperations();
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    throw new InvalidUserInput("Operator missing operand.");
-                }
-#endif
-                if (numbers.Count == 0)
-                {
-                    return null;
-                }
-                return numbers[0];
+                return ((NumericToken)tokens[0]).Value;
             }
             void EvaluateString(string input)
             {
-                List<char> operations = new List<char>();
-                List<Number> numbers = new List<Number>();
+                List<Token> tokens = new List<Token>();
                 StringBuilder numberCollector = new StringBuilder();
                 bool lastCharWasDigit = false;
                 try
@@ -5480,10 +5523,9 @@ namespace Solver
                                 }
                                 else
                                 {
-                                    numbers.Add(Integer.Parse(numberCollector.ToString()));
-                                    operations.Add(' ');
-                                    operations.Add(c);
-                                    numbers.Add(null);
+                                    tokens.Add(new NumericToken(
+                                        Integer.Parse(numberCollector.ToString())));
+                                    tokens.Add(new TextToken(c));
                                 }
                                 lastCharWasDigit = false;
                             }
@@ -5499,28 +5541,24 @@ namespace Solver
                         }
                         else
                         {
-                            operations.Add(c);
-                            numbers.Add(null);
+                            tokens.Add(new TextToken(c));
                         }
                     }
                     if (lastCharWasDigit)
                     {
-                        operations.Add(' ');
-                        numbers.Add(Integer.Parse(numberCollector.ToString()));
+                        tokens.Add(new NumericToken(Integer.Parse(numberCollector.ToString())));
                     }
-                    for (int i = 0; i < operations.Count;)
+                    for (int i = 0; i < tokens.Count;)
                     {
-                        if (operations[i] == '(' && i > 0 && numbers[i - 1] != null)
+                        if (tokens[i].Equals('(') && i > 0 && tokens[i - 1] is NumericToken)
                         {
-                            operations.Insert(i, '*');
-                            numbers.Insert(i, null);
+                            tokens.Insert(i, new TextToken('*'));
                             i += 2;
                         }
-                        else if (operations[i] == ')' && i + 1 < operations.Count &&
-                            (numbers[i + 1] != null || operations[i + 1] == '('))
+                        else if (tokens[i].Equals(')') && i + 1 < tokens.Count &&
+                            (tokens[i + 1].Equals('(') || tokens[i + 1] is NumericToken))
                         {
-                            operations.Insert(i + 1, '*');
-                            numbers.Insert(i + 1, null);
+                            tokens.Insert(i + 1, new TextToken('*'));
                             i += 2;
                         }
                         else
@@ -5528,37 +5566,32 @@ namespace Solver
                             ++i;
                         }
                     }
-                    Number expression = EvaluateExpression(operations, numbers);
-                    if (expression == null)
-                    {
-                        Console.WriteLine("=\n");
-                    }
-                    else
-                    {
-                        Console.Write("=\n" + expression.ToString() + "\n\n");
-                    }
+                    Console.Write("=\n" + EvaluateExpression(tokens).ToString() + "\n\n");
                 }
                 catch (InvalidUserInput e)
                 {
                     Console.WriteLine(e.Message);
                 }
-                catch (DivideByZeroException e)
+                catch (DivideByZeroException)
                 {
-                    Console.WriteLine(e.Message);
+                    Console.WriteLine("Tried to divide by 0.");
                 }
             }
 #if DEBUG
-            EvaluateString("1/(1+2^(1/3))");
+            EvaluateString("(2^(1/2)+3^(1/2)+5^(1/2))-3^(1/2)");
 #else
             while (true)
             {
                 string input = Console.ReadLine();
-                if (input[0] == 'q')
+                if (input != "")
                 {
-                    return;
+                    if (input[0] == 'q')
+                    {
+                        return;
+                    }
+                    EvaluateString(input);
                 }
-                EvaluateString(input);
-            }
+            }            
 #endif
         }
     }
