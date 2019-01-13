@@ -558,6 +558,7 @@ namespace Solver
                 }
                 return a + this;
             }
+            public abstract Term CheapPlus(Term a);
             protected abstract Term TimesRational(Rational a);
             public static Term operator *(Term a, Rational b)
             {
@@ -624,6 +625,14 @@ namespace Solver
             {
                 return Create(Numerator * a.Denominator + a.Numerator * Denominator,
                     Denominator * a.Denominator);
+            }
+            public override Term CheapPlus(Term a)
+            {
+                if (a is Rational rational)
+                {
+                    return Plus(rational);
+                }
+                return a.CheapPlus(this);
             }
             public Rational Minus(Rational a)
             {
@@ -1506,6 +1515,18 @@ namespace Solver
             {
                 return One;
             }
+            public override Term CheapPlus(Term a)
+            {
+                if (a is Rational)
+                {
+                    return null;
+                }
+                if (a is Surd surd && surd == this)
+                {
+                    return new Product(Two, new List<Surd> { this });
+                }
+                return a.CheapPlus(this);
+            }
             protected override Term TimesRational(Rational a)
             {
                 if (a == Zero)
@@ -1749,6 +1770,43 @@ namespace Solver
             public override Rational RationalFactor()
             {
                 return Coefficient;
+            }
+            public override Term CheapPlus(Term a)
+            {
+                if (a is Rational)
+                {
+                    return null;
+                }
+                if (a is Surd surd)
+                {
+                    if (Factors.Count == 1 && Factors[0] == surd)
+                    {
+                        return new Product(Coefficient + One, Factors);
+                    }
+                    return null;
+                }
+                Product product = (Product)a;
+                if (product.Factors.Count != Factors.Count)
+                {
+                    return null;
+                }
+                for (int i = 0; i < Factors.Count; ++i)
+                {
+                    if (product.Factors[i] != Factors[i])
+                    {
+                        return null;
+                    }
+                }
+                Rational coefficient = Coefficient + product.Coefficient;
+                if (coefficient == Zero)
+                {
+                    return Zero;
+                }
+                if (coefficient == One && Factors.Count == 1)
+                {
+                    return Factors[0];
+                }
+                return new Product(coefficient, Factors);
             }
             protected override Term TimesRational(Rational a)
             {
@@ -2228,6 +2286,26 @@ namespace Solver
             {
                 if (a is Term term)
                 {
+                    for (int i = 0; i < Terms.Count; ++i)
+                    {
+                        Term termSum = term.CheapPlus(Terms[i]);
+                        if (!ReferenceEquals(termSum, null))
+                        {
+                            List<Term> outputTerms = new List<Term>(Terms);
+                            if (termSum == Zero && Terms.Count == 2)
+                            {                                
+                                outputTerms.RemoveAt(i);
+                                return outputTerms[0];
+                            }
+                            outputTerms[i] = termSum;
+                            List<RationalPolynomial> outputTermsInTermsOfPrimitiveElement =
+                                new List<RationalPolynomial>(TermsInTermsOfPrimitiveElement);
+                            outputTermsInTermsOfPrimitiveElement[i] *=
+                                termSum.RationalFactor() / Terms[i].RationalFactor();
+                            return new LinearlyIndependentSum(outputTerms,
+                                outputTermsInTermsOfPrimitiveElement, PrimitiveElement);
+                        }
+                    }
                     Number thisPlusTerm(Primitive newPrimitiveElement,
                         List<RationalPolynomial> oldTermsInTermsOfNewPrimitiveElement,
                         RationalPolynomial newTermInTermsOfNewPrimitiveElement)
@@ -4822,7 +4900,8 @@ namespace Solver
                 Integer indexMinusOne = index - Number.One;
                 Rational delta = (rationalRadicand / (Rational)Exponentiate(rootEstimate,
                     indexMinusOne) - (Rational)rootEstimate) / index;
-                Interval<Float> deltaRealPartEstimate = delta.GetRealPartEstimate(-delta / Number.Two);
+                Interval<Float> deltaRealPartEstimate =
+                    delta.GetRealPartEstimate(-delta / Number.Two);
                 while ((Rational)deltaRealPartEstimate.Max - Number.Two * delta > errorIntervalSize)
                 {
                     rootEstimate += deltaRealPartEstimate.Max;
@@ -5578,7 +5657,7 @@ namespace Solver
                 }
             }
 #if DEBUG
-            EvaluateString("(2^(1/2)+3^(1/2)+5^(1/2))-3^(1/2)");
+            EvaluateString("1/(1+2^(1/3))");
 #else
             while (true)
             {
@@ -5591,7 +5670,7 @@ namespace Solver
                     }
                     EvaluateString(input);
                 }
-            }            
+            }
 #endif
         }
     }
