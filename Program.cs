@@ -900,122 +900,74 @@ namespace Solver
             }
             public Integer Plus(Integer a)
             {
-                uint[] aValues;
-                uint[] bValues;
-                uint[] sumValues;
+                if (Sign == 0)
+                {
+                    return a;
+                }
+                if (a.Sign == 0)
+                {
+                    return this;
+                }
+                Integer longInteger;
+                Integer shortInteger;
+                if (Values.Length > a.Values.Length)
+                {
+                    longInteger = this;
+                    shortInteger = a;
+                }
+                else
+                {
+                    longInteger = a;
+                    shortInteger = this;
+                }
+                uint[] longValues = new uint[longInteger.Values.Length + 1];
+                longInteger.Values.CopyTo(longValues, 0);
+                uint[] shortValues = new uint[longValues.Length];
+                shortInteger.Values.CopyTo(shortValues, 0);
                 void calculateValues()
                 {
-                    for (int i = 0; i < aValues.Length; ++i)
+                    for (int i = 0; i < longInteger.Values.Length; ++i)
                     {
-                        if ((aValues[i] & 0x80000000) != 0)
-                        {
-                            aValues[i] -= 0x80000000;
-                            if ((bValues[i] & 0x80000000) != 0)
-                            {
-                                bValues[i] -= 0x80000000;
-                                sumValues[i] += aValues[i] + bValues[i];
-                                sumValues[i + 1] += 1;
-                            }
-                            else
-                            {
-                                sumValues[i] += aValues[i] + bValues[i];
-                                if ((sumValues[i] & 0x80000000) != 0)
-                                {
-                                    sumValues[i] -= 0x80000000;
-                                    sumValues[i + 1] += 1;
-                                }
-                                else
-                                {
-                                    sumValues[i] += 0x80000000;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            if ((bValues[i] & 0x80000000) != 0)
-                            {
-                                bValues[i] -= 0x80000000;
-                                sumValues[i] += aValues[i] + bValues[i];
-                                if ((sumValues[i] & 0x80000000) != 0)
-                                {
-                                    sumValues[i] -= 0x80000000;
-                                    sumValues[i + 1] += 1;
-                                }
-                                else
-                                {
-                                    sumValues[i] += 0x80000000;
-                                }
-                            }
-                            else
-                            {
-                                sumValues[i] += aValues[i] + bValues[i];
-                            }
-                        }
+                        ulong sumValue = (ulong)longValues[i] + shortValues[i];
+                        longValues[i] = (uint)(sumValue & 0xffffffff);
+                        longValues[i + 1] += (uint)((sumValue & 0xffffffff00000000) >> 32);
                     }
+                    longValues[longInteger.Values.Length] += shortValues[longInteger.Values.Length];
                 }
-                uint[] takeTwosComplement(uint[] values)
+                if (shortInteger.Sign == longInteger.Sign)
                 {
-                    uint[] outputValues = new uint[values.Length];
+                    calculateValues();
+                    return new Integer(longValues, longInteger.Sign);
+                }
+                void takeTwosComplement(ref uint[] values)
+                {
                     for (int i = 0; i < values.Length; ++i)
                     {
-                        outputValues[i] = ~values[i];
+                        values[i] = ~values[i];
                     }
                     for (int i = 0; i < values.Length; ++i)
                     {
                         uint power = 1;
                         for (int j = 0; j < 32; ++j)
                         {
-                            outputValues[i] ^= power;
+                            values[i] ^= power;
                             if ((values[i] & power) != 0)
                             {
-                                return outputValues;
+                                return;
                             }
                             power = power << 1;
                         }
                     }
-                    return outputValues;
                 }
-                if (Values.Length > a.Values.Length)
-                {
-                    aValues = new uint[Values.Length];
-                }
-                else
-                {
-                    aValues = new uint[a.Values.Length];
-                }
-                Values.CopyTo(aValues, 0);
-                bValues = new uint[aValues.Length];
-                a.Values.CopyTo(bValues, 0);
-                sumValues = new uint[aValues.Length + 1];
-                Integer handleSingleNegativeCase()
-                {
-                    sumValues[aValues.Length] = 0xffffffff;
-                    calculateValues();
-                    if (sumValues[aValues.Length] == 0)
-                    {
-                        return new Integer(sumValues, 1);
-                    }
-                    return new Integer(takeTwosComplement(sumValues), -1);
-                }
-                if (Sign < 0)
-                {
-                    aValues = takeTwosComplement(aValues);
-                    if (a.Sign < 0)
-                    {
-                        bValues = takeTwosComplement(bValues);
-                        sumValues[aValues.Length] = 0xfffffffe;
-                        calculateValues();
-                        return new Integer(takeTwosComplement(sumValues), -1);
-                    }
-                    return handleSingleNegativeCase();
-                }
-                if (a.Sign < 0)
-                {
-                    bValues = takeTwosComplement(bValues);
-                    return handleSingleNegativeCase();
-                }
+                takeTwosComplement(ref longValues);
                 calculateValues();
-                return new Integer(sumValues, 1);
+                sbyte sign = shortInteger.Sign;
+                if (longValues[longInteger.Values.Length] != 0)
+                {
+                    takeTwosComplement(ref longValues);
+                    sign *= -1;
+                }
+                return new Integer(longValues, sign);
             }
             public override Number Plus(Number a)
             {
@@ -1036,9 +988,9 @@ namespace Solver
                 {
                     for (int j = 0; j < a.Values.Length; ++j)
                     {
-                        ulong productComponent = (ulong)(Values[i]) * a.Values[j];
+                        ulong productComponent = (ulong)Values[i] * a.Values[j];
                         product = product + new Integer(ShiftValuesLeft(new uint[] {
-                            (uint)(productComponent & 0x00000000ffffffff),
+                            (uint)(productComponent & 0xffffffff),
                             (uint)((productComponent & 0xffffffff00000000) >> 32) }, i + j, 0), 1);
                     }
                 }
@@ -5657,7 +5609,11 @@ namespace Solver
                 }
             }
 #if DEBUG
+            Stopwatch timer = new Stopwatch();
+            timer.Start();
             EvaluateString("1/(1+2^(1/3))");
+            timer.Stop();
+            Console.WriteLine(timer.Elapsed);
 #else
             while (true)
             {
