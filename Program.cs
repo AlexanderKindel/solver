@@ -1473,9 +1473,13 @@ namespace Solver
                 {
                     return null;
                 }
-                if (a is Surd surd && surd == this)
+                if (a is Surd surd)
                 {
-                    return new Product(Two, new List<Surd> { this });
+                    if (surd == this)
+                    {
+                        return new Product(Two, new List<Surd> { this });
+                    }
+                    return null;
                 }
                 return a.CheapPlus(this);
             }
