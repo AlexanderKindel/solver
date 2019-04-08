@@ -928,9 +928,30 @@ namespace Solver
                 {
                     for (int i = 0; i < longInteger.Values.Length; ++i)
                     {
-                        ulong sumValue = (ulong)longValues[i] + shortValues[i];
+                        /*ulong sumValue = (ulong)longValues[i] + shortValues[i];
                         longValues[i] = (uint)(sumValue & 0xffffffff);
-                        longValues[i + 1] += (uint)((sumValue & 0xffffffff00000000) >> 32);
+                        ulong remainder = (sumValue & 0xffffffff00000000) >> 32;
+                        for (int j = i + 1; j < longValues.Length; ++ j)
+                        {
+                            if (remainder == 0)
+                            {
+                                break;
+                            }
+                            sumValue = longValues[j] + remainder;
+                            longValues[j] = (uint)(sumValue & 0xffffffff);
+                            remainder = (sumValue & 0xffffffff00000000) >> 32;
+                        }*/
+                        ulong remainder = shortValues[i];
+                        for (int j = i; j < longValues.Length; ++j)
+                        {
+                            ulong sumValue = longValues[j] + remainder;
+                            longValues[j] = (uint)(sumValue & 0xffffffff);
+                            remainder = (sumValue & 0xffffffff00000000) >> 32;
+                            if (remainder == 0)
+                            {
+                                break;
+                            }
+                        }
                     }
                     longValues[longInteger.Values.Length] += shortValues[longInteger.Values.Length];
                 }
@@ -5613,11 +5634,7 @@ namespace Solver
                 }
             }
 #if DEBUG
-            Stopwatch timer = new Stopwatch();
-            timer.Start();
-            EvaluateString("1/(1+2^(1/3))");
-            timer.Stop();
-            Console.WriteLine(timer.Elapsed);
+            EvaluateString("(7+50^(1/2))^(1/3)+(7-50^(1/2))^(1/3)");
 #else
             while (true)
             {
