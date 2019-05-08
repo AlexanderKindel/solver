@@ -1102,7 +1102,9 @@ int main()
                     struct NumberSlot*times =
                         number_slot_new(&number_slot_arena_cursor, &number_slot_free_list);
                     times->number.operation = '*';
+                    times->previous = number_slot;
                     times->next = number_slot->next;
+                    number_slot->next->previous = times;
                     number_slot->next = times;
                 }
                 number_slot = number_slot->next;
