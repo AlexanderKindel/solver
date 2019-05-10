@@ -358,7 +358,7 @@ struct Division int_euclidean_divide(uint32_t**int_arena_cursor, struct Integer*
     int divisor_leading_digit_place = leading_digit_place(divisor);
     if (dividend->value_count > divisor->value_count ||
         (dividend->value_count == divisor->value_count &&
-        dividend_leading_digit_place >= divisor_leading_digit_place))
+            dividend_leading_digit_place >= divisor_leading_digit_place))
     {
         uint32_t*local_int_arena_cursor = *int_arena_cursor;
         advance_arena_cursor(&local_int_arena_cursor, sizeof(uint32_t), dividend->value_count);
@@ -397,7 +397,7 @@ struct Division int_euclidean_divide(uint32_t**int_arena_cursor, struct Integer*
         int8_t dividend_sign = dividend->sign;
         dividend->sign = 1;
         struct Division division =
-            { {dividend->value_count, *int_arena_cursor, quotient_sign}, *dividend };
+        { {dividend->value_count, *int_arena_cursor, quotient_sign}, *dividend };
         calculate_division_values(local_int_arena_cursor, &positive_divisor, &division,
             quotient_value_index, quotient_digit);
         trim_leading_zeroes(&division.quotient);
@@ -412,7 +412,7 @@ struct Division int_euclidean_divide(uint32_t**int_arena_cursor, struct Integer*
         return division;
     }
     struct Division division =
-        { {0, 0, 0}, { dividend->value_count, *int_arena_cursor, quotient_sign } };
+    { {0, 0, 0}, { dividend->value_count, *int_arena_cursor, quotient_sign } };
     advance_arena_cursor(int_arena_cursor, sizeof(uint32_t), dividend->value_count);
     memcpy(division.remainder.values, dividend->values,
         dividend->value_count * sizeof(uint32_t));
@@ -556,7 +556,8 @@ bool get_input(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**n
             default:
                 printf("\"%c\"%s", next_char, " is an invalid character.");
                 while (getchar() != '\n')
-                {}
+                {
+                }
                 return false;
             }
             slot->number.operation = next_char;
@@ -846,7 +847,7 @@ bool int_equals(struct Integer*a, struct Integer*b)
     {
         return false;
     }
-    for (int i = 0; i < a->value_count; ++a)
+    for (int i = 0; i < a->value_count; ++i)
     {
         if (a->values[i] != b->values[i])
         {
@@ -902,14 +903,15 @@ struct ExtendedGCDInfo extended_gcd(uint32_t**int_arena_cursor, struct Integer a
     return info;
 }
 
-bool evaluate(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**number_slot_free_list,
+bool is_fraction(struct Number*a)
+{
+    return a->operation == '/' && a->left->operation == 'i';
+}
+
+bool evaluate_root(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**number_slot_free_list,
     uint32_t**int_arena_cursor, struct Number*a)
 {
-    switch (a->operation)
-    {
-    case 'i':
-        return true;
-    case '-':
+    if (a->operation == '-')
     {
         struct NumberSlot*negative =
             number_slot_new(number_slot_arena_cursor, number_slot_free_list);
@@ -922,87 +924,70 @@ bool evaluate(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**nu
         times->number.right = a->right;
         a->operation = '+';
         a->right = times;
+        return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_arena_cursor, a);
     }
-    }
-    if (!evaluate(number_slot_arena_cursor, number_slot_free_list, int_arena_cursor, a->left))
+    if (a->operation == '/')
     {
-        return false;
-    }
-    if (!evaluate(number_slot_arena_cursor, number_slot_free_list, int_arena_cursor, a->right))
-    {
-        return false;
-    }
-    if (a->left->operation == 'i')
-    {
-        if (a->right->operation == 'i')
+        if (a->left->operation == 'i' && a->right->operation == 'i')
         {
-            switch (a->operation)
+            if (a->right->value.sign == 0)
             {
-            case '+':
+                printf("Tried to divide by 0.");
+                return false;
+            }
+            if (a->left->value.sign == 0)
             {
-                struct Integer sum = int_add(int_arena_cursor, &a->left->value, &a->right->value);
                 a->operation = 'i';
                 free_number_slot(number_slot_free_list, a->left);
                 free_number_slot(number_slot_free_list, a->right);
-                a->value = sum;
+                a->value.value_count = 0;
+                a->value.sign = 0;
                 return true;
             }
-            case '*':
+            uint32_t*int_arena_savepoint = *int_arena_cursor;
+            advance_arena_cursor(int_arena_cursor, sizeof(uint32_t),
+                a->left->value.value_count + a->right->value.value_count);
+            struct ExtendedGCDInfo gcd_info =
+                extended_gcd(int_arena_cursor, a->left->value, a->right->value);
+            a->left->value = gcd_info.a_over_gcd;
+            a->right->value = gcd_info.b_over_gcd;
+            if (a->right->value.sign < 0)
             {
-                struct Integer product =
-                    int_multiply(int_arena_cursor, &a->left->value, &a->right->value);
+                a->left->value.sign = -a->left->value.sign;
+                a->right->value.sign = -a->right->value.sign;
+            }
+            int_move_values_to_cursor(&int_arena_savepoint, &a->left->value);
+            struct Integer one = int_new(int_arena_cursor, 1);
+            if (int_equals(&a->right->value, &one))
+            {
+                struct Number*numerator = a->left;
                 a->operation = 'i';
-                free_number_slot(number_slot_free_list, a->left);
+                a->value = numerator->value;
+                free_number_slot(number_slot_free_list, numerator);
                 free_number_slot(number_slot_free_list, a->right);
-                a->value = product;
-                return true;
             }
-            case '/':
+            else
             {
-                if (a->right->value.sign == 0)
-                {
-                    printf("Tried to divide by 0.");
-                    return false;
-                }
-                if (a->left->value.sign == 0)
-                {
-                    a->operation = 'i';
-                    free_number_slot(number_slot_free_list, a->left);
-                    free_number_slot(number_slot_free_list, a->right);
-                    a->value.value_count = 0;
-                    a->value.sign = 0;
-                    return true;
-                }
-                uint32_t*int_arena_savepoint = *int_arena_cursor;
-                advance_arena_cursor(int_arena_cursor, sizeof(uint32_t),
-                    a->left->value.value_count + a->right->value.value_count);
-                struct ExtendedGCDInfo gcd_info =
-                    extended_gcd(int_arena_cursor, a->left->value, a->right->value);
-                a->left->value = gcd_info.a_over_gcd;
-                a->right->value = gcd_info.b_over_gcd;
-                if (a->right->value.sign < 0)
-                {
-                    a->left->value.sign = -a->left->value.sign;
-                    a->right->value.sign = -a->right->value.sign;
-                }
-                int_move_values_to_cursor(&int_arena_savepoint, &a->left->value);
-                struct Integer one = int_new(int_arena_cursor, 1);
-                if (int_equals(&a->right->value, &one))
-                {
-                    struct Number*numerator = a->left;
-                    a->operation = 'i';
-                    a->value = numerator->value;
-                    free_number_slot(number_slot_free_list, numerator);
-                    free_number_slot(number_slot_free_list, a->right);
-                }
-                else
-                {
-                    int_move_values_to_cursor(&int_arena_savepoint, &a->right->value);
-                }
-                rewind_arena_cursor(int_arena_cursor, int_arena_savepoint);
-                return true;
+                int_move_values_to_cursor(&int_arena_savepoint, &a->right->value);
             }
-            case '^':
+            rewind_arena_cursor(int_arena_cursor, int_arena_savepoint);
+            return true;
+        }
+        if (is_fraction(a->right))
+        {
+            a->operation = '*';
+            struct Number*numerator = a->right->left;
+            a->right->left = a->right->right;
+            a->right->right = numerator;
+            return evaluate_root(number_slot_arena_cursor, number_slot_free_list,
+                int_arena_cursor, a);
+        }
+    }
+    if (a->operation == '^')
+    {
+        if (a->left->operation == 'i')
+        {
+            if (a->right->operation == 'i')
             {
                 if (a->right->value.sign < 0)
                 {
@@ -1017,7 +1002,7 @@ bool evaluate(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**nu
                     over->number.left = one;
                     over->number.right = a->left;
                     a->left = over;
-                    return evaluate(number_slot_arena_cursor, number_slot_free_list,
+                    return evaluate_root(number_slot_arena_cursor, number_slot_free_list,
                         int_arena_cursor, a);
                 }
                 uint32_t*node_int_arena_savepoint = *int_arena_cursor;
@@ -1049,8 +1034,176 @@ bool evaluate(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**nu
                 a->value = exponentiation;
                 return true;
             }
+        }
+    }
+    if (a->operation == '+')
+    {
+        if (a->left->operation == 'i')
+        {
+            if (a->right->operation == 'i')
+            {
+                struct Integer sum = int_add(int_arena_cursor, &a->left->value, &a->right->value);
+                a->operation = 'i';
+                free_number_slot(number_slot_free_list, a->left);
+                free_number_slot(number_slot_free_list, a->right);
+                a->value = sum;
+                return true;
+            }
+            else
+            {
+                struct Number*left = a->left;
+                a->left = a->right;
+                a->right = left;
+                return evaluate_root(number_slot_arena_cursor, number_slot_free_list,
+                    int_arena_cursor, a);
             }
         }
+        else if (is_fraction(a->left))
+        {
+            if (a->right->operation == 'i')
+            {
+                a->operation = '/';
+                struct Number*numerator = a->left->left;
+                uint32_t*int_arena_savepoint = *int_arena_cursor;
+                advance_arena_cursor(int_arena_cursor, sizeof(uint32_t),
+                    max(a->left->right->value.value_count + a->right->value.value_count,
+                    numerator->value.value_count) + 1);
+                struct Integer numerator_term =
+                    int_multiply(int_arena_cursor, &a->left->right->value, &a->right->value);
+                free_number_slot(number_slot_free_list, a->right);
+                a->right = a->left->right;
+                a->left->operation = 'i';
+                a->left->value = int_add(&int_arena_savepoint, &numerator_term, &numerator->value);
+                free_number_slot(number_slot_free_list, numerator);
+                rewind_arena_cursor(int_arena_cursor, int_arena_savepoint);
+                return evaluate_root(number_slot_arena_cursor, number_slot_free_list,
+                    int_arena_cursor, a);
+            }
+            else if (is_fraction(a->right))
+            {
+                a->operation = '/';
+                struct Number*left_denominator = a->left->right;
+                struct Number*right_denominator = a->right->right;
+                uint32_t*int_arena_savepoint = *int_arena_cursor;
+                advance_arena_cursor(int_arena_cursor, sizeof(uint32_t),
+                    left_denominator->value.value_count + right_denominator->value.value_count);
+                struct Integer numerator_term_a = int_multiply(int_arena_cursor,
+                    &a->left->left->value, &right_denominator->value);
+                struct Integer numerator_term_b = int_multiply(int_arena_cursor,
+                    &a->right->left->value, &left_denominator->value);
+                a->right->operation = 'i';
+                free_number_slot(number_slot_free_list, a->right->left);
+                a->right->value = int_multiply(&int_arena_savepoint, &left_denominator->value,
+                    &right_denominator->value);
+                free_number_slot(number_slot_free_list, right_denominator);
+                a->left->operation = 'i';
+                free_number_slot(number_slot_free_list, a->left->left);
+                free_number_slot(number_slot_free_list, a->left->right);
+                a->left->value = int_add(int_arena_cursor, &numerator_term_a, &numerator_term_b);
+                int_move_values_to_cursor(&int_arena_savepoint, &a->left->value);
+                rewind_arena_cursor(int_arena_cursor, int_arena_savepoint);
+                return evaluate_root(number_slot_arena_cursor, number_slot_free_list,
+                    int_arena_cursor, a);
+            }
+            else
+            {
+                struct Number*left = a->left;
+                a->left = a->right;
+                a->right = left;
+                return evaluate_root(number_slot_arena_cursor, number_slot_free_list,
+                    int_arena_cursor, a);
+            }
+        }
+    }
+    if (a->operation == '*')
+    {
+        if (a->left->operation == 'i')
+        {
+            if (a->right->operation == 'i')
+            {
+                struct Integer product =
+                    int_multiply(int_arena_cursor, &a->left->value, &a->right->value);
+                a->operation = 'i';
+                free_number_slot(number_slot_free_list, a->left);
+                free_number_slot(number_slot_free_list, a->right);
+                a->value = product;
+                return true;
+            }
+            else
+            {
+                struct Number*left = a->left;
+                a->left = a->right;
+                a->right = left;
+                return evaluate_root(number_slot_arena_cursor, number_slot_free_list,
+                    int_arena_cursor, a);
+            }
+        }
+        else if (is_fraction(a->left))
+        {
+            if (a->right->operation == 'i')
+            {
+                a->operation = '/';
+                struct Number*numerator = a->left->left;
+                struct Number*integer = a->right;
+                a->left->operation = 'i';
+                a->right = a->left->right;
+                a->left->value = int_multiply(int_arena_cursor, &integer->value, &numerator->value);
+                free_number_slot(number_slot_free_list, integer);
+                free_number_slot(number_slot_free_list, numerator);
+                return evaluate_root(number_slot_arena_cursor, number_slot_free_list,
+                    int_arena_cursor, a);
+            }
+            else if (is_fraction(a->right))
+            {
+                a->operation = '/';
+                struct Number*left_numerator = a->left->left;
+                struct Number*right_numerator = a->right->left;
+                struct Number*left_denominator = a->left->right;
+                struct Number*right_denominator = a->right->right;
+                a->left->operation = 'i';
+                a->left->value =
+                    int_multiply(int_arena_cursor, &left_numerator->value, &right_numerator->value);
+                free_number_slot(number_slot_free_list, left_numerator);
+                free_number_slot(number_slot_free_list, right_numerator);
+                a->right->operation = 'i';
+                a->right->value = int_multiply(int_arena_cursor, &left_denominator->value,
+                    &right_denominator->value);
+                free_number_slot(number_slot_free_list, left_denominator);
+                free_number_slot(number_slot_free_list, right_denominator);
+                return evaluate_root(number_slot_arena_cursor, number_slot_free_list,
+                    int_arena_cursor, a);
+            }
+            else
+            {
+                struct Number*left = a->left;
+                a->left = a->right;
+                a->right = left;
+                return evaluate_root(number_slot_arena_cursor, number_slot_free_list,
+                    int_arena_cursor, a);
+            }
+        }
+    }
+    return true;
+}
+
+bool evaluate(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**number_slot_free_list,
+    uint32_t**int_arena_cursor, struct Number*a)
+{
+    if (a->operation == 'i')
+    {
+        return true;
+    }
+    if (!evaluate(number_slot_arena_cursor, number_slot_free_list, int_arena_cursor, a->left))
+    {
+        return false;
+    }
+    if (!evaluate(number_slot_arena_cursor, number_slot_free_list, int_arena_cursor, a->right))
+    {
+        return false;
+    }
+    if (!evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_arena_cursor, a))
+    {
+        return false;
     }
 }
 
