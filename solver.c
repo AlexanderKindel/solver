@@ -5,7 +5,14 @@
 #include <string.h>
 #include <windows.h>
 
+#ifdef _DEBUG
+#define ASSERT(condition, message) if(!(condition)){printf(message); *(int*)0 = 0;}
+#else
+#define ASSERT(condition, message)
+#endif
+
 DWORD page_size;
+size_t arena_size = 8192;
 
 size_t next_page_end(size_t address)
 {
@@ -17,24 +24,24 @@ size_t next_page_end(size_t address)
     return address;
 }
 
-void*arena_slot_new(void**arena_cursor, size_t step_size, size_t value_count)
+void*stack_slot_new(void**stack_cursor, size_t step_size, size_t value_count)
 {
-    void*slot = *arena_cursor;
-    size_t page_end = next_page_end(*arena_cursor);
-    *arena_cursor = (size_t)*arena_cursor + step_size * value_count;
-    if (*arena_cursor > page_end)
+    void*slot = *stack_cursor;
+    size_t page_end = next_page_end(*stack_cursor);
+    *stack_cursor = (size_t)*stack_cursor + step_size * value_count;
+    if (*stack_cursor > page_end)
     {
-        VirtualAlloc(page_end, (size_t)*arena_cursor - page_end, MEM_COMMIT, PAGE_READWRITE);
+        VirtualAlloc(page_end, (size_t)*stack_cursor - page_end, MEM_COMMIT, PAGE_READWRITE);
     }
     return slot;
 }
 
-uint32_t*int_arena_slot_new(uint32_t**int_arena_cursor, size_t value_count)
+uint32_t*int_stack_slot_new(void**stack_cursor, size_t value_count)
 {
-    return arena_slot_new(int_arena_cursor, sizeof(uint32_t), value_count);
+    return stack_slot_new(stack_cursor, sizeof(uint32_t), value_count);
 }
 
-void rewind_arena_cursor(void**cursor, void*cursor_target)
+void rewind_stack_cursor(void**cursor, void*cursor_target)
 {
     size_t page_end = next_page_end(cursor_target);
     if (*cursor > page_end)
@@ -50,33 +57,32 @@ struct SizedIntPage
     uint32_t memory;
 };
 
-struct ValueCountArena
+struct IntPool
 {
     uint32_t*cursor;
     uint32_t*free_list;
-    struct ValueCountArena*next_value_count_arena;
+    struct IntPool*next_value_count_pool;
     struct SizedIntPage page;
 };
 
-struct ValueCountArena*sized_int_arena_new()
+struct IntPool*sized_int_pool_new()
 {
-    struct ValueCountArena*arena =
-        VirtualAlloc(0, page_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    arena->cursor = &arena->page.memory;
-    return arena;
+    struct IntPool*pool = VirtualAlloc(0, page_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    pool->cursor = &pool->page.memory;
+    return pool;
 }
 
-struct ValueCountArena*get_value_count_arena(struct ValueCountArena*arena, size_t value_count)
+struct IntPool*get_value_count_pool(struct IntPool*int_pool, size_t value_count)
 {
     if (value_count == 1)
     {
-        return arena;
+        return int_pool;
     }
-    if (!arena->next_value_count_arena)
+    if (!int_pool->next_value_count_pool)
     {
-        arena->next_value_count_arena = sized_int_arena_new();
+        int_pool->next_value_count_pool = sized_int_pool_new();
     }
-    return get_value_count_arena(arena->next_value_count_arena, value_count - 1);
+    return get_value_count_pool(int_pool->next_value_count_pool, value_count - 1);
 }
 
 uint32_t**int_pool_slot_next(uint32_t*slot, size_t value_count)
@@ -84,33 +90,32 @@ uint32_t**int_pool_slot_next(uint32_t*slot, size_t value_count)
     return slot + value_count;
 }
 
-uint32_t*int_pool_slot_new(struct ValueCountArena*first_arena, size_t value_count)
+uint32_t*int_pool_slot_new(struct IntPool*int_pool, size_t value_count)
 {
-    struct ValueCountArena*arena = get_value_count_arena(first_arena, value_count);
-    struct uint32_t*allocation = arena->free_list;
+    struct IntPool*pool = get_value_count_pool(int_pool, value_count);
+    struct uint32_t*allocation = pool->free_list;
     if (allocation)
     {
-        arena->free_list = *int_pool_slot_next(allocation, value_count);
+        pool->free_list = *int_pool_slot_next(allocation, value_count);
     }
     else
     {
-        allocation = arena->cursor;
+        allocation = pool->cursor;
         size_t page_end = next_page_end(allocation);
-        arena->cursor = (size_t)(arena->cursor + value_count) + sizeof(uint32_t*);
-        if (arena->cursor > page_end)
+        pool->cursor = (size_t)(pool->cursor + value_count) + sizeof(uint32_t*);
+        if (pool->cursor > page_end)
         {
             struct SizedIntPage*new_page =
                 VirtualAlloc(0, page_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-            arena->cursor = &new_page->memory;
-            size_t last_page_address = page_end - page_size;
-            if (last_page_address == first_arena)
+            pool->cursor = &new_page->memory;
+            size_t previous_page_address = page_end - page_size;
+            if (previous_page_address == int_pool)
             {
-                first_arena->page.next_page = new_page;
+                int_pool->page.next_page = new_page;
             }
             else
             {
-                struct SizedIntPage*last_page = last_page_address;
-                last_page->next_page = new_page;
+                ((struct SizedIntPage*)previous_page_address)->next_page = new_page;
             }
         }
         *int_pool_slot_next(allocation, value_count) = 0;
@@ -124,13 +129,6 @@ struct Integer
     uint32_t*values;
     int8_t sign;
 };
-
-void int_pool_slot_free(struct ValueCountArena*first_arena, struct Integer*a)
-{
-    struct ValueCountArena*arena = get_value_count_arena(first_arena, a->value_count);
-    *int_pool_slot_next(a->values, a->value_count) = arena->free_list;
-    arena->free_list = a->values;
-}
 
 void integer_new(uint32_t*(allocator)(void*, size_t), void*memory, struct Integer*out,
     int32_t value)
@@ -154,36 +152,40 @@ void integer_new(uint32_t*(allocator)(void*, size_t), void*memory, struct Intege
     }
 }
 
-void pool_integer_new(struct ValueCountArena*int_pool, struct Integer*out, int32_t value)
+void pool_integer_new(struct IntPool*int_pool, struct Integer*out, int32_t value)
 {
     integer_new(int_pool_slot_new, int_pool, out, value);
 }
 
-void arena_integer_new(uint32_t**int_arena_cursor, struct Integer*out, int32_t value)
+void stack_integer_new(void**stack_cursor, struct Integer*out, int32_t value)
 {
-    integer_new(int_arena_slot_new, int_arena_cursor, out, value);
+    integer_new(int_stack_slot_new, stack_cursor, out, value);
 }
 
-struct Integer integer_copy(uint32_t**int_arena_cursor, struct Integer*a)
+void integer_copy(void**stack_cursor, struct Integer*out, struct Integer*a)
 {
-    struct Integer copy =
-        { a->value_count, int_arena_slot_new(int_arena_cursor, a->value_count), a->sign };
-    memcpy(copy.values, a->values, a->value_count * sizeof(uint32_t));
-    return copy;
+    ASSERT(a != out, "integer_copy a parameter aliased with out parameter.");
+    out->value_count = a->value_count;
+    out->values = int_stack_slot_new(stack_cursor, a->value_count);
+    out->sign = a->sign;
+    memcpy(out->values, a->values, a->value_count * sizeof(uint32_t));
 }
 
-void integer_move_to_arena_cursor(uint32_t**int_arena_cursor, struct Integer*a)
+void integer_copy_values_to_stack_cursor(void**stack_cursor, struct Integer*a)
 {
-    memcpy(*int_arena_cursor, a->values, a->value_count * sizeof(uint32_t));
-    a->values = *int_arena_cursor;
-    *int_arena_cursor += a->value_count;
+    memcpy(*stack_cursor, a->values, a->value_count * sizeof(uint32_t));
+    a->values = *stack_cursor;
+    *(uint32_t**)stack_cursor += a->value_count;
 }
 
-void integer_move_to_pool(struct ValueCountArena*int_pool, struct Integer*a)
+void integer_copy_values_to_pool(struct IntPool*int_pool, struct Integer*a)
 {
-    uint32_t*slot = int_pool_slot_new(int_pool, a->value_count);
-    memcpy(slot, a->values, a->value_count * sizeof(uint32_t));
-    a->values = slot;
+    if (a->value_count)
+    {
+        uint32_t*slot = int_pool_slot_new(int_pool, a->value_count);
+        memcpy(slot, a->values, a->value_count * sizeof(uint32_t));
+        a->values = slot;
+    }
 }
 
 bool integer_equals(struct Integer*a, struct Integer*b)
@@ -259,15 +261,18 @@ void trim_leading_zeroes(struct Integer*a)
     a->sign = 0;
 }
 
-struct Integer integer_add(uint32_t**int_arena_cursor, struct Integer*a, struct Integer*b)
+void integer_out_add(void**stack_cursor, struct Integer*out, struct Integer*a, struct Integer*b)
 {
+    ASSERT(a != out && b != out, "integer_out_add operand aliased with out parameter.");
     if (a->sign == 0)
     {
-        return integer_copy(int_arena_cursor, b);
+        integer_copy(stack_cursor, out, b);
+        return;
     }
     if (b->sign == 0)
     {
-        return integer_copy(int_arena_cursor, a);
+        integer_copy(stack_cursor, out, a);
+        return;
     }
     struct Integer*long_integer = a;
     struct Integer*short_integer = b;
@@ -276,31 +281,38 @@ struct Integer integer_add(uint32_t**int_arena_cursor, struct Integer*a, struct 
         long_integer = b;
         short_integer = a;
     }
-    struct Integer sum;
-    sum.sign = short_integer->sign;
-    sum.value_count = long_integer->value_count + 1;
-    sum.values = int_arena_slot_new(int_arena_cursor, sum.value_count);
-    memcpy(sum.values, long_integer->values, long_integer->value_count * sizeof(uint32_t));
-    sum.values[long_integer->value_count] = 0;
+    out->sign = short_integer->sign;
+    out->value_count = long_integer->value_count + 1;
+    out->values = int_stack_slot_new(stack_cursor, out->value_count);
+    memcpy(out->values, long_integer->values, long_integer->value_count * sizeof(uint32_t));
+    out->values[long_integer->value_count] = 0;
     if (short_integer->sign == long_integer->sign)
     {
-        calculate_sum_values(short_integer, &sum);
+        calculate_sum_values(short_integer, out);
     }
     else
     {
-        twos_complement(&sum);
-        calculate_sum_values(short_integer, &sum);
-        if (sum.values[long_integer->value_count] != 0)
+        twos_complement(out);
+        calculate_sum_values(short_integer, out);
+        if (out->values[long_integer->value_count] != 0)
         {
-            twos_complement(&sum);
-            sum.sign *= -1;
+            twos_complement(out);
+            out->sign *= -1;
         }
     }
-    trim_leading_zeroes(&sum);
-    rewind_arena_cursor(int_arena_cursor, sum.values + sum.value_count);
+    trim_leading_zeroes(out);
+    rewind_stack_cursor(stack_cursor, out->values + out->value_count);
+}
+
+struct Integer integer_add(void**stack_cursor, struct Integer*a, struct Integer*b)
+{
+    struct Integer sum;
+    integer_out_add(stack_cursor, &sum, a, b);
     return sum;
 }
 
+//Assumes that, at a->values, there is enough allocated but unused memory for a->value_count to
+//increase to max(a->value_count, b->value_count) + 1.
 void integer_add_to_a_in_place(struct Integer*a, struct Integer*b)
 {
     if (b->sign == 0)
@@ -354,58 +366,60 @@ void integer_add_to_a_in_place(struct Integer*a, struct Integer*b)
     a->value_count = i + 1;
 }
 
-struct Integer integer_negative(uint32_t**int_arena_cursor, struct Integer*a)
-{
-    struct Integer copy = integer_copy(int_arena_cursor, a);
-    copy.sign = -copy.sign;
-    return copy;
-}
-
-struct Integer integer_subtract(uint32_t**int_arena_cursor, struct Integer*minuend,
+void integer_out_subtract(void**stack_cursor, struct Integer*out, struct Integer*minuend,
     struct Integer*subtrahend)
 {
-    uint32_t*int_arena_savepoint = int_arena_slot_new(int_arena_cursor,
-        1 + max(minuend->value_count, subtrahend->value_count));
-    struct Integer negative = integer_negative(int_arena_cursor, subtrahend);
-    struct Integer difference = integer_add(&int_arena_savepoint, minuend, &negative);
-    rewind_arena_cursor(int_arena_cursor, int_arena_savepoint);
-    return difference;
+    ASSERT(minuend != out && subtrahend != out,
+        "integer_out_subtract operand aliased with out parameter.");
+    uint32_t*int_arena_savepoint =
+        int_stack_slot_new(stack_cursor, 1 + max(minuend->value_count, subtrahend->value_count));
+    struct Integer negative;
+    integer_copy(stack_cursor, &negative, subtrahend);
+    negative.sign *= -1;
+    integer_out_add(&int_arena_savepoint, out, minuend, &negative);
+    rewind_stack_cursor(stack_cursor, int_arena_savepoint);
 }
 
-struct Integer integer_multiply(uint32_t**int_arena_cursor, struct Integer*a, struct Integer*b)
+void integer_out_multiply(void**output_stack_cursor, void*scratch_stack_cursor, struct Integer*out,
+    struct Integer*a, struct Integer*b)
 {
-    struct Integer product = { 0, *int_arena_cursor, 0 };
-    uint32_t*int_arena_savepoint =
-        int_arena_slot_new(int_arena_cursor, a->value_count + b->value_count);
+    ASSERT(a != out && b != out, "integer_out_multiply operand aliased with out parameter.");
+    out->value_count = 0;
+    out->values = int_stack_slot_new(output_stack_cursor, a->value_count + b->value_count);
+    out->sign = 0;
     for (int i = 0; i < a->value_count; ++i)
     {
         for (int j = 0; j < b->value_count; ++j)
         {
             uint64_t product_component = (uint64_t)a->values[i] * b->values[j];
             size_t shift = i + j;
-            struct Integer integer_component;
-            integer_component.values = *int_arena_cursor;
-            integer_component.sign = 0;
-            memset(*int_arena_cursor, 0, shift * sizeof(uint32_t));
+            struct Integer integer_component =
+                { shift, int_stack_slot_new(&scratch_stack_cursor, shift + 2), 0 };
+            memset(integer_component.values, 0, shift * sizeof(uint32_t));
             if (product_component > 0)
             {
                 integer_component.values[shift] = product_component;
-                integer_component.value_count = shift + 1;
+                integer_component.value_count += 1;
                 integer_component.sign = 1;
+                uint32_t high_bytes = (product_component & 0xffffffff00000000) >> 32;
+                if (high_bytes > 0)
+                {
+                    integer_component.values[shift + 1] = high_bytes;
+                    integer_component.value_count += 1;
+                }
             }
-            uint32_t high_bytes = (product_component & 0xffffffff00000000) >> 32;
-            if (high_bytes > 0)
-            {
-                integer_component.values[shift + 1] = high_bytes;
-                integer_component.value_count = shift + 2;
-                integer_component.sign = 1;
-            }
-            integer_add_to_a_in_place(&product, &integer_component);
+            integer_add_to_a_in_place(out, &integer_component);
         }
     }
-    product.sign = a->sign * b->sign;
-    int_arena_savepoint += product.value_count;
-    rewind_arena_cursor(int_arena_cursor, int_arena_savepoint);
+    out->sign = a->sign * b->sign;
+    rewind_stack_cursor(output_stack_cursor, out->values + out->value_count);
+}
+
+struct Integer integer_multiply(void**output_stack_cursor, void*scratch_stack_cursor,
+    struct Integer*a, struct Integer*b)
+{
+    struct Integer product;
+    integer_out_multiply(output_stack_cursor, scratch_stack_cursor, &product, a, b);
     return product;
 }
 
@@ -430,16 +444,16 @@ int leading_digit_place(struct Integer*a)
     return 0;
 }
 
-void calculate_division_values(uint32_t*int_arena_cursor, struct Integer*positive_divisor,
+void calculate_division_values(void*stack_cursor, struct Integer*positive_divisor,
     struct Division*division, size_t quotient_value_index, uint32_t quotient_digit)
 {
-    memset(division->quotient.values, 0, division->quotient.value_count * sizeof(uint32_t));
     while (true)
     {
         for (int i = 32; i > 0; --i)
         {
-            struct Integer difference =
-                integer_subtract(&int_arena_cursor, &division->remainder, positive_divisor);
+            struct Integer difference;
+            integer_out_subtract(&stack_cursor, &difference, &division->remainder,
+                positive_divisor);
             if (difference.sign >= 0)
             {
                 division->quotient.values[quotient_value_index] |= quotient_digit;
@@ -469,8 +483,8 @@ void calculate_division_values(uint32_t*int_arena_cursor, struct Integer*positiv
     }
 }
 
-struct Division integer_euclidean_divide(uint32_t**int_arena_cursor, struct Integer*dividend,
-    struct Integer*divisor)
+void integer_euclidean_divide(void**output_stack_cursor, void*scratch_stack_cursor,
+    struct Division*out, struct Integer*dividend, struct Integer*divisor)
 {
     int8_t quotient_sign = dividend->sign * divisor->sign;
     int dividend_leading_digit_place = leading_digit_place(dividend);
@@ -479,10 +493,8 @@ struct Division integer_euclidean_divide(uint32_t**int_arena_cursor, struct Inte
         (dividend->value_count == divisor->value_count &&
         dividend_leading_digit_place >= divisor_leading_digit_place))
     {
-        uint32_t*int_arena_savepoint =
-            int_arena_slot_new(int_arena_cursor, dividend->value_count);
         struct Integer positive_divisor = { dividend->value_count,
-            int_arena_slot_new(int_arena_cursor, dividend->value_count), 1 };
+            int_stack_slot_new(&scratch_stack_cursor, dividend->value_count), 1 };
         size_t quotient_value_index = dividend->value_count - divisor->value_count;
         memset(positive_divisor.values, 0, quotient_value_index * sizeof(uint32_t));
         memcpy(positive_divisor.values + quotient_value_index, divisor->values,
@@ -515,47 +527,51 @@ struct Division integer_euclidean_divide(uint32_t**int_arena_cursor, struct Inte
         }
         int8_t dividend_sign = dividend->sign;
         dividend->sign = 1;
-        struct Division division =
-            { {dividend->value_count, int_arena_savepoint, quotient_sign}, *dividend };
-        calculate_division_values(*int_arena_cursor, &positive_divisor, &division,
+        out->quotient.value_count = dividend->value_count;
+        out->quotient.values = *output_stack_cursor;
+        out->quotient.sign = quotient_sign;
+        memset(out->quotient.values, 0, out->quotient.value_count * sizeof(uint32_t));
+        out->remainder = *dividend;
+        calculate_division_values(scratch_stack_cursor, &positive_divisor, out,
             quotient_value_index, quotient_digit);
-        trim_leading_zeroes(&division.quotient);
-        int_arena_savepoint += division.quotient.value_count;
-        integer_move_to_arena_cursor(&int_arena_savepoint, &division.remainder);
-        rewind_arena_cursor(int_arena_cursor, int_arena_savepoint);
-        if (division.remainder.sign != 0)
+        trim_leading_zeroes(&out->quotient);
+        *(uint32_t**)output_stack_cursor += out->quotient.value_count;
+        integer_copy_values_to_stack_cursor(output_stack_cursor, &out->remainder);
+        if (out->remainder.sign != 0)
         {
-            division.remainder.sign = dividend->sign;
+            out->remainder.sign = dividend->sign;
         }
         dividend->sign = dividend_sign;
-        return division;
+        return;
     }
-    struct Division division = { {0, 0, 0}, { dividend->value_count,
-        int_arena_slot_new(int_arena_cursor, dividend->value_count), quotient_sign } };
-    memcpy(division.remainder.values, dividend->values,
-        dividend->value_count * sizeof(uint32_t));
-    return division;
+    out->quotient.value_count = 0;
+    out->quotient.values = 0;
+    out->quotient.sign = 0;
+    integer_copy(output_stack_cursor, &out->remainder, dividend);
+    out->remainder.sign = quotient_sign;
 }
 
-void integer_string(char**char_arena_cursor, uint32_t*int_arena_cursor, struct Integer*a)
+void integer_string(void**output_stack_cursor, void*scratch_stack_cursor, struct Integer*a)
 {
     if (a->sign == 0)
     {
-        *(char*)arena_slot_new(char_arena_cursor, sizeof(char), 1) = '0';
+        *(char*)stack_slot_new(output_stack_cursor, sizeof(char), 1) = '0';
         return;
     }
     if (a->sign < 0)
     {
-        *(char*)arena_slot_new(char_arena_cursor, sizeof(char), 1) = '-';
+        *(char*)stack_slot_new(output_stack_cursor, sizeof(char), 1) = '-';
     }
-    char*buffer_start = arena_slot_new(char_arena_cursor, sizeof(char), 10 * a->value_count + 1);
-    char*next_char = *char_arena_cursor;
+    char*buffer_start = stack_slot_new(output_stack_cursor, sizeof(char), 10 * a->value_count + 1);
+    char*next_char = *output_stack_cursor;
     struct Integer quotient = *a;
     struct Integer power;
-    arena_integer_new(&int_arena_cursor, &power, 10);
+    stack_integer_new(&scratch_stack_cursor, &power, 10);
     while (quotient.sign != 0)
     {
-        struct Division division = integer_euclidean_divide(&int_arena_cursor, &quotient, &power);
+        struct Division division;
+        integer_euclidean_divide(&scratch_stack_cursor, *output_stack_cursor, &division, &quotient,
+            &power);
         quotient = division.quotient;
         next_char -= 1;
         if (division.remainder.sign != 0)
@@ -567,9 +583,9 @@ void integer_string(char**char_arena_cursor, uint32_t*int_arena_cursor, struct I
             *next_char = '0';
         }
     }
-    size_t char_count = *char_arena_cursor - next_char;
+    size_t char_count = *(char**)output_stack_cursor - next_char;
     memcpy(buffer_start, next_char, char_count);
-    rewind_arena_cursor(char_arena_cursor, buffer_start + char_count);
+    rewind_stack_cursor(output_stack_cursor, buffer_start + char_count);
 }
 
 struct Number
@@ -593,7 +609,7 @@ struct NumberSlot
     struct NumberSlot*next;
 };
 
-struct NumberSlot*number_slot_new(struct NumberSlot**arena_cursor, struct NumberSlot**free_list)
+struct NumberSlot*number_slot_new(struct NumberSlot**pool_cursor, struct NumberSlot**free_list)
 {
     struct NumberSlot*allocation = *free_list;
     if (allocation)
@@ -602,25 +618,28 @@ struct NumberSlot*number_slot_new(struct NumberSlot**arena_cursor, struct Number
     }
     else
     {
-        allocation = arena_slot_new(arena_cursor, sizeof(struct NumberSlot), 1);
+        allocation = stack_slot_new(pool_cursor, sizeof(struct NumberSlot), 1);
         allocation->next = 0;
     }
     return allocation;
 }
 
 void number_slot_free(struct NumberSlot**number_slot_free_list, struct NumberSlot*slot,
-    struct ValueCountArena*int_pool)
+    struct IntPool*int_pool)
 {
-    if (slot->number.operation == 'i')
+    if (slot->number.operation == 'i' && slot->number.value.value_count)
     {
-        int_pool_slot_free(int_pool, &slot->number.value);
+        struct IntPool*pool = get_value_count_pool(int_pool, slot->number.value.value_count);
+        *int_pool_slot_next(slot->number.value.values, slot->number.value.value_count) =
+            pool->free_list;
+        pool->free_list = slot->number.value.values;
     }
     slot->next = *number_slot_free_list;
     *number_slot_free_list = slot;
 }
 
-bool get_input(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**number_free_list,
-    struct ValueCountArena*int_pool, uint32_t*int_arena_cursor)
+bool get_input(struct NumberSlot**number_slot_pool_cursor, struct NumberSlot**number_free_list,
+    struct IntPool*int_pool, void*stack_a_cursor, void*stack_b_cursor)
 {
     char next_char = getchar();
     if (next_char == '\n')
@@ -630,25 +649,26 @@ bool get_input(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**n
     struct NumberSlot*previous_slot = 0;
     while (true)
     {
-        struct NumberSlot*slot = number_slot_new(number_slot_arena_cursor, number_free_list);
+        struct NumberSlot*slot = number_slot_new(number_slot_pool_cursor, number_free_list);
         slot->previous = previous_slot;
-        slot->next = *number_slot_arena_cursor;
+        slot->next = *number_slot_pool_cursor;
         if (isdigit(next_char))
         {
             slot->number.operation = 'i';
-            arena_integer_new(&int_arena_cursor, &slot->number.value, next_char - '0');
+            stack_integer_new(&stack_a_cursor, &slot->number.value, next_char - '0');
             struct Integer ten;
-            arena_integer_new(&int_arena_cursor, &ten, 10);
+            stack_integer_new(&stack_a_cursor, &ten, 10);
             next_char = getchar();
             while (isdigit(next_char))
             {
-                slot->number.value = integer_multiply(&int_arena_cursor, &slot->number.value, &ten);
+                slot->number.value =
+                    integer_multiply(&stack_a_cursor, stack_b_cursor, &slot->number.value, &ten);
                 struct Integer digit;
-                arena_integer_new(&int_arena_cursor, &digit, next_char - '0');
-                slot->number.value = integer_add(&int_arena_cursor, &slot->number.value, &digit);
+                stack_integer_new(&stack_a_cursor, &digit, next_char - '0');
+                slot->number.value = integer_add(&stack_a_cursor, &slot->number.value, &digit);
                 next_char = getchar();
             }
-            integer_move_to_pool(int_pool, &slot->number.value);
+            integer_copy_values_to_pool(int_pool, &slot->number.value);
         }
         else
         {
@@ -671,8 +691,7 @@ bool get_input(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**n
             default:
                 printf("\"%c\"%s", next_char, " is an invalid character.");
                 while (getchar() != '\n')
-                {
-                }
+                {}
                 return false;
             }
             slot->number.operation = next_char;
@@ -766,8 +785,8 @@ bool parse_binary_operation_pair(struct NumberSlot**slot, char operation_a, char
     }
 }
 
-struct NumberSlot*parse_input(struct NumberSlot**number_slot_arena_cursor,
-    struct NumberSlot**number_slot_free_list, struct ValueCountArena*int_pool,
+struct NumberSlot*parse_input(struct NumberSlot**number_slot_pool_cursor,
+    struct NumberSlot**number_slot_free_list, struct IntPool*int_pool,
     struct NumberSlot*number_slot)
 {
     if (!number_slot)
@@ -807,7 +826,7 @@ struct NumberSlot*parse_input(struct NumberSlot**number_slot_arena_cursor,
             struct NumberSlot*next = nested_number_slot->next;
             number_slot->next->previous = 0;
             nested_number_slot->previous->next = 0;
-            struct NumberSlot*nested_expression = parse_input(number_slot_arena_cursor,
+            struct NumberSlot*nested_expression = parse_input(number_slot_pool_cursor,
                 number_slot_free_list, int_pool, number_slot->next);
             if (nested_expression)
             {
@@ -889,7 +908,7 @@ struct NumberSlot*parse_input(struct NumberSlot**number_slot_arena_cursor,
                 number_slot->number.operation = 'i';
                 pool_integer_new(int_pool, &number_slot->number.value, -1);
                 struct NumberSlot*times =
-                    number_slot_new(number_slot_arena_cursor, number_slot_free_list);
+                    number_slot_new(number_slot_pool_cursor, number_slot_free_list);
                 times->number.operation = '*';
                 times->number.left = &number_slot->number;
                 times->number.right = &number_slot->next->number;
@@ -961,40 +980,41 @@ struct ExtendedGCDInfo
     struct Integer b_over_gcd;
 };
 
-struct ExtendedGCDInfo extended_gcd(uint32_t**int_arena_cursor, struct Integer a, struct Integer b)
+void extended_gcd(void**output_stack_cursor, void*scratch_stack_cursor, struct ExtendedGCDInfo*out,
+    struct Integer a, struct Integer b)
 {
-    uint32_t*int_arena_savepoint =
-        int_arena_slot_new(int_arena_cursor, 5 * max(a.value_count, b.value_count));
-    struct ExtendedGCDInfo info;
     struct Integer zero = { 0, 0, 0 };
-    info.a_coefficient = zero;
-    arena_integer_new(int_arena_cursor, &info.b_coefficient, 1);
-    arena_integer_new(int_arena_cursor, &info.b_over_gcd, 1);
-    info.a_over_gcd = zero;
+    out->a_coefficient = zero;
+    stack_integer_new(&scratch_stack_cursor, &out->b_coefficient, 1);
+    out->a_over_gcd = zero;
+    stack_integer_new(&scratch_stack_cursor, &out->b_over_gcd, 1);
     while (!integer_equals(&a, &zero))
     {
-        struct Division division = integer_euclidean_divide(int_arena_cursor, &b, &a);
-        struct Integer product =
-            integer_multiply(int_arena_cursor, &info.b_over_gcd, &division.quotient);
-        struct Integer m = integer_subtract(int_arena_cursor, &info.a_coefficient, &product);
-        product = integer_multiply(int_arena_cursor, &info.a_over_gcd, &division.quotient);
-        struct Integer n = integer_subtract(int_arena_cursor, &info.b_coefficient, &product);
+        struct Division division;
+        integer_euclidean_divide(output_stack_cursor, scratch_stack_cursor, &division, &b, &a);
+        struct Integer product;
+        integer_out_multiply(&scratch_stack_cursor, *output_stack_cursor, &product,
+            &out->b_over_gcd, &division.quotient);
+        struct Integer m;
+        integer_out_subtract(&scratch_stack_cursor, &m, &out->a_coefficient, &product);
+        integer_out_multiply(&scratch_stack_cursor, *output_stack_cursor, &product,
+            &out->a_over_gcd, &division.quotient);
+        struct Integer n;
+        integer_out_subtract(&scratch_stack_cursor, &n, &out->b_coefficient, &product);
         b = a;
         a = division.remainder;
-        info.a_coefficient = info.b_over_gcd;
-        info.b_coefficient = info.a_over_gcd;
-        info.b_over_gcd = m;
-        info.a_over_gcd = n;
+        out->a_coefficient = out->b_over_gcd;
+        out->b_coefficient = out->a_over_gcd;
+        out->b_over_gcd = m;
+        out->a_over_gcd = n;
     }
-    info.gcd = b;
-    info.b_over_gcd.sign = -info.b_over_gcd.sign;
-    integer_move_to_arena_cursor(&int_arena_savepoint, &info.gcd);
-    integer_move_to_arena_cursor(&int_arena_savepoint, &info.a_coefficient);
-    integer_move_to_arena_cursor(&int_arena_savepoint, &info.b_coefficient);
-    integer_move_to_arena_cursor(&int_arena_savepoint, &info.a_over_gcd);
-    integer_move_to_arena_cursor(&int_arena_savepoint, &info.b_over_gcd);
-    rewind_arena_cursor(int_arena_cursor, int_arena_savepoint);
-    return info;
+    out->gcd = b;
+    out->b_over_gcd.sign = -out->b_over_gcd.sign;
+    integer_copy_values_to_stack_cursor(output_stack_cursor, &out->gcd);
+    integer_copy_values_to_stack_cursor(output_stack_cursor, &out->a_coefficient);
+    integer_copy_values_to_stack_cursor(output_stack_cursor, &out->b_coefficient);
+    integer_copy_values_to_stack_cursor(output_stack_cursor, &out->a_over_gcd);
+    integer_copy_values_to_stack_cursor(output_stack_cursor, &out->b_over_gcd);
 }
 
 bool is_fraction(struct Number*a)
@@ -1002,27 +1022,27 @@ bool is_fraction(struct Number*a)
     return a->operation == '/' && a->left->operation == 'i';
 }
 
-bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
-    struct NumberSlot**number_slot_free_list, struct ValueCountArena*int_pool,
-    uint32_t*int_arena_cursor, struct Number*a)
+bool evaluate_root(struct NumberSlot**number_slot_pool_cursor,
+    struct NumberSlot**number_slot_free_list, struct IntPool*int_pool, void*stack_a_cursor,
+    void*stack_b_cursor, struct Number*a)
 {
     if (a->operation == '-')
     {
         struct NumberSlot*negative =
-            number_slot_new(number_slot_arena_cursor, number_slot_free_list);
+            number_slot_new(number_slot_pool_cursor, number_slot_free_list);
         negative->number.operation = 'i';
         pool_integer_new(int_pool, &negative->number.value, -1);
         struct NumberSlot*times =
-            number_slot_new(number_slot_arena_cursor, number_slot_free_list);
+            number_slot_new(number_slot_pool_cursor, number_slot_free_list);
         times->number.operation = '*';
         times->number.left = negative;
         times->number.right = a->right;
         a->operation = '+';
         a->right = times;
-        evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-            int_arena_cursor, a->right);
-        return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-            int_arena_cursor, a);
+        evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool, stack_a_cursor,
+            stack_b_cursor, a->right);
+        return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+            stack_a_cursor, stack_b_cursor, a);
     }
     if (a->operation == '/')
     {
@@ -1042,8 +1062,9 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
                 a->value.sign = 0;
                 return true;
             }
-            struct ExtendedGCDInfo gcd_info =
-                extended_gcd(&int_arena_cursor, a->left->value, a->right->value);
+            struct ExtendedGCDInfo gcd_info;
+            extended_gcd(&stack_a_cursor, stack_b_cursor, &gcd_info, a->left->value,
+                a->right->value);
             a->left->value = gcd_info.a_over_gcd;
             a->right->value = gcd_info.b_over_gcd;
             if (a->right->value.sign < 0)
@@ -1051,9 +1072,9 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
                 a->left->value.sign = -a->left->value.sign;
                 a->right->value.sign = -a->right->value.sign;
             }
-            integer_move_to_pool(int_pool, &a->left->value);
+            integer_copy_values_to_pool(int_pool, &a->left->value);
             struct Integer one;
-            arena_integer_new(&int_arena_cursor, &one, 1);
+            stack_integer_new(&stack_a_cursor, &one, 1);
             if (integer_equals(&a->right->value, &one))
             {
                 struct Number*numerator = a->left;
@@ -1064,7 +1085,7 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
             }
             else
             {
-                integer_move_to_pool(int_pool, &a->right->value);
+                integer_copy_values_to_pool(int_pool, &a->right->value);
             }
             return true;
         }
@@ -1074,8 +1095,8 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
             struct Number*numerator = a->right->left;
             a->right->left = a->right->right;
             a->right->right = numerator;
-            return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-                int_arena_cursor, a);
+            return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+                stack_a_cursor, stack_b_cursor, a);
         }
     }
     if (a->operation == '^')
@@ -1088,38 +1109,39 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
                 {
                     a->right->value.sign = 1;
                     struct NumberSlot*one =
-                        number_slot_new(number_slot_arena_cursor, number_slot_free_list);
+                        number_slot_new(number_slot_pool_cursor, number_slot_free_list);
                     one->number.operation = 'i';
                     pool_integer_new(int_pool, &one->number.value, 1);
                     struct NumberSlot*over =
-                        number_slot_new(number_slot_arena_cursor, number_slot_free_list);
+                        number_slot_new(number_slot_pool_cursor, number_slot_free_list);
                     over->number.operation = '/';
                     over->number.left = one;
                     over->number.right = a->left;
                     a->left = over;
-                    return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-                        int_arena_cursor, a);
+                    return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+                        stack_a_cursor, stack_b_cursor, a);
                 }
                 struct Integer exponentiation;
-                arena_integer_new(&int_arena_cursor, &exponentiation, 1);
+                stack_integer_new(&stack_a_cursor, &exponentiation, 1);
                 struct Integer base_to_a_power_of_two = a->left->value;
                 struct Integer exponent = a->right->value;
                 struct Integer two;
-                arena_integer_new(&int_arena_cursor, &two, 2);
+                stack_integer_new(&stack_a_cursor, &two, 2);
                 while (exponent.sign > 0)
                 {
-                    struct Division division =
-                        integer_euclidean_divide(&int_arena_cursor, &exponent, &two);
+                    struct Division division;
+                    integer_euclidean_divide(&stack_a_cursor, stack_b_cursor, &division, &exponent,
+                        &two);
                     if (division.remainder.sign > 0)
                     {
-                        exponentiation = integer_multiply(&int_arena_cursor, &exponentiation,
-                            &base_to_a_power_of_two);
+                        exponentiation = integer_multiply(&stack_a_cursor, stack_b_cursor,
+                            &exponentiation, &base_to_a_power_of_two);
                     }
-                    base_to_a_power_of_two = integer_multiply(&int_arena_cursor,
+                    base_to_a_power_of_two = integer_multiply(&stack_a_cursor, stack_b_cursor,
                         &base_to_a_power_of_two, &base_to_a_power_of_two);
                     exponent = division.quotient;
                 }
-                integer_move_to_pool(int_pool, &exponentiation);
+                integer_copy_values_to_pool(int_pool, &exponentiation);
                 a->operation = 'i';
                 number_slot_free(number_slot_free_list, a->left, int_pool);
                 number_slot_free(number_slot_free_list, a->right, int_pool);
@@ -1134,12 +1156,12 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
         {
             if (a->right->operation == 'i')
             {
-                struct Integer sum =
-                    integer_add(&int_arena_cursor, &a->left->value, &a->right->value);
+                struct Integer sum;
+                integer_out_add(&stack_a_cursor, &sum, &a->left->value, &a->right->value);
                 a->operation = 'i';
                 number_slot_free(number_slot_free_list, a->left, int_pool);
                 number_slot_free(number_slot_free_list, a->right, int_pool);
-                integer_move_to_pool(int_pool, &sum);
+                integer_copy_values_to_pool(int_pool, &sum);
                 a->value = sum;
                 return true;
             }
@@ -1148,8 +1170,8 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
                 struct Number*left = a->left;
                 a->left = a->right;
                 a->right = left;
-                return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-                    int_arena_cursor, a);
+                return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+                    stack_a_cursor, stack_b_cursor, a);
             }
         }
         else if (is_fraction(a->left))
@@ -1158,53 +1180,52 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
             {
                 a->operation = '/';
                 struct Number*old_numerator = a->left->left;
-                uint32_t*int_arena_savepoint = int_arena_cursor;
-                struct Integer new_numerator_term =
-                    integer_multiply(&int_arena_cursor, &a->left->right->value, &a->right->value);
+                struct Integer new_numerator_term;
+                integer_out_multiply(&stack_a_cursor, stack_b_cursor, &new_numerator_term,
+                    &a->left->right->value, &a->right->value);
                 number_slot_free(number_slot_free_list, a->right, int_pool);
                 a->right = a->left->right;
                 a->left->operation = 'i';
-                a->left->value =
-                    integer_add(&int_arena_cursor, &new_numerator_term, &old_numerator->value);
+                integer_out_add(&stack_a_cursor, &a->left->value, &new_numerator_term,
+                    &old_numerator->value);
                 number_slot_free(number_slot_free_list, old_numerator, int_pool);
-                integer_move_to_pool(int_pool, &a->left->value);
-                rewind_arena_cursor(&int_arena_cursor, int_arena_savepoint);
-                return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-                    int_arena_cursor, a);
+                integer_copy_values_to_pool(int_pool, &a->left->value);
+                return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+                    stack_b_cursor, stack_a_cursor, a);
             }
             else if (is_fraction(a->right))
             {
                 a->operation = '/';
                 struct Number*left_denominator = a->left->right;
                 struct Number*right_denominator = a->right->right;
-                uint32_t*int_arena_savepoint = int_arena_cursor;
-                struct Integer numerator_term_a = integer_multiply(&int_arena_cursor,
+                struct Integer numerator_term_a;
+                integer_out_multiply(&stack_a_cursor, stack_b_cursor, &numerator_term_a,
                     &a->left->left->value, &right_denominator->value);
-                struct Integer numerator_term_b = integer_multiply(&int_arena_cursor,
+                struct Integer numerator_term_b;
+                integer_out_multiply(&stack_a_cursor, stack_b_cursor, &numerator_term_b,
                     &a->right->left->value, &left_denominator->value);
                 a->right->operation = 'i';
                 number_slot_free(number_slot_free_list, a->right->left, int_pool);
-                a->right->value = integer_multiply(&int_arena_cursor, &left_denominator->value,
-                    &right_denominator->value);
+                integer_out_multiply(&stack_a_cursor, stack_b_cursor, &a->right->value,
+                    &left_denominator->value, &right_denominator->value);
                 number_slot_free(number_slot_free_list, right_denominator, int_pool);
                 a->left->operation = 'i';
                 number_slot_free(number_slot_free_list, a->left->left, int_pool);
                 number_slot_free(number_slot_free_list, a->left->right, int_pool);
-                a->left->value =
-                    integer_add(&int_arena_cursor, &numerator_term_a, &numerator_term_b);
-                integer_move_to_pool(int_pool, &a->right->value);
-                integer_move_to_pool(int_pool, &a->left->value);
-                rewind_arena_cursor(&int_arena_cursor, int_arena_savepoint);
-                return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-                    int_arena_cursor, a);
+                integer_out_add(&stack_a_cursor, &a->left->value, &numerator_term_a,
+                    &numerator_term_b);
+                integer_copy_values_to_pool(int_pool, &a->right->value);
+                integer_copy_values_to_pool(int_pool, &a->left->value);
+                return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+                    stack_b_cursor, stack_a_cursor, a);
             }
             else
             {
                 struct Number*left = a->left;
                 a->left = a->right;
                 a->right = left;
-                return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-                    int_arena_cursor, a);
+                return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+                    stack_a_cursor, stack_b_cursor, a);
             }
         }
     }
@@ -1214,12 +1235,13 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
         {
             if (a->right->operation == 'i')
             {
-                struct Integer product =
-                    integer_multiply(&int_arena_cursor, &a->left->value, &a->right->value);
+                struct Integer product;
+                integer_out_multiply(&stack_a_cursor, stack_b_cursor, &product, &a->left->value,
+                    &a->right->value);
                 a->operation = 'i';
                 number_slot_free(number_slot_free_list, a->left, int_pool);
                 number_slot_free(number_slot_free_list, a->right, int_pool);
-                integer_move_to_pool(int_pool, &product);
+                integer_copy_values_to_pool(int_pool, &product);
                 a->value = product;
                 return true;
             }
@@ -1228,8 +1250,8 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
                 struct Number*left = a->left;
                 a->left = a->right;
                 a->right = left;
-                return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-                    int_arena_cursor, a);
+                return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+                    stack_a_cursor, stack_b_cursor, a);
             }
         }
         else if (is_fraction(a->left))
@@ -1241,15 +1263,13 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
                 struct Number*integer = a->right;
                 a->left->operation = 'i';
                 a->right = a->left->right;
-                uint32_t*int_arena_savepoint = int_arena_cursor;
-                a->left->value =
-                    integer_multiply(&int_arena_cursor, &integer->value, &numerator->value);
+                integer_out_multiply(&stack_a_cursor, stack_b_cursor, &a->left->value,
+                    &integer->value, &numerator->value);
                 number_slot_free(number_slot_free_list, integer, int_pool);
                 number_slot_free(number_slot_free_list, numerator, int_pool);
-                integer_move_to_pool(int_pool, &a->left->value);
-                rewind_arena_cursor(&int_arena_cursor, int_arena_savepoint);
-                return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-                    int_arena_cursor, a);
+                integer_copy_values_to_pool(int_pool, &a->left->value);
+                return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+                    stack_b_cursor, stack_a_cursor, a);
             }
             else if (is_fraction(a->right))
             {
@@ -1259,77 +1279,75 @@ bool evaluate_root(struct NumberSlot**number_slot_arena_cursor,
                 struct Number*left_denominator = a->left->right;
                 struct Number*right_denominator = a->right->right;
                 a->left->operation = 'i';
-                uint32_t*int_arena_savepoint = int_arena_cursor;
-                a->left->value = integer_multiply(int_arena_cursor, &left_numerator->value,
-                    &right_numerator->value);
+                integer_out_multiply(&stack_a_cursor, stack_b_cursor, &a->left->value,
+                    &left_numerator->value, &right_numerator->value);
                 number_slot_free(number_slot_free_list, left_numerator, int_pool);
                 number_slot_free(number_slot_free_list, right_numerator, int_pool);
                 a->right->operation = 'i';
-                a->right->value = integer_multiply(int_arena_cursor, &left_denominator->value,
-                    &right_denominator->value);
+                integer_out_multiply(&stack_a_cursor, stack_b_cursor, &a->right->value,
+                    &left_denominator->value, &right_denominator->value);
                 number_slot_free(number_slot_free_list, left_denominator, int_pool);
                 number_slot_free(number_slot_free_list, right_denominator, int_pool);
-                integer_move_to_pool(int_pool, &a->left->value);
-                integer_move_to_pool(int_pool, &a->right->value);
-                rewind_arena_cursor(&int_arena_cursor, int_arena_savepoint);
-                return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-                    int_arena_cursor, a);
+                integer_copy_values_to_pool(int_pool, &a->left->value);
+                integer_copy_values_to_pool(int_pool, &a->right->value);
+                return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+                    stack_b_cursor, stack_a_cursor, a);
             }
             else
             {
                 struct Number*left = a->left;
                 a->left = a->right;
                 a->right = left;
-                return evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool,
-                    int_arena_cursor, a);
+                return evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool,
+                    stack_a_cursor, stack_b_cursor, a);
             }
         }
     }
     return true;
 }
 
-bool evaluate(struct NumberSlot**number_slot_arena_cursor, struct NumberSlot**number_slot_free_list,
-    struct ValueCountArena*int_pool, uint32_t*int_arena_cursor, struct Number*a)
+bool evaluate(struct NumberSlot**number_slot_pool_cursor, struct NumberSlot**number_slot_free_list,
+    struct IntPool*int_pool, uint32_t*stack_a_cursor, uint32_t*stack_b_cursor,
+    struct Number*a)
 {
     if (a->operation == 'i')
     {
         return true;
     }
-    if (!evaluate(number_slot_arena_cursor, number_slot_free_list, int_pool, int_arena_cursor,
-        a->left))
+    if (!evaluate(number_slot_pool_cursor, number_slot_free_list, int_pool, stack_a_cursor,
+        stack_b_cursor, a->left))
     {
         return false;
     }
-    if (!evaluate(number_slot_arena_cursor, number_slot_free_list, int_pool, int_arena_cursor,
-        a->right))
+    if (!evaluate(number_slot_pool_cursor, number_slot_free_list, int_pool, stack_a_cursor,
+        stack_b_cursor, a->right))
     {
         return false;
     }
-    if (!evaluate_root(number_slot_arena_cursor, number_slot_free_list, int_pool, int_arena_cursor,
-        a))
+    if (!evaluate_root(number_slot_pool_cursor, number_slot_free_list, int_pool, stack_a_cursor,
+        stack_b_cursor, a))
     {
         return false;
     }
 }
 
-void print_number(struct uint32_t*int_arena_cursor, char*char_arena_cursor, struct Number*number)
+void print_number(void*stack_a_cursor, void*stack_b_cursor, struct Number*number)
 {
     if (number->operation == 'i')
     {
-        char*char_arena_savepoint = char_arena_cursor;
-        integer_string(&char_arena_cursor, int_arena_cursor, &number->value);
-        *(char*)arena_slot_new(&char_arena_cursor, sizeof(char), 1) = 0;
-        printf("%s", char_arena_savepoint);
-        rewind_arena_cursor(&char_arena_cursor, char_arena_savepoint);
+        char*string = stack_a_cursor;
+        integer_string(&stack_a_cursor, stack_b_cursor, &number->value);
+        *(char*)stack_slot_new(&stack_a_cursor, sizeof(char), 1) = 0;
+        printf("%s", string);
     }
     else
     {
         printf("(");
-        print_number(int_arena_cursor, char_arena_cursor, number->left);
+        print_number(stack_a_cursor, stack_b_cursor, number->left);
         printf(")");
         printf("%c", number->operation);
         printf("(");
-        print_number(int_arena_cursor, char_arena_cursor, number->right);
+        print_number(stack_a_cursor, stack_b_cursor, number->right);
         printf(")");
     }
 }
@@ -1339,27 +1357,27 @@ int main()
     SYSTEM_INFO system_info;
     GetSystemInfo(&system_info);
     page_size = system_info.dwPageSize;
-    struct NumberSlot*number_slot_arena = VirtualAlloc(0, 1073741824, MEM_RESERVE, PAGE_READWRITE);
-    struct NumberSlot*number_slot_arena_cursor = number_slot_arena;
+    struct NumberSlot*number_slot_pool = VirtualAlloc(0, arena_size, MEM_RESERVE, PAGE_READWRITE);
+    struct NumberSlot*number_slot_pool_cursor = number_slot_pool;
     struct NumberSlot*number_slot_free_list = 0;
-    uint32_t*int_arena = VirtualAlloc(0, page_size, MEM_RESERVE, PAGE_READWRITE);
-    uint32_t*int_arena_cursor = int_arena;
-    char*char_arena = VirtualAlloc(0, 1073741824, MEM_RESERVE, PAGE_READWRITE);
-    char*char_arena_cursor = char_arena;
+    void*stack_a = VirtualAlloc(0, arena_size, MEM_RESERVE, PAGE_READWRITE);
+    void*stack_a_cursor = stack_a;
+    void*stack_b = VirtualAlloc(0, arena_size, MEM_RESERVE, PAGE_READWRITE);
+    void*stack_b_cursor = stack_b;
     while (true)
     {
-        struct ValueCountArena*input_int_pool = sized_int_arena_new();
-        if (get_input(&number_slot_arena_cursor, &number_slot_free_list, input_int_pool,
-            int_arena_cursor))
+        struct IntPool*int_pool = sized_int_pool_new();
+        if (get_input(&number_slot_pool_cursor, &number_slot_free_list, int_pool, stack_a_cursor,
+            stack_b_cursor))
         {
-            struct NumberSlot*number_slot = number_slot_arena;
+            struct NumberSlot*number_slot = number_slot_pool;
             while (number_slot->next)
             {
                 if (number_slot->next->number.operation == '(' &&
                     (number_slot->number.operation == 'i' || number_slot->number.operation == ')'))
                 {
                     struct NumberSlot*times =
-                        number_slot_new(&number_slot_arena_cursor, &number_slot_free_list);
+                        number_slot_new(&number_slot_pool_cursor, &number_slot_free_list);
                     times->number.operation = '*';
                     times->previous = number_slot;
                     times->next = number_slot->next;
@@ -1368,32 +1386,32 @@ int main()
                 }
                 number_slot = number_slot->next;
             }
-            struct NumberSlot*input = parse_input(&number_slot_arena_cursor, &number_slot_free_list,
-                input_int_pool, number_slot_arena);
-            if (input && evaluate(&number_slot_arena_cursor, &number_slot_free_list, input_int_pool,
-                int_arena_cursor, &input->number))
+            struct NumberSlot*input = parse_input(&number_slot_pool_cursor, &number_slot_free_list,
+                int_pool, number_slot_pool);
+            if (input && evaluate(&number_slot_pool_cursor, &number_slot_free_list, int_pool,
+                stack_a_cursor, stack_b_cursor, &input->number))
             {
                 printf("=\n");
-                print_number(int_arena_cursor, char_arena_cursor, &input->number);
+                print_number(stack_a_cursor, stack_b_cursor, &input->number);
             }
         }
         printf("\n\n");
-        rewind_arena_cursor(&number_slot_arena_cursor, number_slot_arena);
+        rewind_stack_cursor(&number_slot_pool_cursor, number_slot_pool);
         number_slot_free_list = 0;
-        rewind_arena_cursor(&int_arena_cursor, int_arena);
-        rewind_arena_cursor(&char_arena_cursor, char_arena);
-        while (input_int_pool)
+        rewind_stack_cursor(&stack_a_cursor, stack_a);
+        rewind_stack_cursor(&stack_b_cursor, stack_b);
+        while (int_pool)
         {
-            struct ValueCountArena*next_arena = input_int_pool->next_value_count_arena;
-            struct SizedIntPage*page = &input_int_pool->page.next_page;
-            VirtualFree(input_int_pool, page_size, MEM_RELEASE);
+            struct IntPool*next_value_count_pool = int_pool->next_value_count_pool;
+            struct SizedIntPage*page = &int_pool->page.next_page;
+            VirtualFree(int_pool, page_size, MEM_RELEASE);
             while (page)
             {
                 struct SizedIntPage*next_page = page->next_page;
                 VirtualFree(page, page_size, MEM_RELEASE);
                 page = next_page;
             }
-            input_int_pool = next_arena;
+            int_pool = next_value_count_pool;
         }
     }
     return 0;
