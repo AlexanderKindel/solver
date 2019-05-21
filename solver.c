@@ -633,6 +633,49 @@ void extended_gcd(void**output_stack_cursor, void*scratch_stack_cursor, struct E
     out->b_over_gcd->sign *= -1;
 }
 
+struct Integer*primes;
+
+struct Integer*next_prime_slot(struct Integer*prime)
+{
+    return (size_t)prime + integer_size(prime->value_count);
+}
+
+struct Integer*next_prime(void*stack_a_cursor, void*stack_b_cursor, struct Integer*prime)
+{
+    struct Integer*next_slot = next_prime_slot(prime);
+    size_t boundary = next_page_boundary(prime);
+    if (next_slot == boundary)
+    {
+        VirtualAlloc(boundary, page_size, MEM_COMMIT, PAGE_READWRITE);
+    }
+    if (next_slot->value_count)
+    {
+        return next_slot;
+    }
+    memcpy(next_slot, prime, integer_size(prime->value_count));
+    integer_add_to_a_in_place(next_slot, primes);
+    while (true)
+    {
+        struct Integer*potential_factor = primes;
+        while (true)
+        {
+            struct Division division;
+            integer_euclidean_divide(&stack_a_cursor, stack_b_cursor, &division, next_slot,
+                potential_factor);
+            if (division.remainder->value_count == 0)
+            {
+                break;
+            }
+            potential_factor = next_prime_slot(potential_factor);
+            if (potential_factor == next_slot)
+            {
+                return next_slot;
+            }
+        }
+        integer_add_to_a_in_place(next_slot, primes);
+    }
+}
+
 struct Rational
 {
     struct Integer*numerator;
@@ -667,6 +710,15 @@ bool rational_new(struct Integer*(integer_slot_allocator)(void*, size_t), void*m
     integer_move(integer_slot_allocator, memory, &out->numerator);
     integer_move(integer_slot_allocator, memory, &out->denominator);
     return true;
+}
+
+void rational_free(struct IntegerPool*integer_pool, struct Rational*a)
+{
+    if (a->numerator->value_count)
+    {
+        pool_integer_free(integer_pool, a->numerator);
+    }
+    pool_integer_free(integer_pool, a->denominator);
 }
 
 bool rational_out_add(struct Integer*(integer_slot_allocator)(void*, size_t), void*memory,
@@ -721,8 +773,12 @@ struct Number
 struct NumberSlot
 {
     struct Number number;
-    struct NumberSlot*previous;
-    struct NumberSlot*next;
+    union
+    {
+        struct NumberSlot*previous;//Used to form a doubly linked list during parsing.
+        size_t reference_count;
+    };
+    struct NumberSlot*next;//Used for the doubly linked list during parsing and for the free list.
 };
 
 struct NumberSlot*number_slot_new(struct NumberSlot**pool_cursor, struct NumberSlot**free_list)
@@ -737,22 +793,49 @@ struct NumberSlot*number_slot_new(struct NumberSlot**pool_cursor, struct NumberS
         slot = stack_slot_new(pool_cursor, sizeof(struct NumberSlot));
         slot->next = 0;
     }
+    slot->reference_count = 1;
     return slot;
 }
 
-void number_slot_free(struct NumberSlot**number_slot_free_list, struct NumberSlot*slot,
-    struct IntegerPool*integer_pool)
+void number_root_free(struct NumberSlot**free_list, struct IntegerPool*integer_pool,
+    struct NumberSlot*slot)
 {
     if (slot->number.operation == 'r')
     {
-        if (slot->number.value.numerator->value_count)
-        {
-            pool_integer_free(integer_pool, slot->number.value.numerator);
-        }
-        pool_integer_free(integer_pool, slot->number.value.denominator);
+        rational_free(integer_pool, &slot->number.value);
     }
-    slot->next = *number_slot_free_list;
-    *number_slot_free_list = slot;
+    slot->next = *free_list;
+    *free_list = slot;
+}
+
+void number_root_free_if_unused(struct NumberSlot**free_list, struct IntegerPool*integer_pool,
+    struct NumberSlot*slot)
+{
+    slot->reference_count -= 1;
+    if (!slot->reference_count)
+    {
+        number_root_free(free_list, integer_pool, slot);
+    }
+}
+
+void number_free_if_unused(struct NumberSlot**free_list, struct IntegerPool*integer_pool,
+    struct NumberSlot*slot)
+{
+    slot->reference_count -= 1;
+    if (!slot->reference_count)
+    {
+        if (slot->number.operation == 'r')
+        {
+            rational_free(integer_pool, &slot->number.value);
+        }
+        else
+        {
+            number_free_if_unused(free_list, integer_pool, slot->number.left);
+            number_free_if_unused(free_list, integer_pool, slot->number.right);
+        }
+        slot->next = *free_list;
+        *free_list = slot;
+    }
 }
 
 bool get_input(struct NumberSlot**number_slot_pool_cursor, struct NumberSlot**number_free_list,
@@ -959,8 +1042,8 @@ struct NumberSlot*parse_input(struct NumberSlot**number_slot_pool_cursor,
                 {
                     next->previous = nested_expression;
                 }
-                number_slot_free(number_slot_free_list, number_slot, integer_pool);
-                number_slot_free(number_slot_free_list, nested_number_slot, integer_pool);
+                number_root_free(number_slot_free_list, integer_pool, number_slot);
+                number_root_free(number_slot_free_list, integer_pool, nested_number_slot);
                 number_slot = nested_expression;
             }
             else
@@ -991,7 +1074,7 @@ struct NumberSlot*parse_input(struct NumberSlot**number_slot_pool_cursor,
             {
                 number_slot->previous->next = next_slot;
             }
-            number_slot_free(number_slot_free_list, number_slot, integer_pool);
+            number_root_free(number_slot_free_list, integer_pool, number_slot);
         }
         if (!next_slot)
         {
@@ -1063,8 +1146,8 @@ struct NumberSlot*parse_input(struct NumberSlot**number_slot_pool_cursor,
                 {
                     number_slot->previous->next = new_next;
                 }
-                number_slot_free(number_slot_free_list, number_slot->next, integer_pool);
-                number_slot_free(number_slot_free_list, number_slot, integer_pool);
+                number_root_free(number_slot_free_list, integer_pool, number_slot->next);
+                number_root_free(number_slot_free_list, integer_pool, number_slot);
                 number_slot = new_next;
             }
             else
@@ -1093,60 +1176,285 @@ struct NumberSlot*parse_input(struct NumberSlot**number_slot_pool_cursor,
     return number_slot;
 }
 
-bool number_add(struct NumberSlot**number_slot_pool_cursor,
+struct NumberSlot*number_add(struct NumberSlot**number_slot_pool_cursor,
     struct NumberSlot**number_slot_free_list, struct IntegerPool*integer_pool, void*stack_a_cursor,
-    void*stack_b_cursor, struct Number*out, struct Number*a, struct Number*b)
+    void*stack_b_cursor, struct Number*a, struct Number*b)
 {
     if (a->operation == 'r')
     {
+        if (a->value.numerator->value_count == 0)
+        {
+            number_free_if_unused(number_slot_free_list, integer_pool, a);
+            return b;
+        }
         if (b->operation == 'r')
         {
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
             out->operation = 'r';
             if (!rational_out_add(pool_integer_slot_new, integer_pool, stack_a_cursor,
                 stack_b_cursor, &out->value, &a->value, &b->value))
             {
-                return false;
+                return 0;
             }
-            number_slot_free(number_slot_free_list, a, integer_pool);
-            number_slot_free(number_slot_free_list, b, integer_pool);
+            number_free_if_unused(number_slot_free_list, integer_pool, a);
+            number_free_if_unused(number_slot_free_list, integer_pool, b);
+            return out;
         }
     }
-    else
+    else if (a->operation == '^')
     {
-        return number_add(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-            stack_a_cursor, stack_b_cursor, out, b, a);
+        switch (b->operation)
+        {
+        case 'r':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '+';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        case '^':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '+';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        }
     }
-    return true;
+    else if (a->operation == '*')
+    {
+        switch (b->operation)
+        {
+        case 'r':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '+';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        case '^':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '+';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        case '*':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '+';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        }
+    }
+    else if (a->operation == '+')
+    {
+        switch (b->operation)
+        {
+        case 'r':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '+';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        case '^':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '+';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        case '*':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '+';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        case '+':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '+';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        }
+    }
+    return number_add(number_slot_pool_cursor, number_slot_free_list, integer_pool, stack_a_cursor,
+        stack_b_cursor, b, a);
 }
 
-bool number_multiply(struct NumberSlot**number_slot_pool_cursor,
+struct Number*number_multiply(struct NumberSlot**number_slot_pool_cursor,
     struct NumberSlot**number_slot_free_list, struct IntegerPool*integer_pool, void*stack_a_cursor,
-    void*stack_b_cursor, struct Number*out, struct Number*a, struct Number*b)
+    void*stack_b_cursor, struct Number*a, struct Number*b)
 {
     if (a->operation == 'r')
     {
+        if (a->value.numerator->value_count == 0)
+        {
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = 'r';
+            out->value.numerator = &zero;
+            out->value.denominator = integer_new(pool_integer_slot_new, integer_pool, 1, 1);
+            number_free_if_unused(number_slot_free_list, integer_pool, a);
+            number_free_if_unused(number_slot_free_list, integer_pool, b);
+            return out;
+        }
+        if (integer_equals_one(a->value.numerator) && integer_equals_one(a->value.denominator))
+        {
+            number_free_if_unused(number_slot_free_list, integer_pool, a);
+            return b;
+        }
         if (b->operation == 'r')
         {
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
             out->operation = 'r';
             if (!rational_out_multiply(pool_integer_slot_new, integer_pool, stack_a_cursor,
                 stack_b_cursor, &out->value, &a->value, &b->value))
             {
-                return false;
+                return 0;
             }
-            number_slot_free(number_slot_free_list, a, integer_pool);
-            number_slot_free(number_slot_free_list, b, integer_pool);
-            return true;
+            number_free_if_unused(number_slot_free_list, integer_pool, a);
+            number_free_if_unused(number_slot_free_list, integer_pool, b);
+            return out;
         }
     }
-    else
+    else if (a->operation == '^')
     {
-        return number_multiply(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-            stack_a_cursor, stack_b_cursor, out, b, a);
+        switch (b->operation)
+        {
+        case 'r':
+        {
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '*';
+            out->left = b;
+            out->right = a;
+            return out;
+        }
+        case '^':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '*';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        }
     }
-    out->operation = '*';
-    out->left = a;
-    out->right = b;
-    return true;
+    else if (a->operation == '*')
+    {
+        switch (b->operation)
+        {
+        case 'r':
+        {
+            if (a->left->operation == 'r')
+            {
+                struct NumberSlot*coefficient = number_multiply(number_slot_pool_cursor,
+                    number_slot_free_list, integer_pool, stack_a_cursor, stack_b_cursor, b,
+                    a->left);
+                if (!coefficient)
+                {
+                    return 0;
+                }
+                number_free_if_unused(number_slot_free_list, integer_pool, b);
+                struct NumberSlot*out = number_multiply(number_slot_pool_cursor,
+                    number_slot_free_list, integer_pool, stack_a_cursor, stack_b_cursor,
+                    coefficient, a->right);
+                number_root_free_if_unused(number_slot_free_list, integer_pool, a);
+                return out;
+            }
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '*';
+            out->left = a;
+            out->right = b;
+            return true;
+        }
+        case '^':
+        {
+            //Placeholder.
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '*';
+            out->left = a;
+            out->right = b;
+            return out;
+        }
+        case '*':
+        {
+            struct NumberSlot*product = number_multiply(number_slot_pool_cursor,
+                number_slot_free_list, integer_pool, stack_a_cursor, stack_b_cursor, a->right, b);
+            if (!product)
+            {
+                return 0;
+            }
+            product = number_multiply(number_slot_pool_cursor, number_slot_free_list, integer_pool,
+                stack_a_cursor, stack_b_cursor, a->left, product);
+            number_root_free_if_unused(number_slot_free_list, integer_pool, a);
+            return product;
+        }
+        }
+    }
+    else if (a->operation == '+')
+    {
+        ((struct NumberSlot*)b)->reference_count += 1;
+        if (b->operation == 'r')
+        {
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->operation = '+';
+            out->left = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            out->left = number_multiply(number_slot_pool_cursor, number_slot_free_list,
+                integer_pool, stack_a_cursor, stack_b_cursor, a->left, b);
+            if (!out->left)
+            {
+                return 0;
+            }
+            out->right = number_multiply(number_slot_pool_cursor, number_slot_free_list,
+                integer_pool, stack_a_cursor, stack_b_cursor, a->right, b);
+            if (!out->right)
+            {
+                return 0;
+            }
+            number_root_free_if_unused(number_slot_free_list, integer_pool, a);
+            return out;
+        }
+        struct NumberSlot*left = number_multiply(number_slot_pool_cursor, number_slot_free_list,
+            integer_pool, stack_a_cursor, stack_b_cursor, a->left, b);
+        if (!left)
+        {
+            return 0;
+        }
+        struct NumberSlot*right = number_multiply(number_slot_pool_cursor, number_slot_free_list,
+            integer_pool, stack_a_cursor, stack_b_cursor, a->right, b);
+        if (!right)
+        {
+            return 0;
+        }
+        number_root_free_if_unused(number_slot_free_list, integer_pool, a);
+        return number_add(number_slot_pool_cursor, number_slot_free_list, integer_pool,
+            stack_a_cursor, stack_b_cursor, left, right);
+    }
+    return number_multiply(number_slot_pool_cursor, number_slot_free_list, integer_pool,
+        stack_a_cursor, stack_b_cursor, b, a);
 }
 
 void number_reciprocal(struct Number*a)
@@ -1163,71 +1471,29 @@ void number_reciprocal(struct Number*a)
     }
 }
 
-struct Integer*primes;
-
-struct Integer*next_prime_slot(struct Integer*prime)
-{
-    return (size_t)prime + integer_size(prime->value_count);
-}
-
-struct Integer*next_prime(void*stack_a_cursor, void*stack_b_cursor, struct Integer*prime)
-{
-    struct Integer*next_slot = next_prime_slot(prime);
-    size_t boundary = next_page_boundary(prime);
-    if (next_slot == boundary)
-    {
-        VirtualAlloc(boundary, page_size, MEM_COMMIT, PAGE_READWRITE);
-    }
-    if (next_slot->value_count)
-    {
-        return next_slot;
-    }
-    memcpy(next_slot, prime, integer_size(prime->value_count));
-    integer_add_to_a_in_place(next_slot, primes);
-    while (true)
-    {
-        struct Integer*potential_factor = primes;
-        while (true)
-        {
-            struct Division division;
-            integer_euclidean_divide(&stack_a_cursor, stack_b_cursor, &division, next_slot,
-                potential_factor);
-            if (division.remainder->value_count == 0)
-            {
-                break;
-            }
-            potential_factor = next_prime_slot(potential_factor);
-            if (potential_factor == next_slot)
-            {
-                return next_slot;
-            }
-        }
-        integer_add_to_a_in_place(next_slot, primes);
-    }
-}
-
 struct Factor
 {
     struct Integer*value;
     struct Integer*multiplicity;
 };
 
-bool number_exponentiate(struct NumberSlot**number_slot_pool_cursor,
+struct Number*number_exponentiate(struct NumberSlot**number_slot_pool_cursor,
     struct NumberSlot**number_slot_free_list, struct IntegerPool*integer_pool, void*stack_a_cursor,
-    void*stack_b_cursor, struct Number*out, struct Number*base, struct Number*exponent)
+    void*stack_b_cursor, struct Number*base, struct Number*exponent)
 {
     if (exponent->operation != 'r')
     {
         printf("The input expression contains an exponentiation whose exponent is not both real "
             "and rational; this program doesn't handle transcendental numbers.");
-        return false;
+        return 0;
     }
     if (base->operation == 'r')
     {
         if (base->value.numerator->value_count == 0)
         {
-            number_slot_free(number_slot_free_list, base, integer_pool);
-            number_slot_free(number_slot_free_list, exponent, integer_pool);
+            struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
+            number_free_if_unused(number_slot_free_list, integer_pool, base);
+            number_free_if_unused(number_slot_free_list, integer_pool, exponent);
             out->operation = 'r';
             out->value.numerator = &zero;
             out->value.denominator = integer_new(pool_integer_slot_new, integer_pool, 1, 1);
@@ -1238,21 +1504,25 @@ bool number_exponentiate(struct NumberSlot**number_slot_pool_cursor,
             number_reciprocal(base);
             exponent->value.numerator->sign = 1;
             return number_exponentiate(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-                stack_a_cursor, stack_b_cursor, out, base, exponent);
+                stack_a_cursor, stack_b_cursor, base, exponent);
         }
         if (integer_equals_one(base->value.denominator))
         {
             if (integer_equals_one(exponent->value.denominator))
             {
+                struct Number*out = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
                 out->operation = 'r';
                 out->value.denominator = integer_new(pool_integer_slot_new, integer_pool, 1, 1);
                 out->value.numerator = integer_exponentiate(pool_integer_slot_new, integer_pool,
                     stack_a_cursor, stack_b_cursor, base->value.numerator,
                     exponent->value.numerator);
-                return true;
+                number_free_if_unused(number_slot_free_list, integer_pool, base);
+                number_free_if_unused(number_slot_free_list, integer_pool, exponent);
+                return out;
             }
             struct Integer*radicand = integer_exponentiate(stack_integer_slot_new, &stack_a_cursor,
                 stack_a_cursor, stack_b_cursor, base->value.numerator, exponent->value.numerator);
+            number_free_if_unused(number_slot_free_list, integer_pool, base);
             int8_t radicand_sign = radicand->sign;
             radicand->sign = 1;
             size_t factor_count = 0;
@@ -1301,15 +1571,16 @@ bool number_exponentiate(struct NumberSlot**number_slot_pool_cursor,
                 struct Division reduced_degree;
                 integer_euclidean_divide(&stack_a_cursor, stack_b_cursor, &reduced_degree,
                     exponent->value.denominator, multiplicity_gcd);
-                number_slot_free(number_slot_free_list, base, integer_pool);
                 if (integer_equals_one(reduced_degree.quotient))
                 {
-                    number_slot_free(number_slot_free_list, exponent, integer_pool);
+                    number_free_if_unused(number_slot_free_list, integer_pool, exponent);
+                    struct Number*out =
+                        number_slot_new(number_slot_pool_cursor, number_slot_free_list);
                     out->operation = 'r';
                     out->value.denominator = integer_new(pool_integer_slot_new, integer_pool, 1, 1);
                     out->value.numerator = coefficient;
                     integer_move(pool_integer_slot_new, integer_pool, &out->value.numerator);
-                    return true;
+                    return out;
                 }
                 pool_integer_free(integer_pool, exponent->value.denominator);
                 exponent->value.denominator = reduced_degree.quotient;
@@ -1319,6 +1590,7 @@ bool number_exponentiate(struct NumberSlot**number_slot_pool_cursor,
                 number_slot_new(number_slot_pool_cursor, number_slot_free_list);
             number_coefficient->operation = 'r';
             number_coefficient->value.numerator = coefficient;
+            integer_move(pool_integer_slot_new, integer_pool, &number_coefficient->value.numerator);
             number_coefficient->value.denominator =
                 integer_new(pool_integer_slot_new, integer_pool, 1, 1);
             struct Number*number_radicand =
@@ -1345,7 +1617,7 @@ bool number_exponentiate(struct NumberSlot**number_slot_pool_cursor,
             surd->left = number_radicand;
             surd->right = exponent;
             return number_multiply(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-                stack_a_cursor, stack_b_cursor, out, number_coefficient, surd);
+                stack_a_cursor, stack_b_cursor, number_coefficient, surd);
         }
         struct Number*new_denominator =
             number_slot_new(number_slot_pool_cursor, number_slot_free_list);
@@ -1364,19 +1636,19 @@ bool number_exponentiate(struct NumberSlot**number_slot_pool_cursor,
                 stack_a_cursor, stack_b_cursor, base->value.denominator,
                 integer_subtract(&stack_a_cursor, stack_b_cursor, exponent->value.denominator,
                     &one)));
+        number_free_if_unused(number_slot_free_list, integer_pool, base);
         integer_move(pool_integer_slot_new, integer_pool, &new_numerator_base->value.numerator);
-        struct Number*new_numerator =
-            number_slot_new(number_slot_pool_cursor, number_slot_free_list);
-        number_exponentiate(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-            stack_a_cursor, stack_b_cursor, new_numerator, new_numerator_base, exponent);
+        struct Number*new_numerator = number_exponentiate(number_slot_pool_cursor,
+            number_slot_free_list, integer_pool, stack_a_cursor, stack_b_cursor, new_numerator_base,
+            exponent);
         number_reciprocal(new_denominator);
         return number_multiply(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-            stack_a_cursor, stack_b_cursor, out, new_numerator, new_denominator);
+            stack_a_cursor, stack_b_cursor, new_numerator, new_denominator);
     }
     return true;
 }
 
-bool evaluate_root(struct NumberSlot**number_slot_pool_cursor,
+struct Number*evaluate_root(struct NumberSlot**number_slot_pool_cursor,
     struct NumberSlot**number_slot_free_list, struct IntegerPool*integer_pool, void*stack_a_cursor,
     void*stack_b_cursor, struct Number*a)
 {
@@ -1384,7 +1656,7 @@ bool evaluate_root(struct NumberSlot**number_slot_pool_cursor,
     {
     case '+':
         return number_add(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-            stack_a_cursor, stack_b_cursor, a, a->left, a->right);
+            stack_a_cursor, stack_b_cursor, a->left, a->right);
     case '-':
     {
         struct NumberSlot*negative =
@@ -1392,51 +1664,51 @@ bool evaluate_root(struct NumberSlot**number_slot_pool_cursor,
         negative->number.operation = 'r';
         negative->number.value.numerator = integer_new(pool_integer_slot_new, integer_pool, 1, -1);
         negative->number.value.denominator = integer_new(pool_integer_slot_new, integer_pool, 1, 1);
-        struct NumberSlot*product = number_slot_new(number_slot_pool_cursor, number_slot_free_list);
-        if (!number_multiply(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-            stack_a_cursor, stack_b_cursor, product, negative, a->right))
+        struct NumberSlot*product = number_multiply(number_slot_pool_cursor, number_slot_free_list,
+            integer_pool, stack_a_cursor, stack_b_cursor, negative, a->right);
+        if (!product)
         {
-            return false;
+            return 0;
         }
         return number_add(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-            stack_a_cursor, stack_b_cursor, a, a->left, product);
+            stack_a_cursor, stack_b_cursor, a->left, product);
     }
     case '*':
         return number_multiply(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-            stack_a_cursor, stack_b_cursor, a, a->left, a->right);
+            stack_a_cursor, stack_b_cursor, a->left, a->right);
     case '/':
         number_reciprocal(a->right);
         return number_multiply(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-            stack_a_cursor, stack_b_cursor, a, a->left, a->right);
+            stack_a_cursor, stack_b_cursor, a->left, a->right);
     case '^':
         return number_exponentiate(number_slot_pool_cursor, number_slot_free_list, integer_pool,
-            stack_a_cursor, stack_b_cursor, a, a->left, a->right);
+            stack_a_cursor, stack_b_cursor, a->left, a->right);
     }
 }
 
-bool evaluate(struct NumberSlot**number_slot_pool_cursor, struct NumberSlot**number_slot_free_list,
-    struct IntegerPool*integer_pool, uint32_t*stack_a_cursor, uint32_t*stack_b_cursor,
-    struct Number*a)
+struct Number*evaluate(struct NumberSlot**number_slot_pool_cursor,
+    struct NumberSlot**number_slot_free_list, struct IntegerPool*integer_pool,
+    uint32_t*stack_a_cursor, uint32_t*stack_b_cursor, struct Number*a)
 {
+    ((struct NumberSlot*)a)->reference_count = 1;
     if (a->operation == 'r')
     {
-        return true;
+        return a;
     }
-    if (!evaluate(number_slot_pool_cursor, number_slot_free_list, integer_pool, stack_a_cursor,
-        stack_b_cursor, a->left))
+    a->left = evaluate(number_slot_pool_cursor, number_slot_free_list, integer_pool, stack_a_cursor,
+        stack_b_cursor, a->left);
+    if (!a->left)
     {
-        return false;
+        return 0;
     }
-    if (!evaluate(number_slot_pool_cursor, number_slot_free_list, integer_pool, stack_a_cursor,
-        stack_b_cursor, a->right))
+    a->right = evaluate(number_slot_pool_cursor, number_slot_free_list, integer_pool,
+        stack_a_cursor, stack_b_cursor, a->right);
+    if (!a->right)
     {
-        return false;
+        return 0;
     }
-    if (!evaluate_root(number_slot_pool_cursor, number_slot_free_list, integer_pool, stack_a_cursor,
-        stack_b_cursor, a))
-    {
-        return false;
-    }
+    return evaluate_root(number_slot_pool_cursor, number_slot_free_list, integer_pool,
+        stack_a_cursor, stack_b_cursor, a);
 }
 
 void print_number(void*stack_a_cursor, void*stack_b_cursor, struct Number*number)
@@ -1498,8 +1770,11 @@ int main()
             struct NumberSlot*number_slot = number_slot_pool;
             while (number_slot->next)
             {
-                if (number_slot->next->number.operation == '(' &&
-                    (number_slot->number.operation == 'r' || number_slot->number.operation == ')'))
+                if ((number_slot->number.operation == 'r' &&
+                    number_slot->next->number.operation == '(') ||
+                    (number_slot->number.operation == ')' &&
+                    (number_slot->next->number.operation == 'r' ||
+                        number_slot->next->number.operation == '(')))
                 {
                     struct NumberSlot*times =
                         number_slot_new(&number_slot_pool_cursor, &number_slot_free_list);
@@ -1513,11 +1788,16 @@ int main()
             }
             struct NumberSlot*input = parse_input(&number_slot_pool_cursor, &number_slot_free_list,
                 integer_pool, number_slot_pool);
-            if (input && evaluate(&number_slot_pool_cursor, &number_slot_free_list, integer_pool,
-                stack_a_cursor, stack_b_cursor, &input->number))
+            if (input)
             {
-                printf("=\n");
-                print_number(stack_a_cursor, stack_b_cursor, &input->number);
+                struct Number*evaluation = evaluate(&number_slot_pool_cursor,
+                    &number_slot_free_list, integer_pool, stack_a_cursor, stack_b_cursor,
+                    &input->number);
+                if (evaluation)
+                {
+                    printf("=\n");
+                    print_number(stack_a_cursor, stack_b_cursor, evaluation);
+                }
             }
         }
         printf("\n\n");
