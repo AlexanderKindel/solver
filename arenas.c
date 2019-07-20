@@ -78,7 +78,7 @@ struct Pool*get_pool(struct PoolSet*pool_set, size_t slot_size)
     return pool_set->pool_page + (slot_size + sizeof(size_t) - 1) / sizeof(size_t) - 2;
 }
 
-//Produces pointer-aligned memory blocks, which would be incorrect for allocating type whose
+//Produces pointer-aligned memory blocks, which would be incorrect for allocating types whose
 //alignment is larger than a pointer, but the program currently uses no such types.
 void*pool_slot_allocate(struct PoolSet*pool_set, size_t slot_size)
 {

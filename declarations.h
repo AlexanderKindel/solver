@@ -174,6 +174,12 @@ struct FloatInterval
     struct Float*max;
 };
 
+struct RectangularEstimate
+{
+    struct FloatInterval*real_part_estimate;
+    struct FloatInterval*imaginary_part_estimate;
+};
+
 struct SumFieldForm
 {
     struct Number*generator;
@@ -317,7 +323,7 @@ void*rational_generic_divide(struct Stack*output_stack, struct Stack*local_stack
     void*divisor, void*unused);
 void*rational_polynomial_generic_add(struct Stack*output_stack, struct Stack*local_stack, void*a,
     void*b, void*unused);
-void*rational_polynomial_generic_negative(struct Stack*output_stack, struct Stack*local_stack,
+void*rational_polynomial_generic_negative(struct Stack*output_stack, struct Stack*unused_stack,
     void*a, void*unused);
 void*rational_polynomial_generic_multiply(struct Stack*output_stack, struct Stack*local_stack,
     void*a, void*b, void*unused);
@@ -384,6 +390,7 @@ void integer_string(struct Stack*output_stack, struct Stack*local_stack, struct 
 
 void rational_free(struct PoolSet*pool_set, struct Rational*a);
 struct Rational*rational_copy_to_stack(struct Stack*output_stack, struct Rational*a);
+struct Rational*rational_copy_to_pool(struct PoolSet*pool_set, struct Rational*a);
 void rational_move_to_pool(struct PoolSet*pool_set, struct Rational*a);
 void rational_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack, struct Rational*a);
 struct Rational*rational_reduced(struct Stack*output_stack, struct Stack*local_stack,
@@ -438,8 +445,7 @@ void rational_float_estimate(struct Stack*output_stack, struct Stack*local_stack
 void rational_interval_expand_bounds(struct Stack*stack_a, struct Stack*stack_b,
     struct RationalInterval*a, struct Rational*bound_candidate);
 void rational_interval_to_float_interval(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float**out_min, struct Float**out_max, struct RationalInterval*a,
-    struct Rational*bound_interval_size);
+    struct FloatInterval*out, struct RationalInterval*a, struct Rational*bound_interval_size);
 void pi_estimate(struct Stack*stack_a, struct Stack*stack_b, struct Rational*interval_size);
 void pi_shrink_interval_to_one_side_of_value(struct Stack*stack_a, struct Stack*stack_b,
     struct Rational*value);
@@ -528,6 +534,8 @@ struct RationalPolynomial*rational_polynomial_copy_to_number_memory(
 bool rational_polynomial_equals(struct RationalPolynomial*a, struct RationalPolynomial*b);
 struct RationalPolynomial*rational_polynomial_add(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a, struct RationalPolynomial*b);
+struct RationalPolynomial*rational_polynomial_negative(struct Stack*output_stack,
+    struct RationalPolynomial*a);
 struct RationalPolynomial*rational_polynomial_subtract(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a, struct RationalPolynomial*b);
 struct RationalPolynomial*rational_polynomial_multiply(struct Stack*output_stack,
@@ -660,6 +668,8 @@ void float_interval_free(struct PoolSet*pool_set, struct FloatInterval*a);
 void float_interval_move_to_pool(struct PoolSet*pool_set, struct FloatInterval*a);
 void float_interval_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack,
     struct FloatInterval*a);
+bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
+    struct FloatInterval*a, struct FloatInterval*b);
 void float_interval_multiply(struct Stack*output_stack, struct Stack*local_stack,
     struct FloatInterval*out, struct FloatInterval*a, struct FloatInterval*b);
 void float_interval_to_rational_interval(struct Stack*output_stack, struct Stack*local_stack,
@@ -684,10 +694,8 @@ struct Rational*number_rational_factor(struct Stack*output_stack, struct Stack*l
     struct Number*a);
 struct Number*number_exponentiate(struct PoolSet*pool_set, struct Stack*stack_a,
     struct Stack*stack_b, struct Number*base, struct Rational*exponent);
-void number_calculate_minimal_polynomial(struct PoolSet*pool_set, struct Stack*stack_a,
-    struct Stack*stack_b, struct Number*a);
-void number_calculate_conjugates(struct PoolSet*pool_set, struct Stack*stack_a,
-    struct Stack*stack_b, struct Number*a);
+struct RationalPolynomial*number_a_in_terms_of_b(struct PoolSet*pool_set, struct Stack*output_stack,
+    struct Stack*local_stack, struct Number*a, struct Number*b);
 
 struct FloatInterval*number_float_real_part_estimate(struct PoolSet*pool_set,
     struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
@@ -711,11 +719,19 @@ struct FloatInterval*number_float_argument_estimate(struct PoolSet*pool_set, str
 void number_rational_argument_estimate(struct PoolSet*pool_set, struct Stack*output_stack,
     struct Stack*local_stack, struct RationalInterval*out, struct Number*a,
     struct Rational*interval_size);
-void rational_polynomial_estimate_evaluation(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Stack*local_stack, struct Float**real_estimate_min_out,
-    struct Float**real_estimate_max_out, struct Float**imaginary_estimate_min_out,
-    struct Float**imaginary_estimate_max_out, struct RationalPolynomial*a, struct Number*argument,
+void number_rectangular_estimate(struct PoolSet*pool_set, struct Stack*output_stack,
+    struct Stack*local_stack, struct RectangularEstimate*out, struct Number*a,
     struct Rational*interval_size);
+bool rectangular_estimates_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
+    struct RectangularEstimate*a, struct RectangularEstimate*b);
+void rational_polynomial_estimate_evaluation(struct PoolSet*pool_set, struct Stack*output_stack,
+    struct Stack*local_stack, struct RectangularEstimate*out, struct RationalPolynomial*a,
+    struct Number*argument, struct Rational*interval_size);
+
+void number_calculate_minimal_polynomial(struct PoolSet*pool_set, struct Stack*stack_a,
+    struct Stack*stack_b, struct Number*a);
+void number_calculate_conjugates(struct PoolSet*pool_set, struct Stack*stack_a,
+    struct Stack*stack_b, struct Number*a);
 
 struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b,
     struct Integer*degree);

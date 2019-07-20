@@ -517,10 +517,10 @@ void*rational_polynomial_generic_add(struct Stack*output_stack, struct Stack*loc
     return rational_polynomial_add(output_stack, local_stack, a, b);
 }
 
-void*rational_polynomial_generic_negative(struct Stack*output_stack, struct Stack*local_stack,
+void*rational_polynomial_generic_negative(struct Stack*output_stack, struct Stack*unused_stack,
     void*a, void*unused)
 {
-    return polynomial_negative(&rational_operations.ring_operations, output_stack, a);
+    return rational_polynomial_negative(output_stack, a);
 }
 
 void*rational_polynomial_generic_multiply(struct Stack*output_stack, struct Stack*local_stack,

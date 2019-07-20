@@ -14,6 +14,14 @@ struct Rational*rational_copy_to_stack(struct Stack*output_stack, struct Rationa
     return out;
 }
 
+struct Rational*rational_copy_to_pool(struct PoolSet*pool_set, struct Rational*a)
+{
+    struct Rational*out = POOL_VALUE_ALLOCATE(pool_set, struct Rational);
+    out->numerator = integer_copy_to_pool(pool_set, a->numerator);
+    out->denominator = integer_copy_to_pool(pool_set, a->denominator);
+    return out;
+}
+
 void rational_move_to_pool(struct PoolSet*pool_set, struct Rational*a)
 {
     integer_move_to_pool(pool_set, &a->numerator);
@@ -496,13 +504,12 @@ void rational_interval_expand_bounds(struct Stack*stack_a, struct Stack*stack_b,
 }
 
 void rational_interval_to_float_interval(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float**out_min, struct Float**out_max, struct RationalInterval*a,
-    struct Rational*bound_interval_size)
+    struct FloatInterval*out, struct RationalInterval*a, struct Rational*bound_interval_size)
 {
     struct Float*unused_bound;
-    rational_float_estimate(output_stack, local_stack, out_min, &unused_bound, a->min,
+    rational_float_estimate(output_stack, local_stack, &out->min, &unused_bound, a->min,
         bound_interval_size);
-    rational_float_estimate(output_stack, local_stack, &unused_bound, out_max, a->max,
+    rational_float_estimate(output_stack, local_stack, &unused_bound, &out->max, a->max,
         bound_interval_size);
 }
 

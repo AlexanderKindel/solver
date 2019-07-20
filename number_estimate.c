@@ -24,7 +24,7 @@ void number_float_estimate_from_rational(rational_estimate_getter get_rational_e
     struct RationalInterval rational_estimate;
     get_rational_estimate(pool_set, stack_a, stack_b, &rational_estimate, a,
         rational_estimate_interval_size);
-    rational_interval_to_float_interval(stack_a, stack_b, &out->min, &out->max, &rational_estimate,
+    rational_interval_to_float_interval(stack_a, stack_b, out, &rational_estimate,
         rational_estimate_interval_size);
     float_interval_move_to_pool(pool_set, out);
     stack_a->cursor = stack_a_savepoint;
@@ -655,26 +655,43 @@ void number_rational_argument_estimate(struct PoolSet*pool_set, struct Stack*out
     }
 }
 
-void rational_polynomial_estimate_evaluation(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Stack*local_stack, struct Float**real_estimate_min_out,
-    struct Float**real_estimate_max_out, struct Float**imaginary_estimate_min_out,
-    struct Float**imaginary_estimate_max_out, struct RationalPolynomial*a, struct Number*argument,
+void number_rectangular_estimate(struct PoolSet*pool_set, struct Stack*output_stack,
+    struct Stack*local_stack, struct RectangularEstimate*out, struct Number*a,
     struct Rational*interval_size)
+{
+    out->real_part_estimate =
+        number_float_real_part_estimate(pool_set, output_stack, local_stack, a, interval_size);
+    out->imaginary_part_estimate =
+        number_float_imaginary_part_estimate(pool_set, output_stack, local_stack, a, interval_size);
+}
+
+bool rectangular_estimates_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
+    struct RectangularEstimate*a, struct RectangularEstimate*b)
+{
+    return float_intervals_are_disjoint(stack_a, stack_b, a->real_part_estimate,
+            b->real_part_estimate) ||
+        float_intervals_are_disjoint(stack_a, stack_b, a->imaginary_part_estimate,
+            b->imaginary_part_estimate);
+}
+
+void rational_polynomial_estimate_evaluation(struct PoolSet*pool_set, struct Stack*output_stack,
+    struct Stack*local_stack, struct RectangularEstimate*out, struct RationalPolynomial*a,
+    struct Number*argument, struct Rational*interval_size)
 {
     if (a->coefficient_count == 0)
     {
-        *real_estimate_min_out = &float_zero;
-        *real_estimate_max_out = &float_zero;
-        *imaginary_estimate_min_out = &float_zero;
-        *imaginary_estimate_max_out = &float_zero;
+        out->real_part_estimate->min = &float_zero;
+        out->real_part_estimate->max = &float_zero;
+        out->imaginary_part_estimate->min = &float_zero;
+        out->imaginary_part_estimate->max = &float_zero;
         return;
     }
     if (a->coefficient_count == 1)
     {
-        rational_float_estimate(output_stack, local_stack, real_estimate_min_out,
-            real_estimate_max_out, a->coefficients[0], interval_size);
-        *imaginary_estimate_min_out = &float_zero;
-        *imaginary_estimate_max_out = &float_zero;
+        rational_float_estimate(output_stack, local_stack, &out->real_part_estimate->min,
+            &out->real_part_estimate->max, a->coefficients[0], interval_size);
+        out->imaginary_part_estimate->min = &float_zero;
+        out->imaginary_part_estimate->max = &float_zero;
         return;
     }
     void*local_stack_savepoint = local_stack->cursor;
@@ -836,9 +853,9 @@ void rational_polynomial_estimate_evaluation(struct PoolSet*pool_set, struct Sta
                 imaginary_part_max_power, imaginary_part_max);
         }
     }
-    rational_interval_to_float_interval(output_stack, local_stack, real_estimate_min_out,
-        real_estimate_max_out, &evaluation_real_part, interval_size);
-    rational_interval_to_float_interval(output_stack, local_stack, imaginary_estimate_min_out,
-        imaginary_estimate_max_out, &evaluation_imaginary_part, interval_size);
+    rational_interval_to_float_interval(output_stack, local_stack, out->real_part_estimate,
+        &evaluation_real_part, interval_size);
+    rational_interval_to_float_interval(output_stack, local_stack, out->imaginary_part_estimate,
+        &evaluation_imaginary_part, interval_size);
     local_stack->cursor = local_stack_savepoint;
 }

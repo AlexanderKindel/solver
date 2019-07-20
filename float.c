@@ -259,6 +259,13 @@ void float_interval_move_from_pool(struct PoolSet*pool_set, struct Stack*output_
     float_move_from_pool(pool_set, output_stack, &a->max);
 }
 
+bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
+    struct FloatInterval*a, struct FloatInterval*b)
+{
+    return float_compare(stack_a, stack_b, a->min, b->max) > 0 ||
+        float_compare(stack_a, stack_b, b->min, a->max) > 0;
+}
+
 void float_interval_multiply(struct Stack*output_stack, struct Stack*local_stack,
     struct FloatInterval*out, struct FloatInterval*a, struct FloatInterval*b)
 {

@@ -31,6 +31,13 @@ struct RationalPolynomial*rational_polynomial_add(struct Stack*output_stack,
         (struct Polynomial*)a, (struct Polynomial*)b);
 }
 
+struct RationalPolynomial*rational_polynomial_negative(struct Stack*output_stack,
+    struct RationalPolynomial*a)
+{
+    return polynomial_negative(&rational_operations.ring_operations, output_stack,
+        (struct Polynomial*)a);
+}
+
 struct RationalPolynomial*rational_polynomial_subtract(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a, struct RationalPolynomial*b)
 {
