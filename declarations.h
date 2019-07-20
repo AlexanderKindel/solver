@@ -384,7 +384,7 @@ struct Integer*get_prime(struct Stack*stack_a, struct Stack*stack_b, size_t inde
 size_t size_t_factor(struct Stack*output_stack, struct Stack*local_stack, size_t**out, size_t a);
 size_t integer_factor(struct Stack*output_stack, struct Stack*local_stack, struct Factor**out,
     struct Integer*a);
-void integer_string(struct Stack*output_stack, struct Stack*local_stack, struct Integer*a);
+size_t integer_string(struct Stack*output_stack, struct Stack*local_stack, struct Integer*a);
 
 #define INT(value, sign) (struct Integer){ 1, sign 1, value }
 
@@ -680,6 +680,10 @@ void number_node_free(struct PoolSet*pool_set, struct Number*a);
 void number_node_free_during_parse(struct PoolSet*pool_set, struct Number*a);
 void number_free(struct PoolSet*pool_set, struct Number*a);
 struct Number*number_copy(struct PoolSet*pool_set, struct Number*a);
+struct RationalPolynomial*number_a_in_terms_of_b(struct PoolSet*pool_set, struct Stack*output_stack,
+    struct Stack*local_stack, struct Number*a, struct Number*b);
+size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*number);
+
 struct Number*number_add(struct PoolSet*pool_set, struct Stack*stack_a, struct Stack*stack_b,
     struct Number*a, struct Number*b);
 struct Number*number_rational_multiply(struct PoolSet*pool_set, struct Stack*stack_a,
@@ -694,8 +698,6 @@ struct Rational*number_rational_factor(struct Stack*output_stack, struct Stack*l
     struct Number*a);
 struct Number*number_exponentiate(struct PoolSet*pool_set, struct Stack*stack_a,
     struct Stack*stack_b, struct Number*base, struct Rational*exponent);
-struct RationalPolynomial*number_a_in_terms_of_b(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Stack*local_stack, struct Number*a, struct Number*b);
 
 struct FloatInterval*number_float_real_part_estimate(struct PoolSet*pool_set,
     struct Stack*output_stack, struct Stack*local_stack, struct Number*a,

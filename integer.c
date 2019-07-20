@@ -691,16 +691,12 @@ size_t integer_factor(struct Stack*output_stack, struct Stack*local_stack, struc
     return factor_count;
 }
 
-void integer_string(struct Stack*output_stack, struct Stack*local_stack, struct Integer*a)
+size_t integer_string(struct Stack*output_stack, struct Stack*local_stack, struct Integer*a)
 {
     if (a->sign == 0)
     {
         *(char*)STACK_SLOT_ALLOCATE(output_stack, char) = '0';
-        return;
-    }
-    if (a->sign < 0)
-    {
-        *(char*)STACK_SLOT_ALLOCATE(output_stack, char) = '-';
+        return 1;
     }
     void*local_stack_savepoint = local_stack->cursor;
     char*buffer_start = stack_slot_allocate(output_stack, 10 * a->value_count + 1, 1);
@@ -723,7 +719,17 @@ void integer_string(struct Stack*output_stack, struct Stack*local_stack, struct 
         }
     }
     size_t char_count = (char*)output_stack->cursor - next_char;
-    memcpy(buffer_start, next_char, char_count);
+    if (a->sign < 0)
+    {
+        *buffer_start = '-';
+        memcpy(buffer_start + 1, next_char, char_count);
+        char_count += 1;
+    }
+    else
+    {
+        memcpy(buffer_start, next_char, char_count);
+    }
     output_stack->cursor = buffer_start + char_count;
     local_stack->cursor = local_stack_savepoint;
+    return char_count;
 }
