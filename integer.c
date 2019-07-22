@@ -12,20 +12,26 @@ struct Integer*stack_integer_allocate(struct Stack*output_stack, size_t value_co
 
 struct Integer*pool_integer_allocate(struct PoolSet*pool_set, size_t value_count)
 {
-    if (!value_count)
+    if (value_count)
+    {
+        return pool_value_allocate(pool_set, integer_size(value_count));
+    }
+    else
     {
         return &zero;
     }
-    return (struct Integer*)((size_t)pool_slot_allocate(pool_set,
-        integer_size(value_count) + sizeof(void*)) + sizeof(void*));
 }
 
-void pool_integer_free(struct PoolSet*pool_set, struct Integer*a)
+void integer_free(struct PoolSet*pool_set, struct Integer*a)
 {
     if (a->value_count)
     {
-        pool_slot_free(pool_set, (void*)((size_t)a - sizeof(void*)),
-            integer_size(a->value_count) + sizeof(void*));
+        struct PoolSlot*slot = pool_slot_from_value(a);
+        --slot->reference_count;
+        if (!slot->reference_count)
+        {
+            pool_slot_free(pool_set, slot, integer_size(a->value_count));
+        }
     }
 }
 
@@ -45,9 +51,7 @@ struct Integer*integer_copy_to_pool(struct PoolSet*pool_set, struct Integer*a)
 
 void integer_move_to_pool(struct PoolSet*pool_set, struct Integer**a)
 {
-    struct Integer*pool_copy = pool_integer_allocate(pool_set, (*a)->value_count);
-    memcpy(pool_copy, *a, integer_size((*a)->value_count));
-    *a = pool_copy;
+    *a = integer_copy_to_pool(pool_set, *a);
 }
 
 void integer_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack, struct Integer**a)
@@ -56,7 +60,7 @@ void integer_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack, 
         "integer_move_from_pool argument wasn't in a pool.\n");
     struct Integer*pool_copy = *a;
     *a = integer_copy_to_stack(output_stack, *a);
-    pool_integer_free(pool_set, pool_copy);
+    integer_free(pool_set, pool_copy);
 }
 
 struct Integer*stack_integer_initialize(struct Stack*stack, uint32_t value, int8_t sign)

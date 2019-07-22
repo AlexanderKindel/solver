@@ -2,8 +2,14 @@
 
 void rational_free(struct PoolSet*pool_set, struct Rational*a)
 {
-    pool_integer_free(pool_set, a->numerator);
-    pool_integer_free(pool_set, a->denominator);
+    struct PoolSlot*slot = pool_slot_from_value(a);
+    --slot->reference_count;
+    if (!slot->reference_count)
+    {
+        integer_free(pool_set, a->numerator);
+        integer_free(pool_set, a->denominator);
+        pool_slot_free(pool_set, slot, sizeof(struct Rational));
+    }
 }
 
 struct Rational*rational_copy_to_stack(struct Stack*output_stack, struct Rational*a)
@@ -16,19 +22,20 @@ struct Rational*rational_copy_to_stack(struct Stack*output_stack, struct Rationa
 
 struct Rational*rational_copy_to_pool(struct PoolSet*pool_set, struct Rational*a)
 {
-    struct Rational*out = POOL_VALUE_ALLOCATE(pool_set, struct Rational);
+    struct Rational*out = pool_value_allocate(pool_set, sizeof(struct Rational));
     out->numerator = integer_copy_to_pool(pool_set, a->numerator);
     out->denominator = integer_copy_to_pool(pool_set, a->denominator);
     return out;
 }
 
-void rational_move_to_pool(struct PoolSet*pool_set, struct Rational*a)
+void rational_move_value_to_pool(struct PoolSet*pool_set, struct Rational*a)
 {
     integer_move_to_pool(pool_set, &a->numerator);
     integer_move_to_pool(pool_set, &a->denominator);
 }
 
-void rational_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack, struct Rational*a)
+void rational_move_value_from_pool(struct PoolSet*pool_set, struct Stack*output_stack,
+    struct Rational*a)
 {
     integer_move_from_pool(pool_set, output_stack, &a->numerator);
     integer_move_from_pool(pool_set, output_stack, &a->denominator);

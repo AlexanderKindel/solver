@@ -157,7 +157,7 @@ void integer_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*loc
         }
         case 1:
         {
-            out->gcd = polynomial_allocate(output_stack, 1);
+            out->gcd = stack_polynomial_allocate(output_stack, 1);
             out->gcd->coefficients[0] = integer_copy_to_stack(output_stack, d);
             out->a_coefficient =
                 (struct Polynomial*)integer_polynomial_integer_multiply(output_stack, local_stack,
@@ -202,7 +202,7 @@ void integer_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*loc
 struct IntegerPolynomial*bound_coefficients(struct Stack*output_stack, struct Stack*local_stack,
     struct IntegerPolynomial*a, struct Integer*characteristic_power)
 {
-    struct IntegerPolynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
+    struct IntegerPolynomial*out = stack_polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
         struct Integer*remainder = integer_euclidean_remainder(local_stack, output_stack,
@@ -430,7 +430,7 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
             ++factor_count;
         }
     }
-    struct IntegerPolynomial*final_factor = polynomial_allocate(local_stack, 1);
+    struct IntegerPolynomial*final_factor = stack_polynomial_allocate(local_stack, 1);
     final_factor->coefficients[0] =
         unfactored_component_of_a->coefficients[unfactored_component_of_a->coefficient_count - 1];
     for (struct IntegerPolynomial**factor = lifted_factors; factor < lifted_factors_end;
@@ -483,7 +483,7 @@ size_t primitive_integer_polynomial_factor(struct Stack*output_stack, struct Sta
     size_t factor_count = 0;
     if (!a->coefficients[0]->value_count)
     {
-        out[0] = polynomial_allocate(output_stack, 2);
+        out[0] = stack_polynomial_allocate(output_stack, 2);
         out[0]->coefficients[0] = &zero;
         out[0]->coefficients[1] = &one;
         factor_count = 1;
@@ -546,7 +546,7 @@ struct IntegerPolynomial*integer_polynomial_derivative(struct Stack*output_stack
 struct RationalPolynomial*integer_polynomial_to_monic(struct Stack*output_stack,
     struct Stack*local_stack, struct IntegerPolynomial*a)
 {
-    struct RationalPolynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
+    struct RationalPolynomial*out = stack_polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
         out->coefficients[i] = rational_reduced(output_stack, local_stack, a->coefficients[i],

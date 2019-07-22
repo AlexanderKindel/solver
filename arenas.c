@@ -60,7 +60,7 @@ void pool_set_initialize(struct PoolSet*out, size_t start, size_t end)
     stack_initialize(&out->slot_page_stack, start + page_size, end);
 }
 
-void*pool_slot_page_allocate(struct PoolSet*pool_set)
+struct PoolSlotPage*pool_slot_page_allocate(struct PoolSet*pool_set)
 {
     pool_set->slot_page_stack.allocation_cursor =
         pool_set->slot_page_stack.allocation_cursor + page_size;
@@ -73,46 +73,62 @@ void*pool_slot_page_allocate(struct PoolSet*pool_set)
     return VirtualAlloc(new_page_address, page_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 }
 
-struct Pool*get_pool(struct PoolSet*pool_set, size_t slot_size)
+struct Pool*get_pool(struct PoolSet*pool_set, size_t value_size)
 {
-    return pool_set->pool_page + (slot_size + sizeof(size_t) - 1) / sizeof(size_t) - 2;
+    return pool_set->pool_page + (value_size + sizeof(size_t) - 1) / sizeof(size_t) - 2;
 }
 
-//Produces pointer-aligned memory blocks, which would be incorrect for allocating types whose
-//alignment is larger than a pointer, but the program currently uses no such types.
-void*pool_slot_allocate(struct PoolSet*pool_set, size_t slot_size)
+//Produces pointer-aligned values, which would be incorrect for allocating types whose alignments
+//are larger than a pointer, but the program currently uses no such types.
+void*pool_value_allocate(struct PoolSet*pool_set, size_t size)
 {
-    struct Pool*pool = get_pool(pool_set, slot_size);
+    struct Pool*pool = get_pool(pool_set, size);
     if (!pool->first_page)
     {
         pool->first_page = pool_slot_page_allocate(pool_set);
-        pool->cursor = (void*)((size_t)pool->first_page + sizeof(void*));
+        pool->cursor = &pool->first_page->first_slot;
     }
-    void*out = pool->free_list;
+    struct PoolSlot*out = pool->free_list;
     if (out)
     {
-        pool->free_list = *(void**)out;
+        pool->free_list = out->next;
     }
     else
     {
         out = pool->cursor;
-        pool->cursor = (void*)((size_t)pool->cursor + slot_size);
+        pool->cursor =
+            (struct PoolSlot*)((size_t)pool->cursor + offsetof(struct PoolSlot, value) + size);
         size_t boundary = next_page_boundary((size_t)out);
         if ((size_t)pool->cursor > boundary)
         {
-            void*new_page = pool_slot_page_allocate(pool_set);
-            *(void**)(boundary - page_size) = new_page;
-            out = (void*)((size_t)new_page + sizeof(void*));
+            struct PoolSlotPage*new_page = pool_slot_page_allocate(pool_set);
+            ((struct PoolSlotPage*)(boundary - page_size))->next = new_page;
+            out = &new_page->first_slot;
         }
     }
-    return out;
+    out->reference_count = 1;
+    return out->value;
 }
 
-void pool_slot_free(struct PoolSet*pool_set, void*a, size_t slot_size)
+struct PoolSlot*pool_slot_from_value(void*a)
+{
+    return (struct PoolSlot*)((size_t)a - offsetof(struct PoolSlot, value));
+}
+
+void increment_reference_count(void*a)
+{
+    ASSERT(pool_memory_start <= (size_t)a && (size_t)a <= pool_memory_end,
+        "increment_reference_count argument wasn't in a pool.\n");
+    struct PoolSlot*slot = pool_slot_from_value(a);
+    ++slot->reference_count;
+}
+
+void pool_slot_free(struct PoolSet*pool_set, struct PoolSlot*a, size_t size)
 {
     ASSERT(pool_memory_start <= (size_t)a && (size_t)a <= pool_memory_end,
         "pool_slot_free argument wasn't in a pool.\n");
-    struct Pool*pool = get_pool(pool_set, slot_size);
-    *(void**)a = pool->free_list;
+    ASSERT(!a->reference_count, "pool_slot_free called on slot with nonzero reference count.");
+    struct Pool*pool = get_pool(pool_set, size);
+    a->next = pool->free_list;
     pool->free_list = a;
 }

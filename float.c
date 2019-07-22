@@ -2,9 +2,14 @@
 
 void float_free(struct PoolSet*pool_set, struct Float*a)
 {
-    pool_integer_free(pool_set, a->significand);
-    pool_integer_free(pool_set, a->exponent);
-    POOL_VALUE_FREE(pool_set, a, struct Float);
+    struct PoolSlot*slot = pool_slot_from_value(a);
+    --slot->reference_count;
+    if (!slot->reference_count)
+    {
+        integer_free(pool_set, a->significand);
+        integer_free(pool_set, a->exponent);
+        pool_slot_free(pool_set, slot, sizeof(struct Float));
+    }
 }
 
 struct Float*float_copy_to_stack(struct Stack*output_stack, struct Float*a)
@@ -23,7 +28,7 @@ void float_copy_to_pool(struct PoolSet*pool_set, struct Float*a)
 
 void float_move_to_pool(struct PoolSet*pool_set, struct Float**a)
 {
-    struct Float*pool_copy = POOL_VALUE_ALLOCATE(pool_set, struct Float);
+    struct Float*pool_copy = pool_value_allocate(pool_set, sizeof(struct Float));
     pool_copy->significand = integer_copy_to_pool(pool_set, (*a)->significand);
     pool_copy->exponent = integer_copy_to_pool(pool_set, (*a)->exponent);
     *a = pool_copy;
@@ -37,7 +42,12 @@ void float_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack, st
     *a = STACK_SLOT_ALLOCATE(output_stack, struct Float);
     integer_move_from_pool(pool_set, output_stack, &(*a)->significand);
     integer_move_from_pool(pool_set, output_stack, &(*a)->exponent);
-    POOL_VALUE_FREE(pool_set, pool_copy, struct Float);
+    struct PoolSlot*slot = pool_slot_from_value(a);
+    --slot->reference_count;
+    if (!slot->reference_count)
+    {
+        pool_slot_free(pool_set, slot, sizeof(struct Float));
+    }
 }
 
 struct Float*float_reduced(struct Stack*output_stack, struct Stack*local_stack,
@@ -241,22 +251,21 @@ void float_interval_free(struct PoolSet*pool_set, struct FloatInterval*a)
 {
     if (a)
     {
-        float_free(pool_set, a->min);
-        float_free(pool_set, a->max);
+        struct PoolSlot*slot = pool_slot_from_value(a);
+        --slot->reference_count;
+        if (!slot->reference_count)
+        {
+            float_free(pool_set, a->min);
+            float_free(pool_set, a->max);
+            pool_slot_free(pool_set, slot, sizeof(struct FloatInterval));
+        }
     }
 }
 
-void float_interval_move_to_pool(struct PoolSet*pool_set, struct FloatInterval*a)
+void float_interval_move_value_to_pool(struct PoolSet*pool_set, struct FloatInterval*a)
 {
     float_move_to_pool(pool_set, &a->min);
     float_move_to_pool(pool_set, &a->max);
-}
-
-void float_interval_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct FloatInterval*a)
-{
-    float_move_from_pool(pool_set, output_stack, &a->min);
-    float_move_from_pool(pool_set, output_stack, &a->max);
 }
 
 bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
@@ -272,8 +281,8 @@ void float_interval_multiply(struct Stack*output_stack, struct Stack*local_stack
     void*local_stack_savepoint = local_stack->cursor;
     out->min = float_multiply(local_stack, output_stack, a->min, b->min);
     out->max = out->min;
-    struct Float*bound_candidates[3] = {
-        float_multiply(local_stack, output_stack, a->min, b->max),
+    struct Float*bound_candidates[3] =
+    { float_multiply(local_stack, output_stack, a->min, b->max),
         float_multiply(local_stack, output_stack, a->max, b->min),
         float_multiply(local_stack, output_stack, a->max, b->max) };
     for (uint8_t i = 0; i < 3; ++i)

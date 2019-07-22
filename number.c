@@ -1,22 +1,34 @@
 #include "declarations.h"
 
+//The next field of the PoolSlot that contains the allocated Number coincides with that of the
+//Number.
 struct Number*number_allocate(struct PoolSet*pool_set)
 {
-    struct Number*out = pool_slot_allocate(pool_set, sizeof(struct Number));
+    struct Number*out = pool_value_allocate(pool_set, sizeof(struct Number));
     memset(out, 0, sizeof(struct Number));
     return out;
 }
 
-void number_node_free_during_parse(struct PoolSet*pool_set, struct Number*a)
+void number_parse_node_free_if_unreferenced(struct PoolSet*pool_set, struct Number*a)
 {
     if (a->operation == 'r')
     {
         rational_free(pool_set, &a->value);
     }
-    pool_slot_free(pool_set, a, sizeof(struct Number));
+    pool_slot_free(pool_set, pool_slot_from_value(a), sizeof(struct Number));
 }
 
-void number_node_free(struct PoolSet*pool_set, struct Number*a)
+void number_parse_node_free(struct PoolSet*pool_set, struct Number*a)
+{
+    struct PoolSlot*slot = pool_slot_from_value(a);
+    --slot->reference_count;
+    if (!slot->reference_count)
+    {
+        number_parse_node_free_if_unreferenced(pool_set, a);
+    }
+}
+
+void number_node_free_if_unreferenced(struct PoolSet*pool_set, struct Number*a)
 {
     if (a->operation != 'r')
     {
@@ -29,49 +41,32 @@ void number_node_free(struct PoolSet*pool_set, struct Number*a)
     {
         number_free(pool_set, a->next);
     }
-    number_node_free_during_parse(pool_set, a);
+    number_parse_node_free_if_unreferenced(pool_set, a);
+}
+
+void number_node_free(struct PoolSet*pool_set, struct Number*a)
+{
+    struct PoolSlot*slot = pool_slot_from_value(a);
+    --slot->reference_count;
+    if (!slot->reference_count)
+    {
+        number_node_free_if_unreferenced(pool_set, a);
+    }
 }
 
 void number_free(struct PoolSet*pool_set, struct Number*a)
 {
-    if (a->operation != 'r')
+    struct PoolSlot*slot = pool_slot_from_value(a);
+    --slot->reference_count;
+    if (!slot->reference_count)
     {
-        number_free(pool_set, a->left);
-        number_free(pool_set, a->right);
-    }
-    number_node_free(pool_set, a);
-}
-
-struct Number*number_copy(struct PoolSet*pool_set, struct Number*a)
-{
-    struct Number*out = number_allocate(pool_set);
-    memcpy(out, a, sizeof(struct Number));
-    if (a->operation == 'r')
-    {
-        rational_move_to_pool(pool_set, &out->value);
-    }
-    else
-    {
-        out->left = number_copy(pool_set, a->left);
-        out->right = number_copy(pool_set, a->right);
-        if (a->real_part_estimate)
+        if (a->operation != 'r')
         {
-            float_interval_move_to_pool(pool_set, out->real_part_estimate);
+            number_free(pool_set, a->left);
+            number_free(pool_set, a->right);
         }
-        if (a->imaginary_part_estimate)
-        {
-            float_interval_move_to_pool(pool_set, out->imaginary_part_estimate);
-        }
+        number_node_free_if_unreferenced(pool_set, a);
     }
-    if (a->argument_estimate)
-    {
-        float_interval_move_to_pool(pool_set, out->argument_estimate);
-    }
-    if (a->magnitude_estimate)
-    {
-        float_interval_move_to_pool(pool_set, out->magnitude_estimate);
-    }
-    return out;
 }
 
 struct RationalPolynomial*number_a_in_terms_of_b(struct PoolSet*pool_set, struct Stack*output_stack,
@@ -79,7 +74,7 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct PoolSet*pool_set, struct
 {
     if (a->operation == 'r')
     {
-        struct RationalPolynomial*out = polynomial_allocate(output_stack, 1);
+        struct RationalPolynomial*out = stack_polynomial_allocate(output_stack, 1);
         out->coefficients[0] = rational_copy_to_stack(output_stack, &a->value);
         return out;
     }
@@ -161,7 +156,7 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct PoolSet*pool_set, struct
                     if (conjugate_index_count == 0)
                     {
                         struct RationalPolynomial*out =
-                            rational_polynomial_copy(output_stack, candidate_factors[i]);
+                            rational_polynomial_copy_to_stack(output_stack, candidate_factors[i]);
                         local_stack->cursor = local_stack_savepoint;
                         return out;
                     }
@@ -176,6 +171,60 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct PoolSet*pool_set, struct
         }
     }
     return 0;
+}
+
+struct Number*number_evaluate(struct PoolSet*transient_pool_set, struct Stack*stack_a,
+    struct Stack*stack_b, struct Number*a)
+{
+    a->minimal_polynomial = 0;
+    a->next = 0;
+    if (a->operation == 'r')
+    {
+        return a;
+    }
+    a->left = number_evaluate(transient_pool_set, stack_a, stack_b, a->left);
+    if (a->left == number_divide_by_zero_error)
+    {
+        return number_divide_by_zero_error;
+    }
+    a->right = number_evaluate(transient_pool_set, stack_a, stack_b, a->right);
+    if (a->right == number_divide_by_zero_error)
+    {
+        return number_divide_by_zero_error;
+    }
+    switch (a->operation)
+    {
+    case '+':
+        return number_add(transient_pool_set, stack_a, stack_b, a->left, a->right);
+    case '-':
+    {
+        struct Number*negative = number_allocate(transient_pool_set);
+        negative->operation = 'r';
+        negative->value.numerator = pool_integer_initialize(transient_pool_set, 1, -1);
+        negative->value.denominator = pool_integer_initialize(transient_pool_set, 1, 1);
+        return number_add(transient_pool_set, stack_a, stack_b, a->left,
+            number_multiply(transient_pool_set, stack_a, stack_b, negative, a->right));
+    }
+    case '*':
+        return number_multiply(transient_pool_set, stack_a, stack_b, a->left, a->right);
+    case '/':
+        return number_divide(transient_pool_set, stack_a, stack_b, a->left, a->right);
+    case '^':
+    {
+        if (a->right->operation != 'r')
+        {
+            puts("The input expression contains an exponentiation whose exponent is not both real "
+                "and rational; this program doesn't handle transcendental numbers.");
+            return 0;
+        }
+        struct Number*out =
+            number_exponentiate(transient_pool_set, stack_a, stack_b, a->left, &a->right->value);
+        number_free(transient_pool_set, a->right);
+        return out;
+    }
+    default:
+        crash("Number operation not recognized.");
+    }
 }
 
 size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*number)

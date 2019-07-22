@@ -61,11 +61,11 @@ size_t number_field_polynomial_factor(struct Stack*output_stack, struct Stack*lo
         while (true)
         {
             struct NestedPolynomial*power = &nested_polynomial_one;
-            struct NestedPolynomial*d = polynomial_allocate(local_stack, 2);
-            d->coefficients[0] = polynomial_allocate(local_stack, 2);
+            struct NestedPolynomial*d = stack_polynomial_allocate(local_stack, 2);
+            d->coefficients[0] = stack_polynomial_allocate(local_stack, 2);
             d->coefficients[0]->coefficients[0] = &rational_zero;
             d->coefficients[0]->coefficients[1] = &rational_one;
-            d->coefficients[1] = polynomial_allocate(local_stack, 1);
+            d->coefficients[1] = stack_polynomial_allocate(local_stack, 1);
             d->coefficients[1]->coefficients[0] = &(struct Rational) { k, &one };
             struct NestedPolynomial*e = (struct NestedPolynomial*)&polynomial_zero;
             for (size_t j = 0; j < squarefree_factors[i]->coefficient_count; ++j)
@@ -90,8 +90,8 @@ size_t number_field_polynomial_factor(struct Stack*output_stack, struct Stack*lo
                         rational_polynomial_primitive_part(local_stack, output_stack, resultant),
                         resultant_factors);
                 k->sign *= -1;
-                d = polynomial_allocate(local_stack, 2);
-                d->coefficients[0] = polynomial_allocate(local_stack, 2);
+                d = stack_polynomial_allocate(local_stack, 2);
+                d->coefficients[0] = stack_polynomial_allocate(local_stack, 2);
                 d->coefficients[0]->coefficients[0] = &rational_zero;
                 d->coefficients[0]->coefficients[1] = &(struct Rational) { k, &one };
                 d->coefficients[1] = &rational_polynomial_one;
@@ -101,7 +101,8 @@ size_t number_field_polynomial_factor(struct Stack*output_stack, struct Stack*lo
                     e = (struct NestedPolynomial*)&polynomial_zero;
                     for (size_t k = 0; k < resultant_factors[j]->coefficient_count; ++k)
                     {
-                        struct RationalPolynomial*coefficient = polynomial_allocate(local_stack, 1);
+                        struct RationalPolynomial*coefficient =
+                            stack_polynomial_allocate(local_stack, 1);
                         coefficient->coefficients[0] =
                             &(struct Rational) { resultant_factors[j]->coefficients[k], &one };
                         e = nested_polynomial_add(local_stack, output_stack, e,

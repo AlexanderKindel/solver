@@ -12,7 +12,7 @@ void number_calculate_minimal_polynomial_from_annulling_polynomial(struct PoolSe
         rational_polynomial_factor(stack_a, stack_b, annulling_polynomial, candidates);
     if (candidate_count == 1)
     {
-        a->minimal_polynomial = rational_polynomial_copy_to_number_memory(pool_set, candidates[0]);
+        a->minimal_polynomial = rational_polynomial_copy_to_pool(pool_set, candidates[0]);
         stack_a->cursor = stack_a_savepoint;
         return;
     }
@@ -34,7 +34,7 @@ void number_calculate_minimal_polynomial_from_annulling_polynomial(struct PoolSe
                 if (candidate_count == 1)
                 {
                     a->minimal_polynomial =
-                        rational_polynomial_copy_to_number_memory(pool_set, candidates[0]);
+                        rational_polynomial_copy_to_pool(pool_set, candidates[0]);
                     stack_a->cursor = stack_a_savepoint;
                     return;
                 }
@@ -111,7 +111,7 @@ void number_calculate_minimal_polynomial_from_algebraic_form(struct PoolSet*pool
     for (size_t i = 0; i < matrix.height; ++i)
     {
         array_reverse(matrix.rows[i], matrix.width);
-        augmentation[i] = polynomial_allocate(stack_a, i + 2);
+        augmentation[i] = stack_polynomial_allocate(stack_a, i + 2);
         for (size_t j = 0; j <= i; ++j)
         {
             augmentation[i]->coefficients[j] = &rational_zero;
@@ -137,7 +137,7 @@ void number_calculate_minimal_polynomial(struct PoolSet*pool_set, struct Stack*s
     switch (a->operation)
     {
     case 'r':
-        a->minimal_polynomial = polynomial_allocate(&polynomial_stack, 2);
+        a->minimal_polynomial = pool_polynomial_allocate(pool_set, 2);
         a->minimal_polynomial->coefficients[0]->numerator =
             integer_copy_to_pool(pool_set, a->value.numerator);
         a->minimal_polynomial->coefficients[0]->numerator->sign =
@@ -145,6 +145,7 @@ void number_calculate_minimal_polynomial(struct PoolSet*pool_set, struct Stack*s
         a->minimal_polynomial->coefficients[0]->denominator =
             integer_copy_to_pool(pool_set, a->value.denominator);
         a->minimal_polynomial->coefficients[1]->numerator = pool_integer_initialize(pool_set, 1, 1);
+        increment_reference_count(a->minimal_polynomial->coefficients[1]->numerator);
         a->minimal_polynomial->coefficients[1]->denominator =
             a->minimal_polynomial->coefficients[1]->numerator;
         return;
@@ -153,7 +154,7 @@ void number_calculate_minimal_polynomial(struct PoolSet*pool_set, struct Stack*s
         void*stack_a_savepoint = stack_a->cursor;
         number_calculate_minimal_polynomial(pool_set, stack_a, stack_b, a->left);
         size_t surd_index = integer_to_size_t(a->left->value.denominator);
-        struct RationalPolynomial*annulling_polynomial = polynomial_allocate(stack_a,
+        struct RationalPolynomial*annulling_polynomial = stack_polynomial_allocate(stack_a,
             surd_index * (a->left->minimal_polynomial->coefficient_count - 1) + 1);
         annulling_polynomial->coefficients[0] = a->left->minimal_polynomial->coefficients[0];
         for (size_t i = 1; i < a->left->minimal_polynomial->coefficient_count; ++i)
@@ -209,8 +210,10 @@ void number_calculate_sum_or_product_conjugates(struct Number*(operation)(struct
     {
         while (right_conjugate)
         {
-            struct Number*candidate = operation(pool_set, stack_a, stack_b,
-                number_copy(pool_set, left_conjugate), number_copy(pool_set, right_conjugate));
+            increment_reference_count(left_conjugate);
+            increment_reference_count(right_conjugate);
+            struct Number*candidate =
+                operation(pool_set, stack_a, stack_b, left_conjugate, right_conjugate);
             number_calculate_minimal_polynomial(pool_set, stack_a, stack_b, candidate);
             if (!rational_polynomial_equals(a->minimal_polynomial, candidate->minimal_polynomial))
             {
@@ -261,10 +264,13 @@ void number_calculate_conjugates(struct PoolSet*pool_set, struct Stack*stack_a,
             {
                 struct Number*surd = number_allocate(pool_set);
                 surd->operation = '^';
-                surd->left = number_copy(pool_set, radicand_conjugate);
-                surd->right = number_copy(pool_set, a->left);
-                struct Number*candidate = number_multiply(pool_set, stack_a, stack_b, surd,
-                    number_copy(pool_set, radicand_conjugate));
+                increment_reference_count(radicand_conjugate);
+                surd->left = radicand_conjugate;
+                increment_reference_count(a->left);
+                surd->right = a->left;
+                increment_reference_count(radicand_conjugate);
+                struct Number*candidate =
+                    number_multiply(pool_set, stack_a, stack_b, surd, radicand_conjugate);
                 number_calculate_minimal_polynomial(pool_set, stack_a, stack_b, candidate);
                 if (!rational_polynomial_equals(a->minimal_polynomial,
                     candidate->minimal_polynomial))

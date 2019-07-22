@@ -26,7 +26,7 @@ void number_float_estimate_from_rational(rational_estimate_getter get_rational_e
         rational_estimate_interval_size);
     rational_interval_to_float_interval(stack_a, stack_b, out, &rational_estimate,
         rational_estimate_interval_size);
-    float_interval_move_to_pool(pool_set, out);
+    float_interval_move_value_to_pool(pool_set, out);
     stack_a->cursor = stack_a_savepoint;
 }
 
@@ -47,13 +47,14 @@ bool estimate_needs_refinement(struct PoolSet*pool_set, struct Stack*stack_a, st
         }
         else
         {
-            float_interval_free(pool_set, *estimate);
+            float_free(pool_set, (*estimate)->min);
+            float_free(pool_set, (*estimate)->max);
         }
         stack_a->cursor = stack_a_savepoint;
     }
     else
     {
-        *estimate = POOL_VALUE_ALLOCATE(pool_set, struct FloatInterval);
+        *estimate = pool_value_allocate(pool_set, sizeof(struct FloatInterval));
     }
     return true;
 }
@@ -244,7 +245,7 @@ void number_estimate_part_sum(float_estimate_getter get_term_estimate, struct Po
         get_term_estimate(pool_set, stack_a, stack_b, a->right, term_estimate_interval_size);
     out->min = float_add(stack_a, stack_b, left_term_estimate->min, right_term_estimate->min);
     out->max = float_add(stack_a, stack_b, left_term_estimate->max, right_term_estimate->max);
-    float_interval_move_to_pool(pool_set, out);
+    float_interval_move_value_to_pool(pool_set, out);
     stack_a->cursor = stack_a_savepoint;
 }
 
@@ -310,7 +311,7 @@ struct FloatInterval*number_float_real_part_estimate(struct PoolSet*pool_set,
             real_part_product.min, imaginary_part_product.max);
         a->real_part_estimate->max = float_subtract(local_stack, output_stack,
             real_part_product.max, imaginary_part_product.min);
-        float_interval_move_to_pool(pool_set, a->real_part_estimate);
+        float_interval_move_value_to_pool(pool_set, a->real_part_estimate);
         local_stack->cursor = local_stack_savepoint;
         return a->real_part_estimate;
     }
@@ -402,7 +403,7 @@ struct FloatInterval*number_float_imaginary_part_estimate(struct PoolSet*pool_se
             float_add(local_stack, output_stack, term_a.min, term_b.min);
         a->imaginary_part_estimate->max =
             float_add(local_stack, output_stack, term_a.max, term_b.max);
-        float_interval_move_to_pool(pool_set, a->imaginary_part_estimate);
+        float_interval_move_value_to_pool(pool_set, a->imaginary_part_estimate);
         local_stack->cursor = local_stack_savepoint;
         return a->imaginary_part_estimate;
     }
@@ -466,16 +467,12 @@ void number_magnitude_estimate_bound_interval(struct Stack*output_stack, struct 
 struct FloatInterval*number_float_magnitude_estimate(struct PoolSet*pool_set, struct Stack*stack_a,
     struct Stack*stack_b, struct Number*a, struct Rational*interval_size)
 {
-    if (!estimate_needs_refinement(pool_set, stack_a, stack_b, &a->magnitude_estimate,
-        interval_size))
-    {
-        return a->magnitude_estimate;
-    }
     void*stack_a_savepoint = stack_a->cursor;
     if (a->operation == 'r')
     {
-        if (!a->magnitude_estimate->min->significand)
+        if (!a->magnitude_estimate)
         {
+            a->magnitude_estimate = pool_value_allocate(pool_set, sizeof(struct FloatInterval));
             struct IntegerDivision division;
             integer_euclidean_divide(stack_a, stack_b, &division,
                 integer_magnitude(stack_a, a->value.numerator), a->value.denominator);
@@ -486,17 +483,23 @@ struct FloatInterval*number_float_magnitude_estimate(struct PoolSet*pool_set, st
         }
         else
         {
-            float_interval_move_from_pool(pool_set, stack_a, a->magnitude_estimate);
+            float_move_from_pool(pool_set, stack_a, &a->magnitude_estimate->min);
+            float_move_from_pool(pool_set, stack_a, &a->magnitude_estimate->max);
             integer_move_from_pool(pool_set, stack_a, &a->magnitude_estimate_denominator);
             integer_move_from_pool(pool_set, stack_a, &a->magnitude_estimate_remainder);
         }
         rational_continue_float_estimate(stack_a, stack_b, &a->argument_estimate->min,
             &a->argument_estimate->max, &a->magnitude_estimate_denominator,
             &a->magnitude_estimate_remainder, &a->value, interval_size);
-        float_interval_move_to_pool(pool_set, a->magnitude_estimate);
+        float_interval_move_value_to_pool(pool_set, a->magnitude_estimate);
         integer_move_to_pool(pool_set, &a->magnitude_estimate_denominator);
         integer_move_to_pool(pool_set, &a->magnitude_estimate_remainder);
         stack_a->cursor = stack_a_savepoint;
+        return a->magnitude_estimate;
+    }
+    if (!estimate_needs_refinement(pool_set, stack_a, stack_b, &a->magnitude_estimate,
+        interval_size))
+    {
         return a->magnitude_estimate;
     }
     switch (a->operation)
@@ -516,7 +519,7 @@ struct FloatInterval*number_float_magnitude_estimate(struct PoolSet*pool_set, st
             radicand_magnitude_estimate->min, bound_interval_size, a->right->value.denominator);
         float_estimate_root(stack_a, stack_b, &unused_estimate_bound, &a->magnitude_estimate->max,
             radicand_magnitude_estimate->max, bound_interval_size, a->right->value.denominator);
-        float_interval_move_to_pool(pool_set, a->magnitude_estimate);
+        float_interval_move_value_to_pool(pool_set, a->magnitude_estimate);
         stack_a->cursor = stack_a_savepoint;
         return a->magnitude_estimate;
     }
@@ -539,7 +542,7 @@ struct FloatInterval*number_float_magnitude_estimate(struct PoolSet*pool_set, st
             a->left->magnitude_estimate->min, a->right->magnitude_estimate->min);
         a->argument_estimate->max = float_multiply(stack_a, stack_b,
             a->left->magnitude_estimate->max, a->right->magnitude_estimate->max);
-        float_interval_move_to_pool(pool_set, a->magnitude_estimate);
+        float_interval_move_value_to_pool(pool_set, a->magnitude_estimate);
         stack_a->cursor = stack_a_savepoint;
         return a->magnitude_estimate;
     }
@@ -560,7 +563,7 @@ struct FloatInterval*number_float_magnitude_estimate(struct PoolSet*pool_set, st
         number_magnitude_estimate_bound_interval(stack_a, stack_b, &unused_estimate_bound,
             &a->argument_estimate->max, real_part_estimate->max, imaginary_part_estimate->max,
             interval_size);
-        float_interval_move_to_pool(pool_set, a->magnitude_estimate);
+        float_interval_move_value_to_pool(pool_set, a->magnitude_estimate);
         stack_a->cursor = stack_a_savepoint;
         return a->magnitude_estimate;
     }

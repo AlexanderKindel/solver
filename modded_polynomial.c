@@ -22,7 +22,7 @@ struct Integer*modded_integer_reciprocal(struct Stack*output_stack, struct Stack
 struct IntegerPolynomial*modded_polynomial_reduced(struct Stack*output_stack,
     struct Stack*local_stack, struct IntegerPolynomial*a, struct Integer*characteristic)
 {
-    struct IntegerPolynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
+    struct IntegerPolynomial*out = stack_polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
         out->coefficients[i] = integer_euclidean_remainder(local_stack, output_stack,
@@ -175,7 +175,7 @@ size_t cantor_zassenhaus_split(struct Stack*output_stack, struct Stack*local_sta
     struct IntegerPolynomial*b;
     if (integer_equals(characteristic, &INT(2, +)))
     {
-        struct IntegerPolynomial*x_squared = polynomial_allocate(local_stack, 3);
+        struct IntegerPolynomial*x_squared = stack_polynomial_allocate(local_stack, 3);
         x_squared->coefficients[0] = &zero;
         x_squared->coefficients[1] = &zero;
         x_squared->coefficients[2] = &one;
@@ -202,7 +202,7 @@ size_t cantor_zassenhaus_split(struct Stack*output_stack, struct Stack*local_sta
     else
     {
         struct Integer*p_minus_one = integer_add(local_stack, characteristic, &INT(1, -));
-        struct IntegerPolynomial*t = polynomial_allocate(local_stack, 2 * degree);
+        struct IntegerPolynomial*t = stack_polynomial_allocate(local_stack, 2 * degree);
         for (size_t i = 0; i < t->coefficient_count - 1; ++i)
         {
             t->coefficients[i] = p_minus_one;
@@ -260,7 +260,7 @@ size_t squarefree_modded_polynomial_factor(struct Stack*output_stack, struct Sta
 {
     void*local_stack_savepoint = local_stack->cursor;
     size_t factor_count = 0;
-    struct IntegerPolynomial*x = polynomial_allocate(local_stack, 2);
+    struct IntegerPolynomial*x = stack_polynomial_allocate(local_stack, 2);
     x->coefficients[0] = &zero;
     x->coefficients[1] = &one;
     struct IntegerPolynomial*v = a;

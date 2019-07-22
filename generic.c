@@ -86,10 +86,22 @@ void generic_extended_gcd(struct EuclideanDomainOperations*operations, struct St
     local_stack->cursor = local_stack_savepoint;
 }
 
-void*polynomial_allocate(struct Stack*output_stack, size_t coefficient_count)
+size_t polynomial_size(size_t coefficient_count)
+{
+    return sizeof(struct Polynomial) + coefficient_count * sizeof(size_t);
+}
+
+void*stack_polynomial_allocate(struct Stack*output_stack, size_t coefficient_count)
 {
     struct Polynomial*out = stack_slot_allocate(output_stack,
-        (coefficient_count + 1) * sizeof(size_t), _Alignof(struct Polynomial));
+        polynomial_size(coefficient_count), _Alignof(struct Polynomial));
+    out->coefficient_count = coefficient_count;
+    return out;
+}
+
+void*pool_polynomial_allocate(struct PoolSet*pool_set, size_t coefficient_count)
+{
+    struct Polynomial*out = pool_value_allocate(pool_set, polynomial_size(coefficient_count));
     out->coefficient_count = coefficient_count;
     return out;
 }
@@ -106,7 +118,7 @@ void polynomial_copy_coefficients(void*(coefficient_copy)(struct Stack*, void*),
 void*polynomial_copy(void*(coefficient_copy)(struct Stack*, void*), struct Stack*output_stack,
     struct Polynomial*a)
 {
-    struct Polynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
+    struct Polynomial*out = stack_polynomial_allocate(output_stack, a->coefficient_count);
     memcpy(out->coefficients, a->coefficients, a->coefficient_count * sizeof(void*));
     polynomial_copy_coefficients(coefficient_copy, output_stack, a);
     return out;
@@ -153,7 +165,7 @@ void*polynomial_add(struct RingOperations*coefficient_operations, struct Stack*o
     {
         POINTER_SWAP(a, b);
     }
-    struct Polynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
+    struct Polynomial*out = stack_polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < b->coefficient_count; ++i)
     {
         out->coefficients[i] = coefficient_operations->add(output_stack, local_stack,
@@ -170,7 +182,7 @@ void*polynomial_add(struct RingOperations*coefficient_operations, struct Stack*o
 void*polynomial_negative(struct RingOperations*coefficient_operations, struct Stack*output_stack,
     struct Polynomial*a)
 {
-    struct Polynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
+    struct Polynomial*out = stack_polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
         out->coefficients[i] =
@@ -194,10 +206,10 @@ void*polynomial_multiply(struct RingOperations*coefficient_operations, struct St
 {
     if (!a->coefficient_count && !b->coefficient_count)
     {
-        return polynomial_allocate(output_stack, 0);
+        return stack_polynomial_allocate(output_stack, 0);
     }
     struct Polynomial*out =
-        polynomial_allocate(output_stack, a->coefficient_count + b->coefficient_count - 1);
+        stack_polynomial_allocate(output_stack, a->coefficient_count + b->coefficient_count - 1);
     for (size_t i = 0; i < out->coefficient_count; ++i)
     {
         out->coefficients[i] = coefficient_operations->additive_identity;
@@ -224,7 +236,7 @@ void*polynomial_multiply_by_coefficient(struct RingOperations*coefficient_operat
     {
         return &polynomial_zero;
     }
-    struct Polynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
+    struct Polynomial*out = stack_polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
         out->coefficients[i] = coefficient_operations->multiply(output_stack, local_stack,
@@ -248,8 +260,8 @@ void polynomial_euclidean_divide(struct EuclideanDomainOperations*coefficient_op
     void*local_stack_savepoint = local_stack->cursor;
     size_t quotient_coefficient_count =
         1 + dividend->coefficient_count - divisor->coefficient_count;
-    out->quotient = polynomial_allocate(output_stack, quotient_coefficient_count);
-    out->remainder = polynomial_allocate(output_stack, dividend->coefficient_count);
+    out->quotient = stack_polynomial_allocate(output_stack, quotient_coefficient_count);
+    out->remainder = stack_polynomial_allocate(output_stack, dividend->coefficient_count);
     memcpy(out->remainder->coefficients, dividend->coefficients,
         dividend->coefficient_count * sizeof(void*));
     for (size_t i = 1; i <= quotient_coefficient_count; ++i)
@@ -296,7 +308,7 @@ void field_polynomial_euclidean_divide(struct FieldOperations*coefficient_operat
 {
     if (divisor->coefficient_count > dividend->coefficient_count)
     {
-        out->quotient = polynomial_allocate(output_stack, 0);
+        out->quotient = stack_polynomial_allocate(output_stack, 0);
         out->remainder =
             polynomial_copy(coefficient_operations->ring_operations.copy, output_stack, dividend);
         return;
@@ -304,8 +316,8 @@ void field_polynomial_euclidean_divide(struct FieldOperations*coefficient_operat
     void*local_stack_savepoint = local_stack->cursor;
     size_t quotient_coefficient_count =
         1 + dividend->coefficient_count - divisor->coefficient_count;
-    out->quotient = polynomial_allocate(output_stack, quotient_coefficient_count);
-    out->remainder = polynomial_allocate(output_stack, dividend->coefficient_count);
+    out->quotient = stack_polynomial_allocate(output_stack, quotient_coefficient_count);
+    out->remainder = stack_polynomial_allocate(output_stack, dividend->coefficient_count);
     memcpy(out->remainder->coefficients, dividend->coefficients,
         dividend->coefficient_count * sizeof(void*));
     void*leading_coefficient_reciprocal = coefficient_operations->reciprocal(local_stack,
@@ -341,7 +353,7 @@ void*polynomial_divide_by_coefficient(void*(coefficient_quotient)(struct Stack*,
     void*divisor)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct Polynomial*out = polynomial_allocate(output_stack, dividend->coefficient_count);
+    struct Polynomial*out = stack_polynomial_allocate(output_stack, dividend->coefficient_count);
     for (size_t i = 0; i < dividend->coefficient_count; ++i)
     {
         out->coefficients[i] =
@@ -407,7 +419,7 @@ void*polynomial_derivative(void*(coefficient_times_integer)(struct Stack*, struc
         return a;
     }
     void*local_stack_savepoint = local_stack->cursor;
-    struct Polynomial*out = polynomial_allocate(output_stack, a->coefficient_count - 1);
+    struct Polynomial*out = stack_polynomial_allocate(output_stack, a->coefficient_count - 1);
     struct Integer*multiplier = &zero;
     for (size_t i = 1; i < a->coefficient_count; ++i)
     {

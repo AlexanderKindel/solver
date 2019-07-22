@@ -17,7 +17,7 @@ struct Number*number_add(struct PoolSet*pool_set, struct Stack*stack_a, struct S
             struct Number*out = number_allocate(pool_set);
             out->operation = 'r';
             out->value = *rational_add(stack_a, stack_b, &a->value, &b->value);
-            rational_move_to_pool(pool_set, &out->value);
+            rational_move_value_to_pool(pool_set, &out->value);
             number_free(pool_set, a);
             number_free(pool_set, b);
             stack_a->cursor = stack_a_savepoint;
@@ -34,18 +34,19 @@ struct Number*number_add(struct PoolSet*pool_set, struct Stack*stack_a, struct S
             out->operation = '+';
             out->left = a;
             out->right = b;
-            out->field_form = POOL_VALUE_ALLOCATE(pool_set, struct SumFieldForm);
-            out->field_form->generator = number_copy(pool_set, a);
+            out->field_form = pool_value_allocate(pool_set, sizeof(struct SumFieldForm));
+            increment_reference_count(a);
+            out->field_form->generator = a;
             out->field_form->left_term_in_terms_of_generator =
-                polynomial_allocate(&polynomial_stack, 2);
+                pool_polynomial_allocate(pool_set, 2);
             out->field_form->left_term_in_terms_of_generator->coefficients[0] =
-                POOL_VALUE_ALLOCATE(pool_set, struct Rational);
+                pool_value_allocate(pool_set, sizeof(struct Rational));
             out->field_form->left_term_in_terms_of_generator->coefficients[0] =
                 rational_copy_to_pool(pool_set, &rational_zero);
             out->field_form->left_term_in_terms_of_generator->coefficients[1] =
                 rational_copy_to_pool(pool_set, &rational_one);
             out->field_form->right_term_in_terms_of_generator =
-                polynomial_allocate(&polynomial_stack, 1);
+                pool_polynomial_allocate(pool_set, 1);
             out->field_form->right_term_in_terms_of_generator->coefficients[0] =
                 rational_copy_to_pool(pool_set, &b->value);
             return out;
@@ -130,7 +131,7 @@ struct Number*number_rational_multiply(struct PoolSet*pool_set, struct Stack*sta
         struct Number*out = number_allocate(pool_set);
         out->operation = 'r';
         out->value = *rational_multiply(stack_a, stack_b, &a->value, b);
-        rational_move_to_pool(pool_set, &out->value);
+        rational_move_value_to_pool(pool_set, &out->value);
         number_free(pool_set, a);
         stack_a->cursor = stack_a_savepoint;
         return out;
@@ -206,10 +207,12 @@ struct Number*number_consolidate_product(struct PoolSet*pool_set, struct Stack*s
             struct Integer*product_index = integer_euclidean_quotient(stack_a, stack_b,
                 integer_multiply(stack_a, stack_b, a->right->value.denominator,
                     b->right->value.denominator), info.gcd);
+            increment_reference_count(a->left);
             struct Number*radicand_factor_a = number_exponentiate(pool_set, stack_a, stack_b,
-                number_copy(pool_set, a->left), &(struct Rational){info.b_over_gcd, &one});
+                a->left, &(struct Rational){info.b_over_gcd, &one});
+            increment_reference_count(b->left);
             struct Number*radicand_factor_b = number_exponentiate(pool_set, stack_a, stack_b,
-                number_copy(pool_set, b->left), &(struct Rational){info.a_over_gcd, &one});
+                b->left, &(struct Rational){info.a_over_gcd, &one});
             struct RationalInterval radicand_factor_a_argument_estimate;
             number_rational_argument_estimate(pool_set, stack_a, stack_b,
                 &radicand_factor_a_argument_estimate, radicand_factor_a, &rational_one);
@@ -252,8 +255,10 @@ struct Number*number_consolidate_product(struct PoolSet*pool_set, struct Stack*s
                 rational_add(stack_a, stack_b, radicand_factor_a_argument_estimate.min,
                     radicand_factor_b_argument_estimate.min)) < 0)
             {
-                out = number_multiply(pool_set, stack_a, stack_b, out, number_copy(pool_set,
-                    get_roots_of_unity(stack_a, stack_b, product_index)[1]));
+                struct Number*root_of_unity =
+                    get_roots_of_unity(stack_a, stack_b, product_index)[1];
+                increment_reference_count(root_of_unity);
+                out = number_multiply(pool_set, stack_a, stack_b, out, root_of_unity);
             }
             stack_a->cursor = stack_a_savepoint;
             return out;
@@ -280,12 +285,8 @@ struct Number*number_consolidate_product(struct PoolSet*pool_set, struct Stack*s
         }
         case '*':
         {
-            struct Number*out = number_multiply(pool_set, stack_a, stack_b, a->left, b);
-            if (!out)
-            {
-                return 0;
-            }
-            out = number_multiply(pool_set, stack_a, stack_b, out, a->right);
+            struct Number*out = number_multiply(pool_set, stack_a, stack_b, a->left,
+                number_multiply(pool_set, stack_a, stack_b, a->right, b));
             number_node_free(pool_set, a);
             return out;
         }
@@ -293,17 +294,9 @@ struct Number*number_consolidate_product(struct PoolSet*pool_set, struct Stack*s
         break;
     case '+':
     {
-        struct Number*b_copy = number_copy(pool_set, b);
+        increment_reference_count(b);
         struct Number*left = number_multiply(pool_set, stack_a, stack_b, a->left, b);
-        if (!left)
-        {
-            return 0;
-        }
-        struct Number*right = number_multiply(pool_set, stack_a, stack_b, a->right, b_copy);
-        if (!right)
-        {
-            return 0;
-        }
+        struct Number*right = number_multiply(pool_set, stack_a, stack_b, a->right, b);
         number_node_free(pool_set, a);
         return number_add(pool_set, stack_a, stack_b, left, right);
     }
@@ -341,12 +334,12 @@ struct Number*number_reciprocal(struct PoolSet*pool_set, struct Stack*stack_a, s
     case '^':
     {
         void*stack_a_savepoint = stack_a->cursor;
-        pool_integer_free(pool_set, a->right->value.numerator);
+        integer_free(pool_set, a->right->value.numerator);
         struct Rational exponent = { integer_add(stack_a, a->right->value.denominator, &INT(1, -)),
             a->right->value.denominator };
-        struct Number*radicand_copy = number_copy(pool_set, a->left);
+        increment_reference_count(a->left);
         struct Number*out = number_divide(pool_set, stack_a, stack_b,
-            number_exponentiate(pool_set, stack_a, stack_b, a->left, &exponent), radicand_copy);
+            number_exponentiate(pool_set, stack_a, stack_b, a->left, &exponent), a->left);
         number_free(pool_set, a->right);
         number_node_free(pool_set, a);
         stack_a->cursor = stack_a_savepoint;
@@ -367,12 +360,13 @@ struct Number*number_reciprocal(struct PoolSet*pool_set, struct Stack*stack_a, s
         struct Number*out = number_allocate(pool_set);
         out->operation = 'r';
         out->value.numerator = pool_integer_initialize(pool_set, 1, 1);
-        out->value.denominator = pool_integer_initialize(pool_set, 1, 1);
+        increment_reference_count(out->value.numerator);
+        out->value.denominator = out->value.numerator;
         struct Number*conjugate = a->next;
         while (conjugate)
         {
-            out = number_multiply(pool_set, stack_a, stack_b, out,
-                number_copy(pool_set, conjugate));
+            increment_reference_count(conjugate);
+            out = number_multiply(pool_set, stack_a, stack_b, out, conjugate);
             conjugate = conjugate->next;
         }
         number_calculate_minimal_polynomial(pool_set, stack_a, stack_b, a);
@@ -465,10 +459,10 @@ struct Number*number_exponentiate(struct PoolSet*pool_set, struct Stack*stack_a,
         void*stack_a_savepoint = stack_a->cursor;
         if (!integer_equals(exponent->numerator, &one))
         {
-            rational_move_from_pool(pool_set, stack_a, &base->value);
+            rational_move_value_from_pool(pool_set, stack_a, &base->value);
             base->value =
                 *rational_exponentiate(stack_a, stack_b, &base->value, exponent->numerator);
-            rational_move_to_pool(pool_set, &base->value);
+            rational_move_value_to_pool(pool_set, &base->value);
             stack_a->cursor = stack_a_savepoint;
             return base;
         }
@@ -588,11 +582,12 @@ struct Number*number_exponentiate(struct PoolSet*pool_set, struct Stack*stack_a,
             {
                 if (numerator->value[0] & 1)
                 {
+                    increment_reference_count(base);
                     exponentiation_by_numerator = number_multiply(pool_set, stack_a, stack_b,
-                        exponentiation_by_numerator, number_copy(pool_set, base));
+                        exponentiation_by_numerator, base);
                 }
-                base =
-                    number_multiply(pool_set, stack_a, stack_b, base, number_copy(pool_set, base));
+                increment_reference_count(base);
+                base = number_multiply(pool_set, stack_a, stack_b, base, base);
                 numerator = integer_half(stack_a, numerator);
             }
             number_free(pool_set, base);

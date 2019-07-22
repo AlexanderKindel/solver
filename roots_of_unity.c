@@ -77,11 +77,11 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
             {
                 for (size_t j = 0; j < quotient; ++j)
                 {
+                    increment_reference_count(prime_degree_roots[i]);
+                    increment_reference_count(quotient_degree_roots[j]);
                     out[i] = number_multiply(&permanent_pool_set, stack_a, stack_b,
-                        number_copy(&permanent_pool_set, prime_degree_roots[i]),
-                        number_exponentiate(&permanent_pool_set, stack_a, stack_b,
-                            number_copy(&permanent_pool_set, quotient_degree_roots[j]),
-                            &(struct Rational){&one, prime}));
+                        prime_degree_roots[i], number_exponentiate(&permanent_pool_set, stack_a,
+                            stack_b, quotient_degree_roots[j], &(struct Rational){&one, prime}));
                 }
             }
             roots_of_unity_sort(stack_a, stack_b, out, degree);
@@ -109,8 +109,8 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
         break;
     }
     struct RationalPolynomial*resolvent_generator_annulling_polynomials[2] =
-    { polynomial_allocate(stack_a, degree_size_t),
-        polynomial_allocate(stack_a, degree_size_t + 1) };
+        { stack_polynomial_allocate(stack_a, degree_size_t),
+            stack_polynomial_allocate(stack_a, degree_size_t + 1) };
     resolvent_generator_annulling_polynomials[0]->coefficients[0] =
         &(struct Rational) { &INT(1, -), &one };
     resolvent_generator_annulling_polynomials[1]->coefficients[0] =
@@ -208,13 +208,15 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
     for (size_t i = 0; i < resolvent_count_minus_one; ++i)
     {
         size_t resolvent_multiple_index = degree_minus_one_size_t * i;
-        resolvent_product_values[i] = number_copy(&permanent_pool_set, roots_of_unity[0]);
+        increment_reference_count(roots_of_unity[0]);
+        resolvent_product_values[i] = roots_of_unity[0];
         for (size_t j = 0; j < degree_minus_one_size_t; ++j)
         {
+            increment_reference_count(degree_minus_first_roots[i]);
             resolvent_product_values[i] =
                 number_add(&permanent_pool_set, stack_a, stack_b, resolvent_product_values[i],
                     number_rational_multiply(&permanent_pool_set, stack_a, stack_b,
-                        number_copy(&permanent_pool_set, degree_minus_first_roots[i]),
+                        degree_minus_first_roots[i],
                         resolvent_multiples_in_terms_of_degree_minus_first_roots
                         [resolvent_multiple_index]));
         }
@@ -229,8 +231,9 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
         resolvent_product_values[0], &(struct Rational){&one, degree_minus_one});
     for (size_t i = 1; i < resolvent_count_minus_one; ++i)
     {
+        increment_reference_count(resolvent_values[1]);
         resolvent_values[i + 1] = number_divide(&permanent_pool_set, stack_a, stack_b,
-            number_copy(&permanent_pool_set, resolvent_values[1]), resolvent_product_values[i]);
+            resolvent_values[1], resolvent_product_values[i]);
     }
     struct Rational*degree_minus_one_reciprocal = STACK_SLOT_ALLOCATE(stack_a, struct Rational);
     degree_minus_one_reciprocal->numerator = &one;
@@ -245,10 +248,10 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
         size_t degree_minus_first_root_exponent = 0;
         for (size_t j = 0; j < degree_minus_one_size_t; ++j)
         {
+            increment_reference_count(degree_minus_first_roots[degree_minus_first_root_exponent]);
             out[i] = number_add(&permanent_pool_set, stack_a, stack_b,
                 number_multiply(&permanent_pool_set, stack_a, stack_b,
-                    number_copy(&permanent_pool_set,
-                        degree_minus_first_roots[degree_minus_first_root_exponent]),
+                    degree_minus_first_roots[degree_minus_first_root_exponent],
                     resolvent_values[j]), out[i]);
             degree_minus_first_root_exponent =
                 (degree_minus_first_root_exponent + i) % degree_minus_one_size_t;
