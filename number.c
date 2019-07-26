@@ -13,7 +13,8 @@ void number_parse_node_free_if_unreferenced(struct PoolSet*pool_set, struct Numb
 {
     if (a->operation == 'r')
     {
-        rational_free(pool_set, &a->value);
+        integer_free(pool_set, a->value.numerator);
+        integer_free(pool_set, a->value.numerator);
     }
     pool_slot_free(pool_set, pool_slot_from_value(a), sizeof(struct Number));
 }
@@ -28,45 +29,123 @@ void number_parse_node_free(struct PoolSet*pool_set, struct Number*a)
     }
 }
 
-void number_node_free_if_unreferenced(struct PoolSet*pool_set, struct Number*a)
-{
-    if (a->operation != 'r')
-    {
-        float_interval_free(pool_set, a->real_part_estimate);
-        float_interval_free(pool_set, a->imaginary_part_estimate);
-    }
-    float_interval_free(pool_set, a->argument_estimate);
-    float_interval_free(pool_set, a->magnitude_estimate);
-    if (a->next)
-    {
-        number_free(pool_set, a->next);
-    }
-    number_parse_node_free_if_unreferenced(pool_set, a);
-}
-
-void number_node_free(struct PoolSet*pool_set, struct Number*a)
-{
-    struct PoolSlot*slot = pool_slot_from_value(a);
-    --slot->reference_count;
-    if (!slot->reference_count)
-    {
-        number_node_free_if_unreferenced(pool_set, a);
-    }
-}
-
 void number_free(struct PoolSet*pool_set, struct Number*a)
 {
     struct PoolSlot*slot = pool_slot_from_value(a);
     --slot->reference_count;
     if (!slot->reference_count)
     {
-        if (a->operation != 'r')
+        if (a->minimal_polynomial)
         {
-            number_free(pool_set, a->left);
-            number_free(pool_set, a->right);
+            if (a->conjugates)
+            {
+                for (size_t i = 0; i < a->minimal_polynomial->coefficient_count - 1; ++i)
+                {
+                    number_free(pool_set, a->conjugates[i]);
+                }
+            }
+            rational_polynomial_free(pool_set, a->minimal_polynomial);
         }
-        number_node_free_if_unreferenced(pool_set, a);
+        if (a->operation == 'r')
+        {
+            if (a->magnitude_estimate_denominator)
+            {
+                integer_free(pool_set, a->magnitude_estimate_denominator);
+            }
+            if (a->magnitude_estimate_remainder)
+            {
+                integer_free(pool_set, a->magnitude_estimate_remainder);
+            }
+        }
+        else
+        {
+            switch (a->operation)
+            {
+            case '+':
+            {
+                struct Term*term = a->first_term;
+                while (term)
+                {
+                    term_free(pool_set, term);
+                    term = term->next;
+                }
+                break;
+            }
+            case 'g':
+                for (size_t i = 0; i < a->term_count; ++i)
+                {
+                    number_free(pool_set, a->terms[i]);
+                }
+                break;
+            default:
+                if (a->left)
+                {
+                    number_free(pool_set, a->left);
+                }
+                if (a->right)
+                {
+                    number_free(pool_set, a->right);
+                }
+            }
+            float_interval_free_if_non_null(pool_set, a->real_part_estimate);
+            float_interval_free_if_non_null(pool_set, a->imaginary_part_estimate);
+        }
+        float_interval_free_if_non_null(pool_set, a->argument_estimate);
+        float_interval_free_if_non_null(pool_set, a->magnitude_estimate);
+        number_parse_node_free_if_unreferenced(pool_set, a);
     }
+}
+
+struct Number*number_shallow_copy(struct PoolSet*pool_set, struct Number*a)
+{
+    struct Number*out = pool_value_allocate(pool_set, sizeof(struct Number));
+    memcpy(out, a, sizeof(struct Number*));
+    if (out->minimal_polynomial)
+    {
+        increment_reference_count(out->minimal_polynomial);
+        if (out->conjugates)
+        {
+            for (size_t i = 0; i < out->minimal_polynomial->coefficient_count - 1; ++i)
+            {
+                increment_reference_count(out->conjugates[i]);
+            }
+        }
+    }
+    if (out->operation == 'r')
+    {
+        increment_reference_count_if_non_null(out->magnitude_estimate_denominator);
+        increment_reference_count_if_non_null(out->magnitude_estimate_remainder);
+    }
+    else
+    {
+        switch (out->operation)
+        {
+        case '+':
+        {
+            struct Term*term = out->first_term;
+            while (term)
+            {
+                increment_reference_count(term);
+                term = term->next;
+            }
+            break;
+        }
+        case 'g':
+            for (size_t i = 0; i < out->term_count; ++i)
+            {
+                increment_reference_count(out->terms[i]);
+            }
+            break;
+        default:
+            increment_reference_count(out->left);
+            increment_reference_count(out->right);
+        }
+        increment_reference_count_if_non_null(out->real_part_estimate);
+        increment_reference_count_if_non_null(out->imaginary_part_estimate);
+    }
+    increment_reference_count_if_non_null(out->argument_estimate);
+    increment_reference_count_if_non_null(out->magnitude_estimate);
+    return out;
 }
 
 struct RationalPolynomial*number_a_in_terms_of_b(struct PoolSet*pool_set, struct Stack*output_stack,
@@ -198,30 +277,25 @@ struct Number*number_evaluate(struct PoolSet*transient_pool_set, struct Stack*st
         return number_add(transient_pool_set, stack_a, stack_b, a->left, a->right);
     case '-':
     {
-        struct Number*negative = number_allocate(transient_pool_set);
-        negative->operation = 'r';
-        negative->value.numerator = pool_integer_initialize(transient_pool_set, 1, -1);
-        negative->value.denominator = pool_integer_initialize(transient_pool_set, 1, 1);
-        return number_add(transient_pool_set, stack_a, stack_b, a->left,
-            number_multiply(transient_pool_set, stack_a, stack_b, negative, a->right));
+        void*stack_a_savepoint = stack_a->cursor;
+        struct Number*out = number_add(transient_pool_set, stack_a, stack_b, a->left,
+            number_rational_multiply(transient_pool_set, stack_a, stack_b, a->right,
+                &(struct Rational){ stack_integer_initialize(stack_a, 1, -1), &one }));
+        stack_a->cursor = stack_a_savepoint;
+        return out;
     }
     case '*':
         return number_multiply(transient_pool_set, stack_a, stack_b, a->left, a->right);
     case '/':
         return number_divide(transient_pool_set, stack_a, stack_b, a->left, a->right);
     case '^':
-    {
         if (a->right->operation != 'r')
         {
             puts("The input expression contains an exponentiation whose exponent is not both real "
                 "and rational; this program doesn't handle transcendental numbers.");
             return 0;
         }
-        struct Number*out =
-            number_exponentiate(transient_pool_set, stack_a, stack_b, a->left, &a->right->value);
-        number_free(transient_pool_set, a->right);
-        return out;
-    }
+        return number_exponentiate(transient_pool_set, stack_a, stack_b, a->left, &a->right->value);
     default:
         crash("Number operation not recognized.");
     }
@@ -315,5 +389,55 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
     }
     default:
         crash("Number operation not recognized.");
+    }
+}
+
+void term_iterator_initialize(struct TermIterator*out, struct Number*a)
+{
+    out->sum = a;
+    if (a->operation == 'g')
+    {
+        out->term = a->terms[0];
+        out->term_index = 0;
+    }
+    else
+    {
+        out->term_parent = a->first_term;
+        out->term = out->term_parent->value;
+    }
+}
+
+void term_iterator_increment(struct TermIterator*a)
+{
+    if (a->sum->operation == 'g')
+    {
+        ++a->term_index;
+        if (a->term_index == a->sum->term_count)
+        {
+            a->term = 0;
+        }
+        else
+        {
+            a->term = a->sum->terms[a->term_index];
+        }
+    }
+    else
+    {
+        a->term_parent = a->term_parent->next;
+        a->term = a->term_parent->value;
+    }
+}
+
+void term_free(struct PoolSet*pool_set, struct Term*a)
+{
+    struct PoolSlot*slot = pool_slot_from_value(a);
+    if (slot->reference_count)
+    {
+        --slot->reference_count;
+        if (!slot->reference_count)
+        {
+            number_free(pool_set, a->value);
+            rational_polynomial_free(pool_set, a->in_terms_of_generator);
+        }
     }
 }

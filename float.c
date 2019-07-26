@@ -247,7 +247,7 @@ struct Rational*float_to_rational(struct Stack*output_stack, struct Stack*local_
     return out;
 }
 
-void float_interval_free(struct PoolSet*pool_set, struct FloatInterval*a)
+void float_interval_free_if_non_null(struct PoolSet*pool_set, struct FloatInterval*a)
 {
     if (a)
     {

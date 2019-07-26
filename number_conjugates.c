@@ -5,9 +5,8 @@ void number_calculate_minimal_polynomial_from_annulling_polynomial(struct PoolSe
     struct Number*a)
 {
     void*stack_a_savepoint = stack_a->cursor;
-    struct RationalPolynomial**candidates = stack_slot_allocate(stack_a,
-        annulling_polynomial->coefficient_count * sizeof(struct RationalPolynomial*),
-        _Alignof(struct RationalPolynomial*));
+    struct RationalPolynomial**candidates = STACK_ARRAY_ALLOCATE(stack_a,
+        annulling_polynomial->coefficient_count, struct RationalPolynomial*);
     size_t candidate_count =
         rational_polynomial_factor(stack_a, stack_b, annulling_polynomial, candidates);
     if (candidate_count == 1)
@@ -57,11 +56,10 @@ void number_calculate_minimal_polynomial_from_algebraic_form(struct PoolSet*pool
     size_t term_count_upper_bound = (generator_minimal_polynomials[0]->coefficient_count - 1) *
         (generator_minimal_polynomials[1]->coefficient_count - 1) + 1;
     struct Matrix matrix;
-    matrix.rows = stack_slot_allocate(stack_a, term_count_upper_bound * sizeof(struct Rational**),
-        _Alignof(struct Rational**));
+    matrix.rows = STACK_ARRAY_ALLOCATE(stack_a, term_count_upper_bound, struct Rational**);
     matrix.height = 0;
-    size_t(**terms_present)[2] = stack_slot_allocate(stack_a,
-        term_count_upper_bound * sizeof(size_t(*)[2]), _Alignof(size_t(*)[2]));
+    size_t(**terms_present)[2] =
+        STACK_ARRAY_ALLOCATE(stack_a, term_count_upper_bound, size_t(*)[2]);
     size_t terms_present_count = 1;
     struct AlgebraicNumber*power = STACK_SLOT_ALLOCATE(stack_a, struct AlgebraicNumber);
     power->term_coefficient = &rational_one;
@@ -69,8 +67,7 @@ void number_calculate_minimal_polynomial_from_algebraic_form(struct PoolSet*pool
     power->generator_degrees[1] = 0;
     power->next_term = 0;
     struct AlgebraicNumber**powers =
-        stack_slot_allocate(stack_a, term_count_upper_bound * sizeof(struct AlgebraicNumber*),
-            _Alignof(struct AlgebraicNumber*));
+        STACK_ARRAY_ALLOCATE(stack_a, term_count_upper_bound, struct AlgebraicNumber*);
     bool constant_is_present = false;
     while (!constant_is_present || matrix.height < terms_present_count)
     {
@@ -78,8 +75,8 @@ void number_calculate_minimal_polynomial_from_algebraic_form(struct PoolSet*pool
             generator_minimal_polynomials);
         powers[matrix.height] = power;
         struct AlgebraicNumber*power_term = powers[matrix.height];
-        matrix.rows[matrix.height] = stack_slot_allocate(stack_a,
-            term_count_upper_bound * sizeof(struct Rational*), _Alignof(struct Rational*));
+        matrix.rows[matrix.height] =
+            STACK_ARRAY_ALLOCATE(stack_a, term_count_upper_bound, struct Rational*);
         for (size_t i = 0; i < term_count_upper_bound; ++i)
         {
             matrix.rows[matrix.height][i] = &rational_zero;
@@ -106,8 +103,8 @@ void number_calculate_minimal_polynomial_from_algebraic_form(struct PoolSet*pool
         ++matrix.height;
     }
     matrix.width = matrix.height;
-    struct RationalPolynomial**augmentation = stack_slot_allocate(stack_a,
-        matrix.height * sizeof(struct RationalPolynomial*), _Alignof(struct RationalPolynomial*));
+    struct RationalPolynomial**augmentation =
+        STACK_ARRAY_ALLOCATE(stack_a, matrix.height, struct RationalPolynomial*);
     for (size_t i = 0; i < matrix.height; ++i)
     {
         array_reverse(matrix.rows[i], matrix.width);
@@ -118,7 +115,8 @@ void number_calculate_minimal_polynomial_from_algebraic_form(struct PoolSet*pool
         }
         augmentation[i]->coefficients[i + 1] = &rational_one;
     }
-    matrix_row_echelon_form(stack_a, stack_b, &matrix, augmentation);
+    matrix_row_echelon_form(rational_polynomial_rational_multiply, rational_polynomial_subtract,
+        stack_a, stack_b, &matrix, augmentation);
     struct RationalPolynomial*annulling_polynomial = augmentation[matrix.height - 1];
     annulling_polynomial->coefficients[0] = rational_subtract(stack_a, stack_b,
         annulling_polynomial->coefficients[0], matrix.rows[matrix.height - 1][matrix.width - 1]);
@@ -199,40 +197,31 @@ void number_calculate_sum_or_product_conjugates(struct Number*(operation)(struct
     struct Stack*, struct Stack*, struct Number*, struct Number*),
     struct PoolSet*pool_set, struct Stack*stack_a, struct Stack*stack_b, struct Number*a)
 {
-    number_calculate_minimal_polynomial(pool_set, stack_a, stack_b, a);
     number_calculate_conjugates(pool_set, stack_a, stack_b, a->left);
     number_calculate_conjugates(pool_set, stack_a, stack_b, a->right);
-    struct Number*conjugate = a;
-    struct Number*left_conjugate = a->left;
-    struct Number*right_conjugate = a->right->next;
-    size_t conjugate_count = 1;
-    while (left_conjugate)
+    size_t conjugate_count = 0;
+    for (size_t i = 0; i < a->left->minimal_polynomial->coefficient_count - 1; ++i)
     {
-        while (right_conjugate)
+        for (size_t j = 0; j < a->right->minimal_polynomial->coefficient_count - 1; ++j)
         {
-            increment_reference_count(left_conjugate);
-            increment_reference_count(right_conjugate);
-            struct Number*candidate =
-                operation(pool_set, stack_a, stack_b, left_conjugate, right_conjugate);
+            struct Number*candidate = operation(pool_set, stack_a, stack_b,
+                number_shallow_copy(pool_set, a->left->conjugates[i]),
+                number_shallow_copy(pool_set, a->right->conjugates[j]));
             number_calculate_minimal_polynomial(pool_set, stack_a, stack_b, candidate);
-            if (!rational_polynomial_equals(a->minimal_polynomial, candidate->minimal_polynomial))
+            if (rational_polynomial_equals(a->minimal_polynomial, candidate->minimal_polynomial))
             {
-                conjugate->next = candidate;
+                a->conjugates[conjugate_count] = candidate;
                 ++conjugate_count;
                 if (conjugate_count == a->minimal_polynomial->coefficient_count - 1)
                 {
                     return;
                 }
-                conjugate = conjugate->next;
             }
             else
             {
                 number_free(pool_set, candidate);
             }
-            right_conjugate = right_conjugate->next;
         }
-        left_conjugate = left_conjugate->next;
-        right_conjugate = a->right;
     }
     crash("Not enough conjugates found.");
 }
@@ -240,67 +229,66 @@ void number_calculate_sum_or_product_conjugates(struct Number*(operation)(struct
 void number_calculate_conjugates(struct PoolSet*pool_set, struct Stack*stack_a,
     struct Stack*stack_b, struct Number*a)
 {
-    if (a->next)
+    if (a->conjugates)
     {
         return;
     }
+    struct PoolSlot*slot = pool_slot_from_value(a);
+    size_t reference_count = slot->reference_count;
+    number_calculate_minimal_polynomial(pool_set, stack_a, stack_b, a);
+    a->conjugates = pool_value_allocate(pool_set,
+        (a->minimal_polynomial->coefficient_count - 1) * sizeof(size_t));
     switch (a->operation)
     {
     case 'r':
-        return;
+        a->conjugates = pool_value_allocate(pool_set, sizeof(struct Number*));
+        a->conjugates[0] = number_shallow_copy(pool_set, a);
+        break;
     case '^':
     {
-        number_calculate_minimal_polynomial(pool_set, stack_a, stack_b, a);
         number_calculate_conjugates(pool_set, stack_a, stack_b, a->left);
         size_t roots_of_unity_count = integer_to_size_t(a->right->value.denominator);
         struct Number**roots_of_unity =
             get_roots_of_unity(stack_a, stack_b, a->right->value.denominator);
-        struct Number*radicand_conjugate = a->left->next;
-        struct Number*conjugate = a;
-        size_t conjugate_count = 1;
+        size_t conjugate_count = 0;
         for (size_t i = 0; i < roots_of_unity_count; ++i)
         {
-            while (radicand_conjugate)
+            for (size_t j = 0; j < a->left->minimal_polynomial->coefficient_count - 1; ++j)
             {
-                struct Number*surd = number_allocate(pool_set);
-                surd->operation = '^';
-                increment_reference_count(radicand_conjugate);
-                surd->left = radicand_conjugate;
-                increment_reference_count(a->left);
-                surd->right = a->left;
-                increment_reference_count(radicand_conjugate);
+                increment_reference_count(roots_of_unity[i]);
+                increment_reference_count(a->left->conjugates[j]);
                 struct Number*candidate =
-                    number_multiply(pool_set, stack_a, stack_b, surd, radicand_conjugate);
+                    number_multiply(pool_set, stack_a, stack_b, roots_of_unity[i],
+                        number_exponentiate(pool_set, stack_a, stack_b, a->left->conjugates[j],
+                            &a->right->value));
                 number_calculate_minimal_polynomial(pool_set, stack_a, stack_b, candidate);
-                if (!rational_polynomial_equals(a->minimal_polynomial,
+                if (rational_polynomial_equals(a->minimal_polynomial,
                     candidate->minimal_polynomial))
                 {
-                    conjugate->next = candidate;
+                    a->conjugates[conjugate_count] = candidate;
                     ++conjugate_count;
                     if (conjugate_count == a->minimal_polynomial->coefficient_count - 1)
                     {
                         return;
                     }
-                    conjugate = conjugate->next;
                 }
                 else
                 {
                     number_free(pool_set, candidate);
                 }
-                radicand_conjugate = radicand_conjugate->next;
             }
-            radicand_conjugate = a->left;
         }
         crash("Not enough conjugates found.");
     }
     case '*':
     {
         number_calculate_sum_or_product_conjugates(number_multiply, pool_set, stack_a, stack_b, a);
-        return;
+        break;
     }
     case '+':
     {
         number_calculate_sum_or_product_conjugates(number_add, pool_set, stack_a, stack_b, a);
     }
     }
+    slot->reference_count = reference_count;
 }

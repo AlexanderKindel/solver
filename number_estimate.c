@@ -488,7 +488,7 @@ struct FloatInterval*number_float_magnitude_estimate(struct PoolSet*pool_set, st
             integer_move_from_pool(pool_set, stack_a, &a->magnitude_estimate_denominator);
             integer_move_from_pool(pool_set, stack_a, &a->magnitude_estimate_remainder);
         }
-        rational_continue_float_estimate(stack_a, stack_b, &a->argument_estimate->min,
+        leaking_rational_continue_float_estimate(stack_a, stack_b, &a->argument_estimate->min,
             &a->argument_estimate->max, &a->magnitude_estimate_denominator,
             &a->magnitude_estimate_remainder, &a->value, interval_size);
         float_interval_move_value_to_pool(pool_set, a->magnitude_estimate);

@@ -17,6 +17,20 @@ struct RationalPolynomial*rational_polynomial_copy_to_pool(struct PoolSet*pool_s
     return out;
 }
 
+void rational_polynomial_free(struct PoolSet*pool_set, struct RationalPolynomial*a)
+{
+    struct PoolSlot*slot = pool_slot_from_value(a);
+    --slot->reference_count;
+    if (!slot->reference_count)
+    {
+        for (size_t i = 0; i < a->coefficient_count; ++i)
+        {
+            rational_free(pool_set, a->coefficients[i]);
+        }
+        pool_slot_free(pool_set, slot, polynomial_size(a->coefficient_count));
+    }
+}
+
 bool rational_polynomial_equals(struct RationalPolynomial*a, struct RationalPolynomial*b)
 {
     return polynomial_equals(&rational_operations.ring_operations, (struct Polynomial*)a,

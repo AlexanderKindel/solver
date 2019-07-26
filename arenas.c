@@ -10,47 +10,54 @@ size_t next_page_boundary(size_t address)
     return address;
 }
 
-size_t next_aligned_address(size_t address, size_t alignment)
-{
-    return ((address + alignment - 1) / alignment) * alignment;
-}
-
 void stack_initialize(struct Stack*out, size_t start, size_t end)
 {
     out->start = start;
     out->end = end;
     out->cursor = (void*)start;
-    out->allocation_cursor = out->start;
+    out->cursor_max = out->start;
 }
 
 void stack_free(struct Stack*out)
 {
-    while (out->allocation_cursor > out->start)
+    while (out->cursor_max > out->start)
     {
-        out->allocation_cursor -= page_size;
-        VirtualFree((void*)out->allocation_cursor, 0, MEM_RELEASE);
+        out->cursor_max -= page_size;
+        VirtualFree((void*)out->cursor_max, 0, MEM_RELEASE);
     }
     out->cursor = (void*)out->start;
 }
 
-void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t alignment)
+void*array_start(struct Stack*output_stack, size_t alignment)
 {
-    size_t slot = next_aligned_address((size_t)output_stack->cursor, alignment);
-    output_stack->cursor = (void*)(slot + slot_size);
+    output_stack->cursor =
+        (void*)((((size_t)output_stack->cursor + alignment - 1) / alignment) * alignment);
+    return output_stack->cursor;
+}
+
+void extend_array(struct Stack*output_stack, size_t element_size)
+{
+    output_stack->cursor = (void*)((size_t)output_stack->cursor + element_size);
     if ((size_t)output_stack->cursor > output_stack->end)
     {
         crash("Stack ran out of virtual address space.");
     }
-    while ((size_t)output_stack->cursor > output_stack->allocation_cursor)
+    while ((size_t)output_stack->cursor > output_stack->cursor_max)
     {
-        if (!VirtualAlloc((void*)output_stack->allocation_cursor, page_size,
-            MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE))
+        if (!VirtualAlloc((void*)output_stack->cursor_max, page_size, MEM_RESERVE | MEM_COMMIT,
+            PAGE_READWRITE))
         {
             crash("Ran out of physical memory.");
         }
-        output_stack->allocation_cursor = output_stack->allocation_cursor + page_size;
+        output_stack->cursor_max = output_stack->cursor_max + page_size;
     }
-    return (void*)slot;
+}
+
+void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t alignment)
+{
+    void*slot = array_start(output_stack, alignment);
+    extend_array(output_stack, slot_size);
+    return slot;
 }
 
 void pool_set_initialize(struct PoolSet*out, size_t start, size_t end)
@@ -62,14 +69,13 @@ void pool_set_initialize(struct PoolSet*out, size_t start, size_t end)
 
 struct PoolSlotPage*pool_slot_page_allocate(struct PoolSet*pool_set)
 {
-    pool_set->slot_page_stack.allocation_cursor =
-        pool_set->slot_page_stack.allocation_cursor + page_size;
-    if (pool_set->slot_page_stack.allocation_cursor > pool_set->slot_page_stack.end)
+    pool_set->slot_page_stack.cursor_max = pool_set->slot_page_stack.cursor_max + page_size;
+    if (pool_set->slot_page_stack.cursor_max > pool_set->slot_page_stack.end)
     {
         crash("Pool stack ran out of virtual address space.");
     }
     void*new_page_address = pool_set->slot_page_stack.cursor;
-    pool_set->slot_page_stack.cursor = (void*)pool_set->slot_page_stack.allocation_cursor;
+    pool_set->slot_page_stack.cursor = (void*)pool_set->slot_page_stack.cursor_max;
     return VirtualAlloc(new_page_address, page_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 }
 
@@ -121,6 +127,14 @@ void increment_reference_count(void*a)
         "increment_reference_count argument wasn't in a pool.\n");
     struct PoolSlot*slot = pool_slot_from_value(a);
     ++slot->reference_count;
+}
+
+void increment_reference_count_if_non_null(void*a)
+{
+    if (a)
+    {
+        increment_reference_count(a);
+    }
 }
 
 void pool_slot_free(struct PoolSet*pool_set, struct PoolSlot*a, size_t size)

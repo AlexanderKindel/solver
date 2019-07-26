@@ -1,49 +1,5 @@
 #include "declarations.h"
 
-void matrix_row_echelon_form(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
-    struct RationalPolynomial**augmentation)
-{
-    void*local_stack_savepoint = local_stack->cursor;
-    size_t small_dimension = min(a->width, a->height);
-    for (size_t i = 0; i < small_dimension; ++i)
-    {
-        for (size_t j = i + 1; j < a->height; ++j)
-        {
-            if (a->rows[i][i]->numerator->value_count == 0)
-            {
-                POINTER_SWAP(a->rows[i], a->rows[j]);
-                POINTER_SWAP(augmentation[i], augmentation[j]);
-            }
-            else
-            {
-                for (size_t k = i + 1; k < a->height; ++k)
-                {
-                    struct Rational*scalar =
-                        rational_divide(local_stack, output_stack, a->rows[k][i], a->rows[i][i]);
-                    for (size_t l = i; l < a->width; ++l)
-                    {
-                        a->rows[k][l] = rational_subtract(local_stack, output_stack, a->rows[k][l],
-                            rational_multiply(local_stack, output_stack, a->rows[i][l], scalar));
-                    }
-                    augmentation[k] =
-                        rational_polynomial_subtract(local_stack, output_stack, augmentation[k],
-                            rational_polynomial_rational_multiply(local_stack, output_stack,
-                                augmentation[i], scalar));
-                }
-                break;
-            }
-        }
-    }
-    for (size_t i = 0; i < a->height; ++i)
-    {
-        for (size_t j = 0; j < a->width; ++j)
-        {
-            a->rows[i][j] = rational_copy_to_stack(output_stack, a->rows[i][j]);
-        }
-    }
-    local_stack->cursor = local_stack_savepoint;
-}
-
 int8_t degree_compare(size_t a[2], size_t b[2])
 {
     for (size_t i = 0; i < 2; ++i)

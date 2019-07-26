@@ -14,12 +14,24 @@
 #define ASSERT(condition, message)
 #endif
 
+//With the exception of functions whose names begin with "leaking_", every function that dynamically
+//allocates memory that the caller is interested in has an output_stack parameter, and leaves the
+//memory on that Stack. All other Stack parameters - local_stack for functions that also have an
+//output_stack, or stack_a and stack_b for those that don't - are for internal use only, and have
+//any memory the function allocates on them freed again before the function returns. It's common for
+//a function implementation to not know whether a value it allocates is an output value until after
+//the fact, for example, in a while loop where the end condition depends on the value. In such
+//cases, the value is initially allocated on local_stack, then copied to output_stack. leaking_
+//functions exist to handle cases where, among the values allocated by the function body, different
+//callers are interested in different ones, and getting any of them onto output_stack would require
+//copying them. These functions do not reset local_stack, deferring the question of which values to
+//copy to the caller instead of doing it themselves.
 struct Stack
 {
     size_t start;
     size_t end;
     void*cursor;
-    size_t allocation_cursor;
+    size_t cursor_max;
 };
 
 struct PoolSlot
@@ -27,8 +39,8 @@ struct PoolSlot
     size_t reference_count;
     union
     {
-        struct PoolSlot*next;
-        size_t value[];
+        struct PoolSlot*next;//When on a free list, points to the next node of the list.
+        size_t value[];//When in use, the allocated value starts at the address of this array.
     };
 };
 
@@ -66,7 +78,6 @@ struct Factor
 
 struct RingOperations
 {
-    //Functions that all types that fill out this struct must implement.
     void*(*copy)(struct Stack*output_stack, void*a);
     bool(*equals)(void*a, void*b);
     void*additive_identity;
@@ -196,28 +207,39 @@ struct RectangularEstimate
     struct FloatInterval*imaginary_part_estimate;
 };
 
-struct SumFieldForm
+struct Term
 {
-    struct Number*generator;
-    struct RationalPolynomial*left_term_in_terms_of_generator;
-    struct RationalPolynomial*right_term_in_terms_of_generator;
+    struct Number*value;
+    struct RationalPolynomial*in_terms_of_generator;
+    struct Term*next;
+};
+
+struct TermIterator
+{
+    struct Number*sum;
+    struct Number*term;
+    union
+    {        
+        size_t term_index;//When sum->is_generator.
+        struct Term*term_parent;//When !sum->is_generator.
+    };
 };
 
 struct Number
 {
-    //Points to the next element of the doubly linked list representing the input during parsing.
-    //When on a free list during evaluation, points to the next element of the free list. While not
-    //on a free list during evaluation, points to the next element in a singly linked list
-    //consisting of the conjugates of the first element. If a Number is not part of a list of
-    //conjugates and doesn't have operation == 'r', next == 0 means the conjugates have not yet been
-    //calculated.
-    struct Number*next;
     union
     {
-        struct Number*previous;//During parsing, when the input is stored as a doubly linked list.
-        struct RationalPolynomial*minimal_polynomial;//During evaluation.
+        struct
+        {//During parsing, when the input is stored as a doubly linked list.
+            struct Number*previous;
+            struct Number*next;
+        };
+        struct
+        {//During evaluation.
+            struct RationalPolynomial*minimal_polynomial;
+            struct Number**conjugates;
+        };
     };
-    struct SumFieldForm*field_form;
     union
     {
         struct
@@ -228,8 +250,24 @@ struct Number
         };
         struct
         {//When operation != 'r'.
-            struct Number*left;
-            struct Number*right;
+            union
+            {               
+                struct
+                {//When operation == '^' || operation == '*'.
+                    struct Number*left;
+                    struct Number*right;
+                };
+                struct
+                {//When operation == '+'.
+                    struct Number*generator;
+                    struct Term*first_term;
+                };
+                struct
+                {//When operation == 'g'.
+                    size_t term_count;
+                    struct Number**terms;
+                };
+            };
             struct FloatInterval*real_part_estimate;
             struct FloatInterval*imaginary_part_estimate;
         };
@@ -246,9 +284,10 @@ typedef struct FloatInterval*(*float_estimate_getter)(struct PoolSet*, struct St
     struct Number*, struct Rational*);
 
 size_t next_page_boundary(size_t address);
-size_t next_aligned_address(size_t address, size_t alignment);
 void stack_initialize(struct Stack*out, size_t start, size_t end);
 void stack_free(struct Stack*out);
+void*array_start(struct Stack*output_stack, size_t alignment);
+void extend_array(struct Stack*output_stack, size_t element_size);
 void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t alignment);
 void pool_set_initialize(struct PoolSet*out, size_t start, size_t end);
 struct PoolSlotPage*pool_slot_page_allocate(struct PoolSet*pool_set);
@@ -256,9 +295,13 @@ struct Pool*get_pool(struct PoolSet*pool_set, size_t value_size);
 void*pool_value_allocate(struct PoolSet*pool_set, size_t size);
 struct PoolSlot*pool_slot_from_value(void*a);
 void increment_reference_count(void*a);
+void increment_reference_count_if_non_null(void*a);
 void pool_slot_free(struct PoolSet*pool_set, struct PoolSlot*a, size_t size);
 
 #define STACK_SLOT_ALLOCATE(stack, type) stack_slot_allocate(stack, sizeof(type), _Alignof(type))
+
+#define STACK_ARRAY_ALLOCATE(stack, element_count, type)\
+    stack_slot_allocate(stack, (element_count) * sizeof(type), _Alignof(type))
 
 __declspec(noreturn) void crash(char*message);
 void array_reverse(void**a, size_t element_count);
@@ -545,6 +588,7 @@ struct RationalPolynomial*rational_polynomial_copy_to_stack(struct Stack*output_
     struct RationalPolynomial*a);
 struct RationalPolynomial*rational_polynomial_copy_to_pool(struct PoolSet*pool_set,
     struct RationalPolynomial*a);
+void rational_polynomial_free(struct PoolSet*pool_set, struct RationalPolynomial*a);
 bool rational_polynomial_equals(struct RationalPolynomial*a, struct RationalPolynomial*b);
 struct RationalPolynomial*rational_polynomial_add(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a, struct RationalPolynomial*b);
@@ -636,8 +680,13 @@ size_t number_field_polynomial_factor(struct Stack*output_stack, struct Stack*lo
     struct NestedPolynomial*a, struct RationalPolynomial*generator_minimal_polynomial,
     struct NestedPolynomial**out);
 
-void matrix_row_echelon_form(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
-    struct RationalPolynomial**augmentation);
+void matrix_row_echelon_form(void*(augmentation_element_rational_multiply)(struct Stack*,
+    struct Stack*, void*, struct Rational*),
+    void*(augmentation_element_subtract)(struct Stack*, struct Stack*, void*, void*),
+    struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a, void**augmentation);
+void matrix_diagonalize(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
+    struct Rational**augmentation);
+
 struct AlgebraicNumber*pool_algebraic_number_allocate(struct Stack*output_stack,
     struct AlgebraicNumber*free_list);
 void algebraic_number_move_coefficients_to_stack(struct Stack*output_stack,
@@ -678,7 +727,7 @@ void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, st
     struct Float**out_max, struct Float*a, struct Rational*interval_size, struct Integer*index);
 struct Rational*float_to_rational(struct Stack*output_stack, struct Stack*local_stack,
     struct Float*a);
-void float_interval_free(struct PoolSet*pool_set, struct FloatInterval*a);
+void float_interval_free_if_non_null(struct PoolSet*pool_set, struct FloatInterval*a);
 void float_interval_move_value_to_pool(struct PoolSet*pool_set, struct FloatInterval*a);
 bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
     struct FloatInterval*a, struct FloatInterval*b);
@@ -689,13 +738,16 @@ void float_interval_to_rational_interval(struct Stack*output_stack, struct Stack
 
 struct Number*number_allocate(struct PoolSet*pool_set);
 void number_parse_node_free(struct PoolSet*pool_set, struct Number*a);
-void number_node_free(struct PoolSet*pool_set, struct Number*a);
 void number_free(struct PoolSet*pool_set, struct Number*a);
+struct Number*number_shallow_copy(struct PoolSet*pool_set, struct Number*a);
 struct RationalPolynomial*number_a_in_terms_of_b(struct PoolSet*pool_set, struct Stack*output_stack,
     struct Stack*local_stack, struct Number*a, struct Number*b);
 struct Number*number_evaluate(struct PoolSet*transient_pool_set, struct Stack*stack_a,
     struct Stack*stack_b, struct Number*a);
 size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*number);
+void term_iterator_initialize(struct TermIterator*out, struct Number*a);
+void term_iterator_increment(struct TermIterator*a);
+void term_free(struct PoolSet*pool_set, struct Term*a);
 
 struct Number*number_add(struct PoolSet*pool_set, struct Stack*stack_a, struct Stack*stack_b,
     struct Number*a, struct Number*b);

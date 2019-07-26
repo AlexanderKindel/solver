@@ -430,7 +430,7 @@ void estimate_atan2(struct Stack*output_stack, struct Stack*local_stack,
 
 //Leaves garbage allocations on local_stack along with the final values of estimate_denominator and
 //estimate_remainder. The values of out_min and out_max go on output_stack.
-void rational_continue_float_estimate(struct Stack*output_stack, struct Stack*local_stack,
+void leaking_rational_continue_float_estimate(struct Stack*output_stack, struct Stack*local_stack,
     struct Float**out_min, struct Float**out_max, struct Integer**estimate_denominator,
     struct Integer**estimate_remainder, struct Rational*a, struct Rational*interval_size)
 {
@@ -480,7 +480,7 @@ void rational_float_estimate(struct Stack*output_stack, struct Stack*local_stack
         *out_max = STACK_SLOT_ALLOCATE(local_stack, struct Float);
         (*out_max)->significand = division.quotient;
         (*out_max)->exponent = &zero;
-        rational_continue_float_estimate(output_stack, local_stack, out_max, out_min,
+        leaking_rational_continue_float_estimate(output_stack, local_stack, out_max, out_min,
             &estimate_denominator, &estimate_remainder, rational_negative(local_stack, a),
             interval_size);
         (*out_min)->significand->sign = -1;
@@ -491,7 +491,7 @@ void rational_float_estimate(struct Stack*output_stack, struct Stack*local_stack
         *out_min = STACK_SLOT_ALLOCATE(local_stack, struct Float);
         (*out_min)->significand = division.quotient;
         (*out_min)->exponent = &zero;
-        rational_continue_float_estimate(output_stack, local_stack, out_min, out_max,
+        leaking_rational_continue_float_estimate(output_stack, local_stack, out_min, out_max,
             &estimate_denominator, &estimate_remainder, a, interval_size);
     }
     local_stack->cursor = local_stack_savepoint;
