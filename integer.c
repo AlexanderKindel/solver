@@ -5,76 +5,21 @@ size_t integer_size(size_t value_count)
     return sizeof(struct Integer) + value_count * sizeof(uint32_t);
 }
 
-struct Integer*stack_integer_allocate(struct Stack*output_stack, size_t value_count)
+struct Integer*integer_allocate(struct Stack*output_stack, size_t value_count)
 {
     return stack_slot_allocate(output_stack, integer_size(value_count), _Alignof(struct Integer));
 }
 
-struct Integer*pool_integer_allocate(struct PoolSet*pool_set, size_t value_count)
+struct Integer*integer_copy(struct Stack*output_stack, struct Integer*a)
 {
-    if (value_count)
-    {
-        return pool_value_allocate(pool_set, integer_size(value_count));
-    }
-    else
-    {
-        return &zero;
-    }
-}
-
-void integer_free(struct PoolSet*pool_set, struct Integer*a)
-{
-    if (a->value_count)
-    {
-        struct PoolSlot*slot = pool_slot_from_value(a);
-        --slot->reference_count;
-        if (!slot->reference_count)
-        {
-            pool_slot_free(pool_set, slot, integer_size(a->value_count));
-        }
-    }
-}
-
-struct Integer*integer_copy_to_stack(struct Stack*output_stack, struct Integer*a)
-{
-    struct Integer*copy = stack_integer_allocate(output_stack, a->value_count);
+    struct Integer*copy = integer_allocate(output_stack, a->value_count);
     memcpy(copy, a, integer_size(a->value_count));
     return copy;
 }
 
-struct Integer*integer_copy_to_pool(struct PoolSet*pool_set, struct Integer*a)
+struct Integer*integer_initialize(struct Stack*stack, uint32_t value, int8_t sign)
 {
-    struct Integer*out = pool_integer_allocate(pool_set, a->value_count);
-    memcpy(out, a, integer_size(a->value_count));
-    return out;
-}
-
-void integer_move_to_pool(struct PoolSet*pool_set, struct Integer**a)
-{
-    *a = integer_copy_to_pool(pool_set, *a);
-}
-
-void integer_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack, struct Integer**a)
-{
-    ASSERT(pool_memory_start <= (size_t)*a && (size_t)*a <= pool_memory_end,
-        "integer_move_from_pool argument wasn't in a pool.\n");
-    struct Integer*pool_copy = *a;
-    *a = integer_copy_to_stack(output_stack, *a);
-    integer_free(pool_set, pool_copy);
-}
-
-struct Integer*stack_integer_initialize(struct Stack*stack, uint32_t value, int8_t sign)
-{
-    struct Integer*out = stack_integer_allocate(stack, 1);
-    out->value_count = 1;
-    out->sign = sign;
-    out->value[0] = value;
-    return out;
-}
-
-struct Integer*pool_integer_initialize(struct PoolSet*pool_set, uint32_t value, int8_t sign)
-{
-    struct Integer*out = pool_integer_allocate(pool_set, 1);
+    struct Integer*out = integer_allocate(stack, 1);
     out->value_count = 1;
     out->sign = sign;
     out->value[0] = value;
@@ -86,7 +31,7 @@ struct Integer*integer_from_char(struct Stack*output_stack, char value)
     uint32_t uint_value = value - '0';
     if (uint_value)
     {
-        struct Integer*out = stack_integer_allocate(output_stack, 1);
+        struct Integer*out = integer_allocate(output_stack, 1);
         out->value_count = 1;
         out->sign = 1;
         out->value[0] = uint_value;
@@ -115,7 +60,7 @@ void integer_trim_leading_zeroes(struct Integer*a)
 struct Integer*integer_from_size_t(struct Stack*output_stack, size_t value)
 {
     size_t value_count = sizeof(size_t) / sizeof(uint32_t);
-    struct Integer*out = stack_integer_allocate(output_stack, value_count);
+    struct Integer*out = integer_allocate(output_stack, value_count);
     out->value_count = value_count;
     *(size_t*)&out->value = value;
     integer_trim_leading_zeroes(out);
@@ -164,7 +109,7 @@ bool integer_equals_zero(struct Integer*a)
 
 struct Integer*integer_magnitude(void*output_arena, struct Integer*a)
 {
-    struct Integer*out = integer_copy_to_stack(output_arena, a);
+    struct Integer*out = integer_copy(output_arena, a);
     if (out->sign < 0)
     {
         out->sign = 1;
@@ -215,8 +160,6 @@ void twos_complement(struct Integer*a)
 //increase to max(a->value_count, b->value_count) + 1.
 void integer_add_to_a_in_place(struct Integer*a, struct Integer*b)
 {
-    ASSERT((size_t)a < pool_memory_start || pool_memory_end <= (size_t)a,
-        "The a argument of integer_add_to_a_in_place was in a pool.\n");
     if (b->sign == 0)
     {
         return;
@@ -257,7 +200,7 @@ void integer_add_to_a_in_place(struct Integer*a, struct Integer*b)
 
 struct Integer*integer_add(struct Stack*output_stack, struct Integer*a, struct Integer*b)
 {
-    struct Integer*out = integer_copy_to_stack(output_stack, a);
+    struct Integer*out = integer_copy(output_stack, a);
     stack_slot_allocate(output_stack, (b->value_count + 1) * sizeof(uint32_t),
         _Alignof(struct Integer));
     integer_add_to_a_in_place(out, b);
@@ -267,7 +210,7 @@ struct Integer*integer_add(struct Stack*output_stack, struct Integer*a, struct I
 
 struct Integer*integer_negative(struct Stack*output_stack, struct Integer*a)
 {
-    struct Integer*out = integer_copy_to_stack(output_stack, a);
+    struct Integer*out = integer_copy(output_stack, a);
     out->sign = -out->sign;
     return out;
 }
@@ -286,7 +229,7 @@ struct Integer*integer_multiply(struct Stack*output_stack, struct Stack*local_st
     struct Integer*a, struct Integer*b)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct Integer*out = stack_integer_allocate(output_stack, a->value_count + b->value_count);
+    struct Integer*out = integer_allocate(output_stack, a->value_count + b->value_count);
     out->value_count = 0;
     out->sign = 0;
     for (int i = 0; i < a->value_count; ++i)
@@ -295,7 +238,7 @@ struct Integer*integer_multiply(struct Stack*output_stack, struct Stack*local_st
         {
             uint64_t product_component = (uint64_t)a->value[i] * b->value[j];
             size_t shift = i + j;
-            struct Integer*integer_component = stack_integer_allocate(local_stack, shift + 2);
+            struct Integer*integer_component = integer_allocate(local_stack, shift + 2);
             integer_component->value_count = shift;
             integer_component->sign = 0;
             memset(&integer_component->value, 0, shift * sizeof(uint32_t));
@@ -391,7 +334,7 @@ void integer_euclidean_divide(struct Stack*output_stack, struct Stack*local_stac
         {
             quotient_digit = 1;
         }
-        out->quotient = stack_integer_allocate(output_stack, dividend->value_count);
+        out->quotient = integer_allocate(output_stack, dividend->value_count);
         out->quotient->value_count = dividend->value_count;
         out->quotient->sign = dividend->sign * divisor->sign;
         memset(&out->quotient->value, 0, out->quotient->value_count * sizeof(uint32_t));
@@ -426,7 +369,7 @@ void integer_euclidean_divide(struct Stack*output_stack, struct Stack*local_stac
         break_both_loops:
         integer_trim_leading_zeroes(out->quotient);
         output_stack->cursor = &out->quotient->value[out->quotient->value_count];
-        out->remainder = integer_copy_to_stack(output_stack, out->remainder);
+        out->remainder = integer_copy(output_stack, out->remainder);
         if (out->remainder->sign != 0)
         {
             out->remainder->sign = dividend->sign;
@@ -436,7 +379,7 @@ void integer_euclidean_divide(struct Stack*output_stack, struct Stack*local_stac
     else
     {
         out->quotient = &zero;
-        out->remainder = integer_copy_to_stack(output_stack, dividend);
+        out->remainder = integer_copy(output_stack, dividend);
     }
 }
 
@@ -461,13 +404,13 @@ struct Integer*integer_doubled(struct Stack*output_stack, struct Integer*a)
     struct Integer*out;
     if (a->value[a->value_count - 1] & 0x80000000)
     {
-        out = stack_integer_allocate(output_stack, a->value_count + 1);
+        out = integer_allocate(output_stack, a->value_count + 1);
         out->value_count = a->value_count + 1;
         out->value[a->value_count] = 0;
     }
     else
     {
-        out = stack_integer_allocate(output_stack, a->value_count);
+        out = integer_allocate(output_stack, a->value_count);
         out->value_count = a->value_count;
     }
     out->sign = a->sign;
@@ -478,15 +421,13 @@ struct Integer*integer_doubled(struct Stack*output_stack, struct Integer*a)
 
 void integer_halve(struct Integer*a)
 {
-    ASSERT((size_t)a < pool_memory_start || pool_memory_end <= (size_t)a,
-        "integer_halve was called on a pool Integer.\n");
     integer_downshift(a, 1);
     integer_trim_leading_zeroes(a);
 }
 
 struct Integer*integer_half(struct Stack*output_stack, struct Integer*a)
 {
-    struct Integer*out = integer_copy_to_stack(output_stack, a);
+    struct Integer*out = integer_copy(output_stack, a);
     integer_halve(out);
     return out;
 }
@@ -568,7 +509,7 @@ struct Integer*integer_square_root(struct Stack*output_stack, struct Stack*local
     struct Integer*out;
     if (integer_equals(rational_square_root->denominator, &one))
     {
-        out = integer_copy_to_stack(output_stack, rational_square_root->numerator);
+        out = integer_copy(output_stack, rational_square_root->numerator);
     }
     else
     {
@@ -602,7 +543,7 @@ struct Integer*get_prime(struct Stack*stack_a, struct Stack*stack_b, size_t inde
             if (potential_factor_index == index)
             {
                 stack_a->cursor = stack_a_savepoint;
-                primes[index] = integer_copy_to_stack(&permanent_stack, primes[index]);
+                primes[index] = integer_copy(&permanent_stack, primes[index]);
                 return primes[index];
             }
         }
@@ -613,7 +554,7 @@ struct Integer*get_prime(struct Stack*stack_a, struct Stack*stack_b, size_t inde
 size_t size_t_factor(struct Stack*output_stack, struct Stack*local_stack, size_t**out, size_t a)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    *out = STACK_SLOT_ALLOCATE(output_stack, size_t);
+    *out = ALLOCATE(output_stack, size_t);
     size_t factor_count = 0;
     size_t prime_index = 0;
     size_t prime = 2;
@@ -625,7 +566,7 @@ size_t size_t_factor(struct Stack*output_stack, struct Stack*local_stack, size_t
         {
             (*out)[factor_count] = prime;
             factor_count += 1;
-            STACK_SLOT_ALLOCATE(output_stack, size_t);
+            ALLOCATE(output_stack, size_t);
             do
             {
                 a = a / prime;
@@ -650,7 +591,7 @@ size_t integer_factor(struct Stack*output_stack, struct Stack*local_stack, struc
     struct Integer*a)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    *out = STACK_SLOT_ALLOCATE(output_stack, struct Factor);
+    *out = array_start(output_stack, _Alignof(struct Factor));
     size_t factor_count = 0;
     size_t prime_index = 0;
     struct Integer*prime = primes[0];
@@ -661,11 +602,11 @@ size_t integer_factor(struct Stack*output_stack, struct Stack*local_stack, struc
         integer_euclidean_divide(local_stack, output_stack, &division, a, prime);
         if (division.remainder->value_count == 0)
         {
+            extend_array(output_stack, sizeof(struct Factor));
             struct Factor*factor = *out + factor_count;
             factor->value = prime;
             factor->multiplicity = &zero;
             factor_count += 1;
-            STACK_SLOT_ALLOCATE(output_stack, struct Factor);
             do
             {
                 factor->multiplicity = integer_add(local_stack, factor->multiplicity, &one);
@@ -678,18 +619,15 @@ size_t integer_factor(struct Stack*output_stack, struct Stack*local_stack, struc
     }
     if (!integer_equals(a, &one))
     {
+        extend_array(output_stack, sizeof(struct Factor));
         (*out)[factor_count].value = a;
         (*out)[factor_count].multiplicity = &one;
         factor_count += 1;
     }
-    else
-    {
-        output_stack->cursor = *out + factor_count;
-    }
     for (size_t i = 0; i < factor_count; ++i)
     {
-        (*out)[i].value = integer_copy_to_stack(output_stack, (*out)[i].value);
-        (*out)[i].multiplicity = integer_copy_to_stack(output_stack, (*out)[i].multiplicity);
+        (*out)[i].value = integer_copy(output_stack, (*out)[i].value);
+        (*out)[i].multiplicity = integer_copy(output_stack, (*out)[i].multiplicity);
     }
     local_stack->cursor = local_stack_savepoint;
     return factor_count;
@@ -699,7 +637,7 @@ size_t integer_string(struct Stack*output_stack, struct Stack*local_stack, struc
 {
     if (a->sign == 0)
     {
-        *(char*)STACK_SLOT_ALLOCATE(output_stack, char) = '0';
+        *(char*)ALLOCATE(output_stack, char) = '0';
         return 1;
     }
     void*local_stack_savepoint = local_stack->cursor;

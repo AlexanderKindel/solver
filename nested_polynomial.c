@@ -2,7 +2,7 @@
 
 struct NestedPolynomial*nested_polynomial_copy(struct Stack*output_stack, struct NestedPolynomial*a)
 {
-    return polynomial_copy(rational_polynomial_copy_to_stack, output_stack, (struct Polynomial*)a);
+    return polynomial_copy(rational_polynomial_copy, output_stack, (struct Polynomial*)a);
 }
 
 bool nested_polynomial_equals(struct NestedPolynomial*a, struct NestedPolynomial*b)

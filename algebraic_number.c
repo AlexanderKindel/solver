@@ -25,7 +25,7 @@ struct AlgebraicNumber*pool_algebraic_number_allocate(struct Stack*output_stack,
         free_list = free_list->next_term;
         return out;
     }
-    return STACK_SLOT_ALLOCATE(output_stack, struct AlgebraicNumber);
+    return ALLOCATE(output_stack, struct AlgebraicNumber);
 }
 
 void algebraic_number_move_coefficients_to_stack(struct Stack*output_stack,
@@ -33,7 +33,7 @@ void algebraic_number_move_coefficients_to_stack(struct Stack*output_stack,
 {
     while (a)
     {
-        rational_copy_to_stack(output_stack, a->term_coefficient);
+        a->term_coefficient = rational_copy(output_stack, a->term_coefficient);
         a = a->next_term;
     }
 }
@@ -112,7 +112,7 @@ struct AlgebraicNumber*algebraic_number_add(struct Stack*output_stack,
     struct Stack*local_stack, struct AlgebraicNumber*a, struct AlgebraicNumber*b)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct AlgebraicNumber*out = STACK_SLOT_ALLOCATE(output_stack, struct AlgebraicNumber);
+    struct AlgebraicNumber*out = ALLOCATE(output_stack, struct AlgebraicNumber);
     struct AlgebraicNumber*out_term = out;
     out_term->next_term = out_term;
     while (a)
@@ -120,7 +120,7 @@ struct AlgebraicNumber*algebraic_number_add(struct Stack*output_stack,
         out_term = out_term->next_term;
         memcpy(out_term, a, sizeof(struct AlgebraicNumber));
         a = a->next_term;
-        out_term->next_term = STACK_SLOT_ALLOCATE(output_stack, struct AlgebraicNumber);
+        out_term->next_term = ALLOCATE(output_stack, struct AlgebraicNumber);
     }
     output_stack->cursor = out_term->next_term;
     out_term->next_term = 0;    
@@ -145,7 +145,7 @@ struct AlgebraicNumber*algebraic_number_multiply(struct Stack*output_stack,
             if (coefficient->numerator->value_count)
             {
                 struct AlgebraicNumber*product_component =
-                    STACK_SLOT_ALLOCATE(local_stack, struct AlgebraicNumber);
+                    ALLOCATE(local_stack, struct AlgebraicNumber);
                 memset(product_component, 0, sizeof(struct AlgebraicNumber));
                 product_component->term_coefficient = coefficient;
                 for (size_t i = 0; i < 2; ++i)
@@ -167,7 +167,7 @@ struct AlgebraicNumber*algebraic_number_multiply(struct Stack*output_stack,
                         size_t reduced_degree = component_generator_degree -
                             generator_annulling_polynomials[i]->coefficient_count + 1;
                         struct AlgebraicNumber*component_factor =
-                            STACK_SLOT_ALLOCATE(local_stack, struct AlgebraicNumber);
+                            ALLOCATE(local_stack, struct AlgebraicNumber);
                         struct AlgebraicNumber*component_factor_term = component_factor;
                         component_factor_term->next_term = component_factor_term;
                         for (size_t j = 0;
@@ -182,7 +182,7 @@ struct AlgebraicNumber*algebraic_number_multiply(struct Stack*output_stack,
                                 component_factor_term->term_coefficient =
                                     rational_negative(local_stack, coefficient);
                                 component_factor_term->next_term =
-                                    STACK_SLOT_ALLOCATE(local_stack, struct AlgebraicNumber);
+                                    ALLOCATE(local_stack, struct AlgebraicNumber);
                             }
                         }
                         component_factor_term->next_term = 0;

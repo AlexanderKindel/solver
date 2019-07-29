@@ -1,34 +1,9 @@
 #include "declarations.h"
 
-struct RationalPolynomial*rational_polynomial_copy_to_stack(struct Stack*output_stack,
+struct RationalPolynomial*rational_polynomial_copy(struct Stack*output_stack,
     struct RationalPolynomial*a)
 {
-    return polynomial_copy(rational_copy_to_stack, output_stack, (struct Polynomial*)a);
-}
-
-struct RationalPolynomial*rational_polynomial_copy_to_pool(struct PoolSet*pool_set,
-    struct RationalPolynomial*a)
-{
-    struct RationalPolynomial*out = pool_polynomial_allocate(pool_set, a->coefficient_count);
-    for (size_t i = 0; i < a->coefficient_count; ++i)
-    {
-        out->coefficients[i] = rational_copy_to_pool(pool_set, a->coefficients[i]);
-    }
-    return out;
-}
-
-void rational_polynomial_free(struct PoolSet*pool_set, struct RationalPolynomial*a)
-{
-    struct PoolSlot*slot = pool_slot_from_value(a);
-    --slot->reference_count;
-    if (!slot->reference_count)
-    {
-        for (size_t i = 0; i < a->coefficient_count; ++i)
-        {
-            rational_free(pool_set, a->coefficients[i]);
-        }
-        pool_slot_free(pool_set, slot, polynomial_size(a->coefficient_count));
-    }
+    return polynomial_copy(rational_copy, output_stack, (struct Polynomial*)a);
 }
 
 bool rational_polynomial_equals(struct RationalPolynomial*a, struct RationalPolynomial*b)
@@ -120,7 +95,7 @@ struct IntegerPolynomial*rational_polynomial_to_integer_polynomial(struct Stack*
     struct Stack*local_stack, struct RationalPolynomial*a, struct Integer*multiple)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct IntegerPolynomial*out = stack_polynomial_allocate(local_stack, a->coefficient_count);
+    struct IntegerPolynomial*out = polynomial_allocate(local_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
         out->coefficients[i] = integer_multiply(local_stack, output_stack,
@@ -156,17 +131,16 @@ void rational_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*lo
     integer_polynomial_extended_gcd(local_stack, output_stack, &info,
         integer_polynomial_integer_divide(local_stack, output_stack, integer_a, content),
         integer_polynomial_integer_divide(local_stack, output_stack, integer_b, content));
-    out->a_coefficient =
-        stack_polynomial_allocate(output_stack, info.a_coefficient->coefficient_count);
+    out->a_coefficient = polynomial_allocate(output_stack, info.a_coefficient->coefficient_count);
     for (size_t i = 0; i < info.a_coefficient->coefficient_count; ++i)
     {
-        out->a_coefficient->coefficients[i] = STACK_SLOT_ALLOCATE(output_stack, struct Rational);
+        out->a_coefficient->coefficients[i] = ALLOCATE(output_stack, struct Rational);
         ((struct Rational*)out->a_coefficient->coefficients[i])->numerator =
-            integer_copy_to_stack(output_stack, info.a_coefficient->coefficients[i]);
+            integer_copy(output_stack, info.a_coefficient->coefficients[i]);
         ((struct Rational*)out->a_coefficient->coefficients[i])->denominator =
-            stack_integer_initialize(output_stack, 1, 1);
+            integer_initialize(output_stack, 1, 1);
     }
-    out->gcd = stack_polynomial_allocate(output_stack, info.gcd->coefficient_count);
+    out->gcd = polynomial_allocate(output_stack, info.gcd->coefficient_count);
     for (size_t i = 0; i < info.gcd->coefficient_count; ++i)
     {
         out->gcd->coefficients[i] = rational_reduced(output_stack, local_stack,
@@ -221,12 +195,11 @@ struct IntegerPolynomial*rational_polynomial_primitive_part(struct Stack*output_
 struct NestedPolynomial*rational_polynomial_to_nested_polynomial(struct Stack*output_stack,
     struct RationalPolynomial*a)
 {
-    struct NestedPolynomial*out = stack_polynomial_allocate(output_stack, a->coefficient_count);
+    struct NestedPolynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
-        out->coefficients[i] = stack_polynomial_allocate(output_stack, 0);
-        out->coefficients[i]->coefficients[0] =
-            rational_copy_to_stack(output_stack, a->coefficients[i]);
+        out->coefficients[i] = polynomial_allocate(output_stack, 0);
+        out->coefficients[i]->coefficients[0] = rational_copy(output_stack, a->coefficients[i]);
     }
     return out;
 }

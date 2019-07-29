@@ -1,53 +1,11 @@
 #include "declarations.h"
 
-void float_free(struct PoolSet*pool_set, struct Float*a)
+struct Float*float_copy(struct Stack*output_stack, struct Float*a)
 {
-    struct PoolSlot*slot = pool_slot_from_value(a);
-    --slot->reference_count;
-    if (!slot->reference_count)
-    {
-        integer_free(pool_set, a->significand);
-        integer_free(pool_set, a->exponent);
-        pool_slot_free(pool_set, slot, sizeof(struct Float));
-    }
-}
-
-struct Float*float_copy_to_stack(struct Stack*output_stack, struct Float*a)
-{
-    struct Float*out = STACK_SLOT_ALLOCATE(output_stack, struct Float);
-    out->significand = integer_copy_to_stack(output_stack, a->significand);
-    out->exponent = integer_copy_to_stack(output_stack, a->exponent);
+    struct Float*out = ALLOCATE(output_stack, struct Float);
+    out->significand = integer_copy(output_stack, a->significand);
+    out->exponent = integer_copy(output_stack, a->exponent);
     return out;
-}
-
-void float_copy_to_pool(struct PoolSet*pool_set, struct Float*a)
-{
-    a->significand = integer_copy_to_pool(pool_set, a->significand);
-    a->exponent = integer_copy_to_pool(pool_set, a->exponent);
-}
-
-void float_move_to_pool(struct PoolSet*pool_set, struct Float**a)
-{
-    struct Float*pool_copy = pool_value_allocate(pool_set, sizeof(struct Float));
-    pool_copy->significand = integer_copy_to_pool(pool_set, (*a)->significand);
-    pool_copy->exponent = integer_copy_to_pool(pool_set, (*a)->exponent);
-    *a = pool_copy;
-}
-
-void float_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack, struct Float**a)
-{
-    ASSERT(pool_memory_start <= (size_t)*a && (size_t)*a <= pool_memory_end,
-        "float_move_from_pool argument wasn't in a pool.\n");
-    struct Float*pool_copy = *a;
-    *a = STACK_SLOT_ALLOCATE(output_stack, struct Float);
-    integer_move_from_pool(pool_set, output_stack, &(*a)->significand);
-    integer_move_from_pool(pool_set, output_stack, &(*a)->exponent);
-    struct PoolSlot*slot = pool_slot_from_value(a);
-    --slot->reference_count;
-    if (!slot->reference_count)
-    {
-        pool_slot_free(pool_set, slot, sizeof(struct Float));
-    }
 }
 
 struct Float*float_reduced(struct Stack*output_stack, struct Stack*local_stack,
@@ -59,9 +17,9 @@ struct Float*float_reduced(struct Stack*output_stack, struct Stack*local_stack,
         significand = integer_half(local_stack, significand);
         exponent = integer_add(local_stack, exponent, &one);
     }
-    struct Float*out = STACK_SLOT_ALLOCATE(output_stack, struct Float);
-    out->significand = integer_copy_to_stack(output_stack, significand);
-    out->exponent = integer_copy_to_stack(output_stack, exponent);
+    struct Float*out = ALLOCATE(output_stack, struct Float);
+    out->significand = integer_copy(output_stack, significand);
+    out->exponent = integer_copy(output_stack, exponent);
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
@@ -74,9 +32,9 @@ bool float_equals(struct Float*a, struct Float*b)
 
 struct Float*float_magnitude(struct Stack*output_stack, struct Float*a)
 {
-    struct Float*out = STACK_SLOT_ALLOCATE(output_stack, struct Float);
+    struct Float*out = ALLOCATE(output_stack, struct Float);
     out->significand = integer_magnitude(output_stack, a->significand);
-    out->exponent = integer_copy_to_stack(output_stack, a->exponent);
+    out->exponent = integer_copy(output_stack, a->exponent);
     return out;
 }
 
@@ -89,12 +47,12 @@ struct Float*float_add(struct Stack*output_stack, struct Stack*local_stack, stru
     struct Float*out;
     if (exponent_difference->sign > 0)
     {
-        out = STACK_SLOT_ALLOCATE(output_stack, struct Float);
+        out = ALLOCATE(output_stack, struct Float);
         out->significand = integer_add(output_stack, b->significand,
             integer_multiply(local_stack, output_stack, a->significand,
                 integer_exponentiate(local_stack, output_stack, &INT(2, +),
                     exponent_difference)));
-        out->exponent = integer_copy_to_stack(output_stack, b->exponent);
+        out->exponent = integer_copy(output_stack, b->exponent);
     }
     else if (exponent_difference->sign < 0)
     {
@@ -117,9 +75,9 @@ struct Float*float_generic_add(struct Stack*output_stack, struct Stack*local_sta
 
 struct Float*float_negative(struct Stack*output_stack, struct Float*a)
 {
-    struct Float*out = STACK_SLOT_ALLOCATE(output_stack, struct Float);
+    struct Float*out = ALLOCATE(output_stack, struct Float);
     out->significand = integer_negative(output_stack, a->significand);
-    out->exponent = integer_copy_to_stack(output_stack, a->exponent);
+    out->exponent = integer_copy(output_stack, a->exponent);
     return out;
 }
 
@@ -133,7 +91,7 @@ struct Float*float_subtract(struct Stack*output_stack, struct Stack*local_stack,
     struct Float*minuend, struct Float*subtrahend)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct Float*out = STACK_SLOT_ALLOCATE(output_stack, struct Float);
+    struct Float*out = ALLOCATE(output_stack, struct Float);
     out = float_add(output_stack, local_stack, minuend, float_negative(local_stack, subtrahend));
     local_stack->cursor = local_stack_savepoint;
     return out;
@@ -194,7 +152,7 @@ void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, st
     }
     else
     {
-        *out_max = float_copy_to_stack(local_stack, a);
+        *out_max = float_copy(local_stack, a);
     }
     struct Rational*rational_radicand = float_to_rational(local_stack, output_stack, a);
     struct Integer*index_minus_one = integer_add(local_stack, index, &INT(1, -));
@@ -206,19 +164,17 @@ void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, st
                     float_to_rational(local_stack, output_stack,
                         float_exponentiate(local_stack, output_stack, *out_max, index_minus_one))),
                 float_to_rational(local_stack, output_stack, *out_max)), index);
-        struct Float*delta_float_estimate_min;
-        struct Float*delta_float_estimate_max;
-        rational_float_estimate(local_stack, output_stack, &delta_float_estimate_min,
-            &delta_float_estimate_max, delta,
+        struct FloatInterval delta_float_estimate;
+        rational_float_estimate(local_stack, output_stack, &delta_float_estimate, delta,
             rational_integer_divide(local_stack, output_stack, delta, &INT(2, -)));
-        *out_max = float_add(local_stack, output_stack, *out_max, delta_float_estimate_max);
+        *out_max = float_add(local_stack, output_stack, *out_max, delta_float_estimate.max);
         if (rational_compare(output_stack, local_stack,
             rational_subtract(local_stack, output_stack,
-                float_to_rational(local_stack, output_stack, delta_float_estimate_max),
+                float_to_rational(local_stack, output_stack, delta_float_estimate.max),
                 rational_doubled(local_stack, output_stack, delta)), interval_size) <= 0)
         {
-            *out_min = float_add(output_stack, local_stack, *out_max, delta_float_estimate_max);
-            *out_max = float_copy_to_stack(output_stack, *out_max);
+            *out_min = float_add(output_stack, local_stack, *out_max, delta_float_estimate.max);
+            *out_max = float_copy(output_stack, *out_max);
             local_stack->cursor = local_stack_savepoint;
             return;
         }
@@ -229,10 +185,10 @@ struct Rational*float_to_rational(struct Stack*output_stack, struct Stack*local_
     struct Float*a)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct Rational*out = STACK_SLOT_ALLOCATE(output_stack, struct Rational);
+    struct Rational*out = ALLOCATE(output_stack, struct Rational);
     if (a->exponent->sign < 0)
     {
-        out->numerator = integer_copy_to_stack(output_stack, a->significand);
+        out->numerator = integer_copy(output_stack, a->significand);
         out->denominator = integer_exponentiate(output_stack, local_stack, &INT(2, +),
             integer_magnitude(local_stack, a->exponent));
     }
@@ -245,27 +201,6 @@ struct Rational*float_to_rational(struct Stack*output_stack, struct Stack*local_
     }
     local_stack->cursor = local_stack_savepoint;
     return out;
-}
-
-void float_interval_free_if_non_null(struct PoolSet*pool_set, struct FloatInterval*a)
-{
-    if (a)
-    {
-        struct PoolSlot*slot = pool_slot_from_value(a);
-        --slot->reference_count;
-        if (!slot->reference_count)
-        {
-            float_free(pool_set, a->min);
-            float_free(pool_set, a->max);
-            pool_slot_free(pool_set, slot, sizeof(struct FloatInterval));
-        }
-    }
-}
-
-void float_interval_move_value_to_pool(struct PoolSet*pool_set, struct FloatInterval*a)
-{
-    float_move_to_pool(pool_set, &a->min);
-    float_move_to_pool(pool_set, &a->max);
 }
 
 bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
@@ -296,8 +231,8 @@ void float_interval_multiply(struct Stack*output_stack, struct Stack*local_stack
             out->max = bound_candidates[i];
         }
     }
-    out->min = float_copy_to_stack(output_stack, out->min);
-    out->max = float_copy_to_stack(output_stack, out->max);
+    out->min = float_copy(output_stack, out->min);
+    out->max = float_copy(output_stack, out->max);
     local_stack->cursor = local_stack_savepoint;
 }
 

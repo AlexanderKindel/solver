@@ -50,7 +50,7 @@ void matrix_row_echelon_form(void*(augmentation_element_rational_multiply)(struc
     {
         for (size_t j = 0; j < a->width; ++j)
         {
-            a->rows[i][j] = rational_copy_to_stack(output_stack, a->rows[i][j]);
+            a->rows[i][j] = rational_copy(output_stack, a->rows[i][j]);
         }
     }
     local_stack->cursor = local_stack_savepoint;

@@ -34,35 +34,6 @@ struct Stack
     size_t cursor_max;
 };
 
-struct PoolSlot
-{
-    size_t reference_count;
-    union
-    {
-        struct PoolSlot*next;//When on a free list, points to the next node of the list.
-        size_t value[];//When in use, the allocated value starts at the address of this array.
-    };
-};
-
-struct PoolSlotPage
-{
-    struct PoolSlotPage*next;
-    struct PoolSlot first_slot;
-};
-
-struct Pool
-{
-    struct PoolSlotPage*first_page;
-    struct PoolSlot*cursor;
-    struct PoolSlot*free_list;
-};
-
-struct PoolSet
-{
-    struct Pool*pool_page;
-    struct Stack slot_page_stack;
-};
-
 struct Integer
 {
     size_t value_count;
@@ -207,24 +178,6 @@ struct RectangularEstimate
     struct FloatInterval*imaginary_part_estimate;
 };
 
-struct Term
-{
-    struct Number*value;
-    struct RationalPolynomial*in_terms_of_generator;
-    struct Term*next;
-};
-
-struct TermIterator
-{
-    struct Number*sum;
-    struct Number*term;
-    union
-    {        
-        size_t term_index;//When sum->is_generator.
-        struct Term*term_parent;//When !sum->is_generator.
-    };
-};
-
 struct Number
 {
     union
@@ -235,72 +188,43 @@ struct Number
             struct Number*next;
         };
         struct
-        {//During evaluation.
-            struct RationalPolynomial*minimal_polynomial;
-            struct Number**conjugates;
+        {//When operation == '+' || operation == 'g'.
+            size_t term_count;
+            struct Number**terms;
         };
     };
     union
     {
+        struct Rational value;//When operation == 'r'.            
         struct
-        {//When operation == 'r'.
-            struct Rational value;
-            struct Integer*magnitude_estimate_denominator;
-            struct Integer*magnitude_estimate_remainder;
+        {//When operation == '^' || operation == '*'.
+            struct Number*left;
+            struct Number*right;
         };
         struct
-        {//When operation != 'r'.
-            union
-            {               
-                struct
-                {//When operation == '^' || operation == '*'.
-                    struct Number*left;
-                    struct Number*right;
-                };
-                struct
-                {//When operation == '+'.
-                    struct Number*generator;
-                    struct Term*first_term;
-                };
-                struct
-                {//When operation == 'g'.
-                    size_t term_count;
-                    struct Number**terms;
-                };
-            };
-            struct FloatInterval*real_part_estimate;
-            struct FloatInterval*imaginary_part_estimate;
+        {//When operation == '+'.
+            struct Number*generator;
+            struct RationalPolynomial**terms_in_terms_of_generator;
         };
     };
-    struct FloatInterval*argument_estimate;
-    struct FloatInterval*magnitude_estimate;
     char operation;
 };
 
-typedef void(*rational_estimate_getter)(struct PoolSet*, struct Stack*, struct Stack*,
-    struct RationalInterval*, struct Number*, struct Rational*);
-
-typedef struct FloatInterval*(*float_estimate_getter)(struct PoolSet*, struct Stack*, struct Stack*,
+typedef void(*rational_estimate_getter)(struct Stack*, struct Stack*, struct RationalInterval*,
     struct Number*, struct Rational*);
 
-size_t next_page_boundary(size_t address);
+typedef void(*float_estimate_getter)(struct Stack*, struct Stack*, struct FloatInterval*,
+    struct Number*, struct Rational*);
+
 void stack_initialize(struct Stack*out, size_t start, size_t end);
 void stack_free(struct Stack*out);
 void*array_start(struct Stack*output_stack, size_t alignment);
 void extend_array(struct Stack*output_stack, size_t element_size);
 void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t alignment);
-void pool_set_initialize(struct PoolSet*out, size_t start, size_t end);
-struct PoolSlotPage*pool_slot_page_allocate(struct PoolSet*pool_set);
-struct Pool*get_pool(struct PoolSet*pool_set, size_t value_size);
-void*pool_value_allocate(struct PoolSet*pool_set, size_t size);
-struct PoolSlot*pool_slot_from_value(void*a);
-void increment_reference_count(void*a);
-void increment_reference_count_if_non_null(void*a);
-void pool_slot_free(struct PoolSet*pool_set, struct PoolSlot*a, size_t size);
 
-#define STACK_SLOT_ALLOCATE(stack, type) stack_slot_allocate(stack, sizeof(type), _Alignof(type))
+#define ALLOCATE(stack, type) stack_slot_allocate(stack, sizeof(type), _Alignof(type))
 
-#define STACK_ARRAY_ALLOCATE(stack, element_count, type)\
+#define ARRAY_ALLOCATE(stack, element_count, type)\
     stack_slot_allocate(stack, (element_count) * sizeof(type), _Alignof(type))
 
 __declspec(noreturn) void crash(char*message);
@@ -311,8 +235,7 @@ void*generic_gcd(struct EuclideanDomainOperations*operations, struct Stack*outpu
     struct Stack*local_stack, void*a, void*b, void*misc);
 void generic_extended_gcd(struct EuclideanDomainOperations*operations, struct Stack*output_stack,
     struct Stack*local_stack, struct ExtendedGCDInfo*out, void*a, void*b, void*misc);
-void*stack_polynomial_allocate(struct Stack*output_stack, size_t coefficient_count);
-void*pool_polynomial_allocate(struct PoolSet*pool_set, size_t coefficient_count);
+void*polynomial_allocate(struct Stack*output_stack, size_t coefficient_count);
 void polynomial_copy_coefficients(void*(coefficient_copy)(struct Stack*, void*),
     struct Stack*output_stack, struct Polynomial*a);
 void*polynomial_copy(void*(coefficient_copy)(struct Stack*, void*), struct Stack*output_stack,
@@ -389,18 +312,14 @@ void*nested_polynomial_generic_add(struct Stack*output_stack, struct Stack*local
     struct NestedPolynomial*a, struct NestedPolynomial*b, void*unused);
 void*nested_polynomial_generic_negative(struct Stack*output_stack, struct Stack*local_stack,
     struct NestedPolynomial*a, void*unused);
+void*number_generic_multiply(struct Stack*output_stack, struct Stack*local_stack,
+    struct Number*a, struct Number*b, void*unused);
 
 #define POINTER_SWAP(a, b) { void*temp = a; a = b; b = temp; }
 
-struct Integer*stack_integer_allocate(struct Stack*output_stack, size_t value_count);
-struct Integer*pool_integer_allocate(struct PoolSet*pool_set, size_t value_count);
-void integer_free(struct PoolSet*pool_set, struct Integer*a);
-struct Integer*integer_copy_to_stack(struct Stack*output_stack, struct Integer*a);
-struct Integer*integer_copy_to_pool(struct PoolSet*pool_set, struct Integer*a);
-void integer_move_to_pool(struct PoolSet*pool_set, struct Integer**a);
-void integer_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack, struct Integer**a);
-struct Integer*stack_integer_initialize(struct Stack*stack, uint32_t value, int8_t sign);
-struct Integer*pool_integer_initialize(struct PoolSet*pool_set, uint32_t value, int8_t sign);
+struct Integer*integer_allocate(struct Stack*output_stack, size_t value_count);
+struct Integer*integer_copy(struct Stack*output_stack, struct Integer*a);
+struct Integer*integer_initialize(struct Stack*stack, uint32_t value, int8_t sign);
 struct Integer*integer_from_char(struct Stack*output_stack, char value);
 struct Integer*integer_from_size_t(struct Stack*output_stack, size_t value);
 size_t integer_to_size_t(struct Integer*a);
@@ -444,12 +363,7 @@ size_t integer_string(struct Stack*output_stack, struct Stack*local_stack, struc
 
 #define INT(value, sign) (struct Integer){ 1, sign 1, value }
 
-void rational_free(struct PoolSet*pool_set, struct Rational*a);
-struct Rational*rational_copy_to_stack(struct Stack*output_stack, struct Rational*a);
-struct Rational*rational_copy_to_pool(struct PoolSet*pool_set, struct Rational*a);
-void rational_move_value_to_pool(struct PoolSet*pool_set, struct Rational*a);
-void rational_move_value_from_pool(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Rational*a);
+struct Rational*rational_copy(struct Stack*output_stack, struct Rational*a);
 struct Rational*rational_reduced(struct Stack*output_stack, struct Stack*local_stack,
     struct Integer*numerator, struct Integer*denominator);
 bool rational_equals(struct Rational*a, struct Rational*b);
@@ -494,18 +408,14 @@ void rational_estimate_arctangent(struct Stack*output_stack, struct Stack*local_
 void estimate_atan2(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct Rational*y, struct Rational*x,
     struct Rational*interval_size);
-void rational_continue_float_estimate(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float**out_min, struct Float**out_max, struct Integer**estimate_denominator,
-    struct Integer**estimate_remainder, struct Rational*a, struct Rational*interval_size);
 void rational_float_estimate(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float**out_min, struct Float**out_max, struct Rational*a, struct Rational*interval_size);
+    struct FloatInterval*out, struct Rational*a, struct Rational*interval_size);
 void rational_interval_expand_bounds(struct Stack*stack_a, struct Stack*stack_b,
     struct RationalInterval*a, struct Rational*bound_candidate);
 void rational_interval_to_float_interval(struct Stack*output_stack, struct Stack*local_stack,
     struct FloatInterval*out, struct RationalInterval*a, struct Rational*bound_interval_size);
-void pi_estimate(struct Stack*stack_a, struct Stack*stack_b, struct Rational*interval_size);
-void pi_shrink_interval_to_one_side_of_value(struct Stack*stack_a, struct Stack*stack_b,
-    struct Rational*value);
+void pi_estimate(struct Rational*interval_size);
+void pi_shrink_interval_to_one_side_of_value(struct Rational*value);
 
 struct IntegerPolynomial*integer_polynomial_copy(struct Stack*output_stack,
     struct IntegerPolynomial*a);
@@ -584,11 +494,8 @@ void modded_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*loca
 size_t squarefree_modded_polynomial_factor(struct Stack*output_stack, struct Stack*local_stack,
     struct IntegerPolynomial*a, struct Integer*characteristic, struct IntegerPolynomial**out);
 
-struct RationalPolynomial*rational_polynomial_copy_to_stack(struct Stack*output_stack,
+struct RationalPolynomial*rational_polynomial_copy(struct Stack*output_stack,
     struct RationalPolynomial*a);
-struct RationalPolynomial*rational_polynomial_copy_to_pool(struct PoolSet*pool_set,
-    struct RationalPolynomial*a);
-void rational_polynomial_free(struct PoolSet*pool_set, struct RationalPolynomial*a);
 bool rational_polynomial_equals(struct RationalPolynomial*a, struct RationalPolynomial*b);
 struct RationalPolynomial*rational_polynomial_add(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a, struct RationalPolynomial*b);
@@ -697,11 +604,7 @@ struct AlgebraicNumber*algebraic_number_multiply(struct Stack*output_stack,
     struct Stack*local_stack, struct AlgebraicNumber*a, struct AlgebraicNumber*b,
     struct RationalPolynomial*generator_annulling_polynomials[2]);
 
-void float_free(struct PoolSet*pool_set, struct Float*a);
-struct Float*float_copy_to_stack(struct Stack*output_stack, struct Float*a);
-void float_copy_to_pool(struct PoolSet*pool_set, struct Float*a);
-void float_move_to_pool(struct PoolSet*pool_set, struct Float**a);
-void float_move_from_pool(struct PoolSet*pool_set, struct Stack*output_stack, struct Float**a);
+struct Float*float_copy(struct Stack*output_stack, struct Float*a);
 struct Float*float_reduced(struct Stack*output_stack, struct Stack*local_stack,
     struct Integer*significand, struct Integer*exponent);
 bool float_equals(struct Float*a, struct Float*b);
@@ -727,8 +630,6 @@ void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, st
     struct Float**out_max, struct Float*a, struct Rational*interval_size, struct Integer*index);
 struct Rational*float_to_rational(struct Stack*output_stack, struct Stack*local_stack,
     struct Float*a);
-void float_interval_free_if_non_null(struct PoolSet*pool_set, struct FloatInterval*a);
-void float_interval_move_value_to_pool(struct PoolSet*pool_set, struct FloatInterval*a);
 bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
     struct FloatInterval*a, struct FloatInterval*b);
 void float_interval_multiply(struct Stack*output_stack, struct Stack*local_stack,
@@ -736,69 +637,56 @@ void float_interval_multiply(struct Stack*output_stack, struct Stack*local_stack
 void float_interval_to_rational_interval(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct FloatInterval*a);
 
-struct Number*number_allocate(struct PoolSet*pool_set);
-void number_parse_node_free(struct PoolSet*pool_set, struct Number*a);
-void number_free(struct PoolSet*pool_set, struct Number*a);
-struct Number*number_shallow_copy(struct PoolSet*pool_set, struct Number*a);
-struct RationalPolynomial*number_a_in_terms_of_b(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Stack*local_stack, struct Number*a, struct Number*b);
-struct Number*number_evaluate(struct PoolSet*transient_pool_set, struct Stack*stack_a,
-    struct Stack*stack_b, struct Number*a);
+struct Number*number_copy(struct Stack*output_stack, struct Number*a);
+struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
+    struct Stack*local_stack, struct Number*a, struct RationalPolynomial*a_minimal_polynomial,
+    struct Number*b, struct RationalPolynomial*b_minimal_polynomial);
+struct Number*number_evaluate(struct Stack*output_stack, struct Stack*local_stack, struct Number*a);
 size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*number);
-void term_iterator_initialize(struct TermIterator*out, struct Number*a);
-void term_iterator_increment(struct TermIterator*a);
-void term_free(struct PoolSet*pool_set, struct Term*a);
 
-struct Number*number_add(struct PoolSet*pool_set, struct Stack*stack_a, struct Stack*stack_b,
-    struct Number*a, struct Number*b);
-struct Number*number_rational_multiply(struct PoolSet*pool_set, struct Stack*stack_a,
-    struct Stack*stack_b, struct Number*a, struct Rational*b);
-struct Number*number_multiply(struct PoolSet*pool_set, struct Stack*stack_a, struct Stack*stack_b,
-    struct Number*a, struct Number*b);
-struct Number*number_reciprocal(struct PoolSet*pool_set, struct Stack*stack_a, struct Stack*stack_b,
+struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
+    struct Number*b);
+struct Number*number_rational_multiply(struct Stack*output_stack, struct Stack*local_stack,
+    struct Number*a, struct Rational*b);
+struct Number*number_multiply(struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
+    struct Number*b);
+struct Number*number_reciprocal(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*a);
-struct Number*number_divide(struct PoolSet*pool_set, struct Stack*stack_a, struct Stack*stack_b,
+struct Number*number_divide(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*dividend, struct Number*divisor);
 struct Rational*number_rational_factor(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*a);
-struct Number*number_exponentiate(struct PoolSet*pool_set, struct Stack*stack_a,
-    struct Stack*stack_b, struct Number*base, struct Rational*exponent);
+struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
+    struct Number*base, struct Rational*exponent);
 
-struct FloatInterval*number_float_real_part_estimate(struct PoolSet*pool_set,
-    struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
-    struct Rational*interval_size);
-void number_rational_real_part_estimate(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalInterval*out, struct Number*a,
-    struct Rational*interval_size);
-struct FloatInterval*number_float_imaginary_part_estimate(struct PoolSet*pool_set,
-    struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
-    struct Rational*interval_size);
-void number_rational_imaginary_part_estimate(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalInterval*out, struct Number*a,
-    struct Rational*interval_size);
-struct FloatInterval*number_float_magnitude_estimate(struct PoolSet*pool_set, struct Stack*stack_a,
-    struct Stack*stack_b, struct Number*a, struct Rational*interval_size);
-void number_rational_magnitude_estimate(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalInterval*out, struct Number*a,
-    struct Rational*interval_size);
-struct FloatInterval*number_float_argument_estimate(struct PoolSet*pool_set, struct Stack*stack_a,
-    struct Stack*stack_b, struct Number*a, struct Rational*interval_size);
-void number_rational_argument_estimate(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalInterval*out, struct Number*a,
-    struct Rational*interval_size);
-void number_rectangular_estimate(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Stack*local_stack, struct RectangularEstimate*out, struct Number*a,
-    struct Rational*interval_size);
+void number_float_real_part_estimate(struct Stack*output_stack, struct Stack*local_stack,
+    struct FloatInterval*out, struct Number*a, struct Rational*interval_size);
+void number_rational_real_part_estimate(struct Stack*output_stack, struct Stack*local_stack,
+    struct RationalInterval*out, struct Number*a, struct Rational*interval_size);
+void number_float_imaginary_part_estimate(struct Stack*output_stack, struct Stack*local_stack,
+    struct FloatInterval*out, struct Number*a, struct Rational*interval_size);
+void number_rational_imaginary_part_estimate(struct Stack*output_stack, struct Stack*local_stack,
+    struct RationalInterval*out, struct Number*a, struct Rational*interval_size);
+void number_float_magnitude_estimate(struct Stack*output_stack, struct Stack*local_stack,
+    struct FloatInterval*out, struct Number*a, struct Rational*interval_size);
+void number_rational_magnitude_estimate(struct Stack*output_stack, struct Stack*local_stack,
+    struct RationalInterval*out, struct Number*a, struct Rational*interval_size);
+void number_float_argument_estimate(struct Stack*output_stack, struct Stack*local_stack,
+    struct FloatInterval*out, struct Number*a, struct Rational*interval_size);
+void number_rational_argument_estimate(struct Stack*output_stack, struct Stack*local_stack,
+    struct RationalInterval*out, struct Number*a, struct Rational*interval_size);
+void number_rectangular_estimate(struct Stack*output_stack, struct Stack*local_stack,
+    struct RectangularEstimate*out, struct Number*a, struct Rational*interval_size);
 bool rectangular_estimates_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
     struct RectangularEstimate*a, struct RectangularEstimate*b);
-void rational_polynomial_estimate_evaluation(struct PoolSet*pool_set, struct Stack*output_stack,
-    struct Stack*local_stack, struct RectangularEstimate*out, struct RationalPolynomial*a,
-    struct Number*argument, struct Rational*interval_size);
+void rational_polynomial_estimate_evaluation(struct Stack*output_stack, struct Stack*local_stack,
+    struct RectangularEstimate*out, struct RationalPolynomial*a, struct Number*argument,
+    struct Rational*interval_size);
 
-void number_calculate_minimal_polynomial(struct PoolSet*pool_set, struct Stack*stack_a,
-    struct Stack*stack_b, struct Number*a);
-void number_calculate_conjugates(struct PoolSet*pool_set, struct Stack*stack_a,
-    struct Stack*stack_b, struct Number*a);
+struct RationalPolynomial*number_minimal_polynomial(struct Stack*output_stack,
+    struct Stack*local_stack, struct Number*a);
+struct Number**number_conjugates(struct Stack*output_stack, struct Stack*local_stack,
+    struct Number*a, struct RationalPolynomial*a_minimal_polynomial);
 
 struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b,
     struct Integer*degree);
@@ -806,32 +694,31 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b,
 //Not equal to the OS page size, but instead to whichever of the OS page size and OS allocation
 //granularity is larger so VirtualAlloc never rounds addresses that are multiples of page_size.
 size_t page_size;
-size_t pool_memory_start;
-size_t pool_memory_end;
 struct Stack permanent_stack;
-struct PoolSet permanent_pool_set;
+struct Stack pi_stack_a;
+struct Stack pi_stack_b;
 
 struct Integer zero = { 0, 0, 0 };
 struct Integer one = { 1, 1, 1 };
-struct EuclideanDomainOperations integer_operations = { { integer_copy_to_stack,
-    integer_equals, &zero, &one, integer_generic_add, integer_generic_negative,
-    integer_generic_multiply }, integer_generic_euclidean_divide, integer_generic_gcd };
+struct EuclideanDomainOperations integer_operations = { { integer_copy, integer_equals, &zero, &one,
+    integer_generic_add, integer_generic_negative, integer_generic_multiply },
+    integer_generic_euclidean_divide, integer_generic_gcd };
 struct Integer**primes;
 
 struct Rational rational_zero = { &zero, &one };
 struct Rational rational_one = { &one, &one };
-struct FieldOperations rational_operations = { { rational_copy_to_stack, rational_equals,
-    &rational_zero, &rational_one, rational_generic_add, rational_generic_negative,
-    rational_generic_multiply }, rational_generic_reciprocal };
-struct Rational pi_estimate_min;
-struct Rational pi_interval_size;
+struct FieldOperations rational_operations = { { rational_copy, rational_equals, &rational_zero,
+    &rational_one, rational_generic_add, rational_generic_negative, rational_generic_multiply },
+    rational_generic_reciprocal };
+struct Rational*pi_estimate_min;
+struct Rational*pi_interval_size;
 struct Integer*pi_sixteen_to_the_k;
 struct Integer*pi_eight_k;
 
 struct Float float_zero = { &zero, &zero };
 struct Float float_one = { &one, &zero };
-struct RingOperations float_operations = { float_copy_to_stack, float_equals, &float_zero,
-    &float_one, float_generic_add, float_generic_negative, float_generic_multiply };
+struct RingOperations float_operations = { float_copy, float_equals, &float_zero, &float_one,
+    float_generic_add, float_generic_negative, float_generic_multiply };
 
 struct Polynomial polynomial_zero = { 0 };
 
@@ -842,8 +729,8 @@ struct EuclideanDomainOperations integer_polynomial_operations = { { integer_pol
     integer_polynomial_generic_multiply }, integer_polynomial_generic_euclidean_divide,
     integer_polynomial_generic_gcd };
 
-struct FieldOperations modded_integer_operations = { { integer_copy_to_stack, integer_equals,
-    &zero, &one, integer_generic_add, integer_generic_negative, integer_generic_multiply },
+struct FieldOperations modded_integer_operations = { { integer_copy, integer_equals, &zero, &one,
+    integer_generic_add, integer_generic_negative, integer_generic_multiply },
     modded_integer_reciprocal };
 struct EuclideanDomainOperations modded_polynomial_operations = { { integer_polynomial_copy,
     integer_polynomial_equals, &polynomial_zero, &integer_polynomial_one, modded_polynomial_add,
@@ -851,12 +738,12 @@ struct EuclideanDomainOperations modded_polynomial_operations = { { integer_poly
     modded_polynomial_euclidean_divide, 0 };
 
 struct RationalPolynomial rational_polynomial_one = { 1, &rational_one };
-struct EuclideanDomainOperations rational_polynomial_operations =
-    { { rational_polynomial_copy_to_stack, rational_polynomial_equals, &polynomial_zero,
-    &rational_polynomial_one, rational_polynomial_generic_add, rational_polynomial_generic_negative,
+struct EuclideanDomainOperations rational_polynomial_operations = { { rational_polynomial_copy,
+    rational_polynomial_equals, &polynomial_zero, &rational_polynomial_one,
+    rational_polynomial_generic_add, rational_polynomial_generic_negative,
     rational_polynomial_generic_multiply }, rational_polynomial_generic_euclidean_divide, 0 };
 
-struct FieldOperations number_field_element_operations = { { rational_polynomial_copy_to_stack,
+struct FieldOperations number_field_element_operations = { { rational_polynomial_copy,
     rational_polynomial_equals, &polynomial_zero, &rational_polynomial_one,
     rational_polynomial_generic_add, rational_polynomial_generic_negative,
     number_field_element_multiply }, number_field_element_reciprocal };
@@ -868,6 +755,8 @@ struct EuclideanDomainOperations number_field_polynomial_operations =
     &nested_polynomial_one, nested_polynomial_generic_add, nested_polynomial_generic_negative,
     number_field_polynomial_multiply }, number_field_polynomial_euclidean_divide,
     number_field_polynomial_gcd };
+
+struct Number number_one = { .value = {&one, &one}, .operation = 'r' };
 
 struct Number*number_divide_by_zero_error = 0;
 struct Number*number_product_consolidation_failed = (struct Number*)1;
