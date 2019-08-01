@@ -211,7 +211,7 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
                 number_add(stack_a, stack_b, resolvent_product_values[i],
                     number_rational_multiply(stack_a, stack_b, degree_minus_first_roots[i],
                         resolvent_multiples_in_terms_of_degree_minus_first_roots
-                        [resolvent_multiple_index]));
+                            [resolvent_multiple_index]));
         }
     }
     struct Number**resolvent_values =

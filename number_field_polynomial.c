@@ -76,7 +76,7 @@ size_t number_field_polynomial_factor(struct Stack*output_stack, struct Stack*lo
                             squarefree_factors[i]->coefficients[j])));
                 power = nested_polynomial_multiply(local_stack, output_stack, power, d);
             }
-            struct RationalPolynomial*resultant = nested_polynomial_get_resultant(local_stack,
+            struct RationalPolynomial*resultant = nested_polynomial_resultant(local_stack,
                 output_stack, nested_minimal_polynomial, e);
             if (rational_polynomial_gcd(local_stack, output_stack,
                 rational_polynomial_derivative(local_stack, output_stack, resultant),

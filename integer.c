@@ -281,7 +281,7 @@ void integer_downshift(struct Integer*a, uint8_t shift)
     a->value[a->value_count - 1] = a->value[a->value_count - 1] >> shift;
 }
 
-int leading_digit_place(struct Integer*a)
+size_t leading_digit_place(struct Integer*a)
 {
     if (!a->value_count)
     {
@@ -304,8 +304,8 @@ int leading_digit_place(struct Integer*a)
 void integer_euclidean_divide(struct Stack*output_stack, struct Stack*local_stack,
     struct IntegerDivision*out, struct Integer*dividend, struct Integer*divisor)
 {
-    int dividend_leading_digit_place = leading_digit_place(dividend);
-    int divisor_leading_digit_place = leading_digit_place(divisor);
+    size_t dividend_leading_digit_place = leading_digit_place(dividend);
+    size_t divisor_leading_digit_place = leading_digit_place(divisor);
     if (dividend->value_count > divisor->value_count ||
         (dividend->value_count == divisor->value_count &&
             dividend_leading_digit_place >= divisor_leading_digit_place))

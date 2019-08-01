@@ -23,7 +23,7 @@ struct RationalPolynomial*number_field_element_reciprocal(struct Stack*output_st
         generator_minimal_polynomial);
     struct RationalPolynomial*out =
         rational_polynomial_rational_multiply(output_stack, local_stack,
-        (struct RationalPolynomial*)info.a_coefficient,
+            (struct RationalPolynomial*)info.a_coefficient,
             rational_reciprocal(local_stack, output_stack, info.gcd->coefficients[0]));
     local_stack->cursor = local_stack_savepoint;
     return out;

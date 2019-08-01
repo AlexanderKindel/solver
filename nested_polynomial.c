@@ -77,7 +77,7 @@ struct NestedPolynomial*nested_polynomial_derivative(struct Stack*output_stack,
 }
 
 //Correct up to multiplication by a nonzero rational.
-struct RationalPolynomial*nested_polynomial_get_resultant(struct Stack*output_stack,
+struct RationalPolynomial*nested_polynomial_resultant(struct Stack*output_stack,
     struct Stack*local_stack, struct NestedPolynomial*a, struct NestedPolynomial*b)
 {
     if (a->coefficient_count == 0 || b->coefficient_count == 0)

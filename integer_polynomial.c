@@ -492,7 +492,7 @@ size_t primitive_integer_polynomial_factor(struct Stack*output_stack, struct Sta
             a = integer_polynomial_euclidean_quotient(local_stack, output_stack, a, *out);
         } while (!a->coefficients[0]->value_count);
     }
-    if (a->coefficients[0]->value_count < 2)
+    if (a->coefficient_count < 2)
     {
         local_stack->cursor = local_stack_savepoint;
         return factor_count;

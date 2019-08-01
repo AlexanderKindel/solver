@@ -263,11 +263,10 @@ void polynomial_euclidean_divide(struct EuclideanDomainOperations*coefficient_op
         coefficient_operations->euclidean_divide(local_stack, output_stack, &division,
             out->remainder->coefficients[out->remainder->coefficient_count - i],
             divisor->coefficients[divisor->coefficient_count - 1], misc);
-        if (!coefficient_operations->ring_operations.equals(division.remainder,
+        if (coefficient_operations->ring_operations.equals(division.remainder,
             coefficient_operations->ring_operations.additive_identity))
         {
-            memcpy(out->quotient->coefficients[quotient_coefficient_count - i], division.quotient,
-                sizeof(void*));
+            out->quotient->coefficients[quotient_coefficient_count - i] = division.quotient;
             for (size_t j = 1; j < divisor->coefficient_count; ++j)
             {
                 out->remainder->coefficients[out->remainder->coefficient_count - i - j] =
@@ -320,8 +319,7 @@ void field_polynomial_euclidean_divide(struct FieldOperations*coefficient_operat
         void*quotient = coefficient_operations->ring_operations.multiply(local_stack, output_stack,
             out->remainder->coefficients[out->remainder->coefficient_count - i],
             leading_coefficient_reciprocal, misc);
-        memcpy(out->quotient->coefficients[quotient_coefficient_count - i], quotient,
-            sizeof(void*));
+        out->quotient->coefficients[quotient_coefficient_count - i] = quotient;
         for (size_t j = 1; j < divisor->coefficient_count; ++j)
         {
             out->remainder->coefficients[out->remainder->coefficient_count - i - j] =

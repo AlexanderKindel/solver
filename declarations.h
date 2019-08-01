@@ -207,6 +207,7 @@ struct Number
             struct RationalPolynomial**terms_in_terms_of_generator;
         };
     };
+    struct RationalPolynomial*minimal_polynomial;
     char operation;
 };
 
@@ -399,6 +400,7 @@ struct Rational*rational_max(struct Stack*stack_a, struct Stack*stack_b, struct 
     struct Rational*b);
 struct Rational*rational_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
     struct Rational*base, struct Integer*exponent);
+struct RationalPolynomial*rational_minimal_polynomial(struct Stack*output_stack, struct Rational*a);
 void rational_estimate_cosine(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct Rational*a, struct Rational*interval_size);
 void rational_estimate_sine(struct Stack*output_stack, struct Stack*local_stack,
@@ -568,7 +570,7 @@ struct NestedPolynomial*nested_polynomial_rational_polynomial_divide(struct Stac
     struct Stack*local_stack, struct NestedPolynomial*dividend, struct RationalPolynomial*divisor);
 struct NestedPolynomial*nested_polynomial_derivative(struct Stack*output_stack,
     struct Stack*local_stack, struct NestedPolynomial*a);
-struct RationalPolynomial*nested_polynomial_get_resultant(struct Stack*output_stack,
+struct RationalPolynomial*nested_polynomial_resultant(struct Stack*output_stack,
     struct Stack*local_stack, struct NestedPolynomial*a, struct NestedPolynomial*b);
 
 struct NestedPolynomial*number_field_polynomial_multiply(struct Stack*output_stack,
@@ -638,12 +640,12 @@ void float_interval_to_rational_interval(struct Stack*output_stack, struct Stack
     struct RationalInterval*out, struct FloatInterval*a);
 
 struct Number*number_copy(struct Stack*output_stack, struct Number*a);
-struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
-    struct Stack*local_stack, struct Number*a, struct RationalPolynomial*a_minimal_polynomial,
-    struct Number*b, struct RationalPolynomial*b_minimal_polynomial);
-struct Number*number_evaluate(struct Stack*output_stack, struct Stack*local_stack, struct Number*a);
-size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*number);
-
+struct Number*number_rational_initialize(struct Stack*output_stack, struct Rational*value);
+struct Number*number_surd_initialize(struct Stack*output_stack, struct Stack*local_stack,
+    struct Number*radicand, struct Number*exponent);
+struct RationalPolynomial*number_minimal_polynomial_from_annulling_polynomial(
+    struct Stack*output_stack, struct Stack*local_stack,
+    struct RationalPolynomial*annulling_polynomial, struct Number*a);
 struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
     struct Number*b);
 struct Number*number_rational_multiply(struct Stack*output_stack, struct Stack*local_stack,
@@ -658,6 +660,10 @@ struct Rational*number_rational_factor(struct Stack*output_stack, struct Stack*l
     struct Number*a);
 struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*base, struct Rational*exponent);
+struct Number**number_conjugates(struct Stack*output_stack, struct Stack*local_stack,
+    struct Number*a);
+struct Number*number_evaluate(struct Stack*output_stack, struct Stack*local_stack, struct Number*a);
+size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*number);
 
 void number_float_real_part_estimate(struct Stack*output_stack, struct Stack*local_stack,
     struct FloatInterval*out, struct Number*a, struct Rational*interval_size);
@@ -682,11 +688,6 @@ bool rectangular_estimates_are_disjoint(struct Stack*stack_a, struct Stack*stack
 void rational_polynomial_estimate_evaluation(struct Stack*output_stack, struct Stack*local_stack,
     struct RectangularEstimate*out, struct RationalPolynomial*a, struct Number*argument,
     struct Rational*interval_size);
-
-struct RationalPolynomial*number_minimal_polynomial(struct Stack*output_stack,
-    struct Stack*local_stack, struct Number*a);
-struct Number**number_conjugates(struct Stack*output_stack, struct Stack*local_stack,
-    struct Number*a, struct RationalPolynomial*a_minimal_polynomial);
 
 struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b,
     struct Integer*degree);
@@ -756,7 +757,7 @@ struct EuclideanDomainOperations number_field_polynomial_operations =
     number_field_polynomial_multiply }, number_field_polynomial_euclidean_divide,
     number_field_polynomial_gcd };
 
-struct Number number_one = { .value = {&one, &one}, .operation = 'r' };
+struct Number number_one;
 
 struct Number*number_divide_by_zero_error = 0;
 struct Number*number_product_consolidation_failed = (struct Number*)1;

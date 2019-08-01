@@ -87,6 +87,7 @@ struct Integer*denominator_lcm(struct Stack*output_stack, struct Stack*local_sta
     {
         out = integer_multiply(local_stack, output_stack, out, list[i]->denominator);
     }
+    out = integer_copy(output_stack, out);
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
@@ -95,10 +96,10 @@ struct IntegerPolynomial*rational_polynomial_to_integer_polynomial(struct Stack*
     struct Stack*local_stack, struct RationalPolynomial*a, struct Integer*multiple)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct IntegerPolynomial*out = polynomial_allocate(local_stack, a->coefficient_count);
+    struct IntegerPolynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
-        out->coefficients[i] = integer_multiply(local_stack, output_stack,
+        out->coefficients[i] = integer_multiply(output_stack, local_stack,
             a->coefficients[i]->numerator, integer_euclidean_quotient(local_stack, output_stack,
                 multiple, a->coefficients[i]->denominator));
     }

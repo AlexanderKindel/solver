@@ -225,6 +225,16 @@ struct Rational*rational_exponentiate(struct Stack*output_stack, struct Stack*lo
         rational_unreduced_multiply }, output_stack, local_stack, base, exponent, 0);
 }
 
+struct RationalPolynomial*rational_minimal_polynomial(struct Stack*output_stack, struct Rational*a)
+{
+    struct RationalPolynomial*out = polynomial_allocate(output_stack, 2);
+    out->coefficients[0] = ALLOCATE(output_stack, struct Rational);
+    out->coefficients[0]->numerator = integer_negative(output_stack, a->numerator);
+    out->coefficients[0]->denominator = integer_copy(output_stack, a->denominator);
+    out->coefficients[1] = &rational_one;
+    return out;
+}
+
 void rational_estimate_size_or_cosine(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct Rational*a_squared, struct Integer*factorial_component,
     struct Rational*delta, struct Rational*interval_size)
