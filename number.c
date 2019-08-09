@@ -711,8 +711,7 @@ struct Number*number_consolidate_product(struct Stack*output_stack, struct Stack
             if (!integer_equals(a->right->value.denominator, b->right->value.denominator))
             {
                 struct Rational*radicand_factor_argument_interval_size =
-                    rational_integer_divide(local_stack, output_stack, pi_estimate_min,
-                        product_index);
+                    rational_integer_divide(local_stack, output_stack, pi.min, product_index);
                 struct RationalInterval a_argument_estimate;
                 number_rational_argument_estimate(local_stack, output_stack, &a_argument_estimate,
                     a, radicand_factor_argument_interval_size);
@@ -738,7 +737,7 @@ struct Number*number_consolidate_product(struct Stack*output_stack, struct Stack
                 &(struct Rational){&one, product_index});
             struct RationalInterval product_radicand_rational_argument_estimate;
             number_rational_argument_estimate(local_stack, output_stack,
-                &product_radicand_rational_argument_estimate, product_radicand, pi_estimate_min);
+                &product_radicand_rational_argument_estimate, product_radicand, pi.min);
             if (rational_compare(output_stack, local_stack,
                 product_radicand_rational_argument_estimate.max,
                 rational_add(local_stack, output_stack, radicand_factor_a_argument_estimate.min,
@@ -859,8 +858,7 @@ struct Number*number_reciprocal(struct Stack*output_stack, struct Stack*local_st
             puts("Tried to divide by 0.");
             return number_divide_by_zero_error;
         }
-        out = number_rational_initialize(output_stack,
-            rational_reciprocal(local_stack, output_stack, &a->value));
+        out = number_rational_initialize(output_stack, rational_reciprocal(local_stack, &a->value));
         break;
     }
     case '^':
@@ -887,7 +885,7 @@ struct Number*number_reciprocal(struct Stack*output_stack, struct Stack*local_st
             out = number_multiply(local_stack, output_stack, out, conjugates[i]);
         }
         struct Rational*coefficient =
-            rational_reciprocal(local_stack, output_stack, a->minimal_polynomial->coefficients[0]);
+            rational_reciprocal(local_stack, a->minimal_polynomial->coefficients[0]);
         if (a->minimal_polynomial->coefficient_count % 2 == 0)
         {
             coefficient->numerator->sign *= -1;

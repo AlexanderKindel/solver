@@ -104,10 +104,22 @@ struct Rational
     struct Integer*denominator;
 };
 
+struct Float
+{
+    struct Integer*significand;
+    struct Integer*exponent;
+};
+
 struct RationalInterval
 {
     struct Rational*min;
     struct Rational*max;
+};
+
+struct FloatInterval
+{
+    struct Float*min;
+    struct Float*max;
 };
 
 struct Polynomial
@@ -160,18 +172,6 @@ struct AlgebraicNumber
     size_t generator_degrees[2];
 };
 
-struct Float
-{
-    struct Integer*significand;
-    struct Integer*exponent;
-};
-
-struct FloatInterval
-{
-    struct Float*min;
-    struct Float*max;
-};
-
 struct RectangularEstimate
 {
     struct FloatInterval*real_part_estimate;
@@ -216,6 +216,12 @@ typedef void(*rational_estimate_getter)(struct Stack*, struct Stack*, struct Rat
 
 typedef void(*float_estimate_getter)(struct Stack*, struct Stack*, struct FloatInterval*,
     struct Number*, struct Rational*);
+
+struct EstimateGetters
+{
+    rational_estimate_getter rational;
+    float_estimate_getter fl;
+};
 
 void stack_initialize(struct Stack*out, size_t start, size_t end);
 void stack_free(struct Stack*out);
@@ -382,8 +388,7 @@ struct Rational*rational_unreduced_multiply(struct Stack*output_stack, struct St
     struct Rational*a, struct Rational*b, void*unused);
 struct Rational*rational_integer_multiply(struct Stack*output_stack, struct Stack*local_stack,
     struct Rational*a, struct Integer*b);
-struct Rational*rational_reciprocal(struct Stack*output_stack, struct Stack*local_stack,
-    struct Rational*a);
+struct Rational*rational_reciprocal(struct Stack*output_stack, struct Rational*a);
 struct Rational*rational_divide(struct Stack*output_stack, struct Stack*local_stack,
     struct Rational*dividend, struct Rational*divisor);
 struct Rational*rational_integer_divide(struct Stack*output_stack, struct Stack*local_stack,
@@ -407,15 +412,56 @@ void rational_estimate_sine(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct Rational*a, struct Rational*interval_size);
 void rational_estimate_arctangent(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct Rational*a, struct Rational*interval_size);
-void estimate_atan2(struct Stack*output_stack, struct Stack*local_stack,
+void rational_estimate_atan2(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct Rational*y, struct Rational*x,
     struct Rational*interval_size);
 void rational_float_estimate(struct Stack*output_stack, struct Stack*local_stack,
     struct FloatInterval*out, struct Rational*a, struct Rational*interval_size);
+
+struct Float*float_copy(struct Stack*output_stack, struct Float*a);
+struct Float*float_reduced(struct Stack*output_stack, struct Stack*local_stack,
+    struct Integer*significand, struct Integer*exponent);
+bool float_equals(struct Float*a, struct Float*b);
+struct Float*float_magnitude(struct Stack*output_stack, struct Float*a);
+struct Float*float_add(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
+    struct Float*b);
+struct Float*float_generic_add(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
+    struct Float*b, void*unused);
+struct Float*float_negative(struct Stack*output_stack, struct Float*a);
+struct Float*float_generic_negative(struct Stack*output_stack, struct Stack*unused_stack,
+    struct Float*a, void*unused);
+struct Float*float_subtract(struct Stack*output_stack, struct Stack*local_stack,
+    struct Float*minuend, struct Float*subtrahend);
+struct Float*float_multiply(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
+    struct Float*b);
+struct Float*float_generic_multiply(struct Stack*output_stack, struct Stack*local_stack,
+    struct Float*a, struct Float*b, void*unused);
+int8_t float_compare(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b);
+struct Float*float_max(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b);
+struct Float*float_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
+    struct Float*base, struct Integer*exponent);
+void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, struct Float**out_min,
+    struct Float**out_max, struct Float*a, struct Rational*interval_size, struct Integer*index);
+struct Rational*float_to_rational(struct Stack*output_stack, struct Stack*local_stack,
+    struct Float*a);
+
+struct Rational*rational_interval_max_magnitude(struct Stack*output_stack, struct Stack*local_stack,
+    struct RationalInterval*a);
 void rational_interval_expand_bounds(struct Stack*stack_a, struct Stack*stack_b,
     struct RationalInterval*a, struct Rational*bound_candidate);
+struct Rational*rational_interval_factor_interval_size(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalInterval*factor_a, struct RationalInterval*factor_b,
+    struct Rational*product_interval_size);
+void rational_interval_estimate_atan2(struct Stack*output_stack, struct Stack*local_stack,
+    struct RationalInterval*out, struct RationalInterval*y, struct RationalInterval*x,
+    struct Rational*bound_interval_size);
 void rational_interval_to_float_interval(struct Stack*output_stack, struct Stack*local_stack,
     struct FloatInterval*out, struct RationalInterval*a, struct Rational*bound_interval_size);
+bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
+    struct FloatInterval*a, struct FloatInterval*b);
+void float_interval_to_rational_interval(struct Stack*output_stack, struct Stack*local_stack,
+    struct RationalInterval*out, struct FloatInterval*a);
+
 void pi_estimate(struct Rational*interval_size);
 void pi_shrink_interval_to_one_side_of_value(struct Rational*value);
 
@@ -606,39 +652,6 @@ struct AlgebraicNumber*algebraic_number_multiply(struct Stack*output_stack,
     struct Stack*local_stack, struct AlgebraicNumber*a, struct AlgebraicNumber*b,
     struct RationalPolynomial*generator_annulling_polynomials[2]);
 
-struct Float*float_copy(struct Stack*output_stack, struct Float*a);
-struct Float*float_reduced(struct Stack*output_stack, struct Stack*local_stack,
-    struct Integer*significand, struct Integer*exponent);
-bool float_equals(struct Float*a, struct Float*b);
-struct Float*float_magnitude(struct Stack*output_stack, struct Float*a);
-struct Float*float_add(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
-    struct Float*b);
-struct Float*float_generic_add(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
-    struct Float*b, void*unused);
-struct Float*float_negative(struct Stack*output_stack, struct Float*a);
-struct Float*float_generic_negative(struct Stack*output_stack, struct Stack*unused_stack,
-    struct Float*a, void*unused);
-struct Float*float_subtract(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float*minuend, struct Float*subtrahend);
-struct Float*float_multiply(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
-    struct Float*b);
-struct Float*float_generic_multiply(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float*a, struct Float*b, void*unused);
-int8_t float_compare(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b);
-struct Float*float_max(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b);
-struct Float*float_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float*base, struct Integer*exponent);
-void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, struct Float**out_min,
-    struct Float**out_max, struct Float*a, struct Rational*interval_size, struct Integer*index);
-struct Rational*float_to_rational(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float*a);
-bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
-    struct FloatInterval*a, struct FloatInterval*b);
-void float_interval_multiply(struct Stack*output_stack, struct Stack*local_stack,
-    struct FloatInterval*out, struct FloatInterval*a, struct FloatInterval*b);
-void float_interval_to_rational_interval(struct Stack*output_stack, struct Stack*local_stack,
-    struct RationalInterval*out, struct FloatInterval*a);
-
 struct Number*number_copy(struct Stack*output_stack, struct Number*a);
 struct Number*number_rational_initialize(struct Stack*output_stack, struct Rational*value);
 struct Number*number_surd_initialize(struct Stack*output_stack, struct Stack*local_stack,
@@ -711,8 +724,7 @@ struct Rational rational_one = { &one, &one };
 struct FieldOperations rational_operations = { { rational_copy, rational_equals, &rational_zero,
     &rational_one, rational_generic_add, rational_generic_negative, rational_generic_multiply },
     rational_generic_reciprocal };
-struct Rational*pi_estimate_min;
-struct Rational*pi_interval_size;
+struct RationalInterval pi;
 struct Integer*pi_sixteen_to_the_k;
 struct Integer*pi_eight_k;
 
@@ -763,5 +775,10 @@ struct Number*number_divide_by_zero_error = 0;
 struct Number*number_product_consolidation_failed = (struct Number*)1;
 
 struct Number**roots_of_unity;
+
+struct EstimateGetters real_estimate_getters =
+    { number_rational_real_part_estimate, number_float_real_part_estimate };
+struct EstimateGetters imaginary_estimate_getters =
+    { number_rational_imaginary_part_estimate, number_float_imaginary_part_estimate };
 
 #endif

@@ -113,19 +113,19 @@ void*polynomial_copy(void*(coefficient_copy)(struct Stack*, void*), struct Stack
 {
     struct Polynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
     memcpy(out->coefficients, a->coefficients, a->coefficient_count * sizeof(void*));
-    polynomial_copy_coefficients(coefficient_copy, output_stack, a);
+    polynomial_copy_coefficients(coefficient_copy, output_stack, out);
     return out;
 }
 
 void polynomial_trim_leading_zeroes(struct RingOperations*coefficient_operations,
     struct Polynomial*a)
 {
-    for (size_t i = *(size_t*)a; i-- > 0;)
+    for (size_t i = a->coefficient_count; i-- > 0;)
     {
         if (coefficient_operations->equals(a->coefficients[i],
             coefficient_operations->additive_identity))
         {
-            *(size_t*)a -= 1;
+            a->coefficient_count -= 1;
         }
         else
         {
@@ -166,7 +166,7 @@ void*polynomial_add(struct RingOperations*coefficient_operations, struct Stack*o
     }
     for (size_t i = b->coefficient_count; i < a->coefficient_count; ++i)
     {
-        a->coefficients[i] = coefficient_operations->copy(output_stack, a->coefficients[i]);
+        out->coefficients[i] = coefficient_operations->copy(output_stack, a->coefficients[i]);
     }
     polynomial_trim_leading_zeroes(coefficient_operations, out);
     return out;
@@ -238,7 +238,7 @@ void*polynomial_multiply_by_coefficient(struct RingOperations*coefficient_operat
     return out;
 }
 
-//Sets the fields of out to 0 when the coefficients of the quotient wouldn't be in the ring.
+//Sets out->quotient to 0 when the coefficients of the quotient wouldn't be in the ring.
 void polynomial_euclidean_divide(struct EuclideanDomainOperations*coefficient_operations,
     struct Stack*output_stack, struct Stack*local_stack, struct PolynomialDivision*out,
     struct Polynomial*dividend, struct Polynomial*divisor, void*misc)
@@ -251,38 +251,39 @@ void polynomial_euclidean_divide(struct EuclideanDomainOperations*coefficient_op
         return;
     }
     void*local_stack_savepoint = local_stack->cursor;
-    size_t quotient_coefficient_count =
-        1 + dividend->coefficient_count - divisor->coefficient_count;
-    out->quotient = polynomial_allocate(output_stack, quotient_coefficient_count);
+    out->quotient = polynomial_allocate(output_stack,
+        1 + dividend->coefficient_count - divisor->coefficient_count);
     out->remainder = polynomial_allocate(output_stack, dividend->coefficient_count);
     memcpy(out->remainder->coefficients, dividend->coefficients,
         dividend->coefficient_count * sizeof(void*));
-    for (size_t i = 1; i <= quotient_coefficient_count; ++i)
+    while (out->remainder->coefficient_count >= divisor->coefficient_count)
     {
+        --out->remainder->coefficient_count;
         struct Division division;
         coefficient_operations->euclidean_divide(local_stack, output_stack, &division,
-            out->remainder->coefficients[out->remainder->coefficient_count - i],
+            out->remainder->coefficients[out->remainder->coefficient_count],
             divisor->coefficients[divisor->coefficient_count - 1], misc);
         if (coefficient_operations->ring_operations.equals(division.remainder,
             coefficient_operations->ring_operations.additive_identity))
         {
-            out->quotient->coefficients[quotient_coefficient_count - i] = division.quotient;
-            for (size_t j = 1; j < divisor->coefficient_count; ++j)
+            out->quotient->coefficients[out->remainder->coefficient_count + 1 -
+                divisor->coefficient_count] = division.quotient;
+            for (size_t i = 1; i < divisor->coefficient_count; ++i)
             {
-                out->remainder->coefficients[out->remainder->coefficient_count - i - j] =
+                out->remainder->coefficients[divisor->coefficient_count - i] =
                     coefficient_operations->ring_operations.add(local_stack, output_stack,
-                        out->remainder->coefficients[out->remainder->coefficient_count - i - j],
+                        out->remainder->coefficients[out->remainder->coefficient_count - i],
                         coefficient_operations->ring_operations.negative(local_stack, output_stack,
                             coefficient_operations->ring_operations.multiply(local_stack,
                                 output_stack, division.quotient,
-                                divisor->coefficients[divisor->coefficient_count - 1 - j], misc),
+                                divisor->coefficients[divisor->coefficient_count - i - 1], misc),
                             misc), misc);
             }
         }
         else
         {
             out->quotient = 0;
-            out->remainder = 0;
+            local_stack->cursor = local_stack_savepoint;
             return;
         }
     }
@@ -306,28 +307,29 @@ void field_polynomial_euclidean_divide(struct FieldOperations*coefficient_operat
         return;
     }
     void*local_stack_savepoint = local_stack->cursor;
-    size_t quotient_coefficient_count =
-        1 + dividend->coefficient_count - divisor->coefficient_count;
-    out->quotient = polynomial_allocate(output_stack, quotient_coefficient_count);
+    out->quotient = polynomial_allocate(output_stack,
+        1 + dividend->coefficient_count - divisor->coefficient_count);
     out->remainder = polynomial_allocate(output_stack, dividend->coefficient_count);
     memcpy(out->remainder->coefficients, dividend->coefficients,
         dividend->coefficient_count * sizeof(void*));
     void*leading_coefficient_reciprocal = coefficient_operations->reciprocal(local_stack,
         output_stack, divisor->coefficients[divisor->coefficient_count - 1], misc);
-    for (size_t i = 1; i <= quotient_coefficient_count; ++i)
+    while (out->remainder->coefficient_count >= divisor->coefficient_count)
     {
+        --out->remainder->coefficient_count;
         void*quotient = coefficient_operations->ring_operations.multiply(local_stack, output_stack,
-            out->remainder->coefficients[out->remainder->coefficient_count - i],
+            out->remainder->coefficients[out->remainder->coefficient_count],
             leading_coefficient_reciprocal, misc);
-        out->quotient->coefficients[quotient_coefficient_count - i] = quotient;
-        for (size_t j = 1; j < divisor->coefficient_count; ++j)
+        out->quotient->coefficients[out->remainder->coefficient_count + 1 -
+            divisor->coefficient_count] = quotient;
+        for (size_t i = 1; i < divisor->coefficient_count; ++i)
         {
-            out->remainder->coefficients[out->remainder->coefficient_count - i - j] =
+            out->remainder->coefficients[out->remainder->coefficient_count - i] =
                 coefficient_operations->ring_operations.add(local_stack, output_stack,
-                    out->remainder->coefficients[out->remainder->coefficient_count - i - j],
+                    out->remainder->coefficients[out->remainder->coefficient_count - i],
                     coefficient_operations->ring_operations.negative(local_stack, output_stack,
                         coefficient_operations->ring_operations.multiply(local_stack, output_stack,
-                            quotient, divisor->coefficients[divisor->coefficient_count - 1 - j],
+                            quotient, divisor->coefficients[divisor->coefficient_count - i - 1],
                             misc), misc), misc);
         }
     }
@@ -384,7 +386,7 @@ size_t polynomial_squarefree_factor(struct EuclideanDomainOperations*polynomial_
     while (true)
     {
         struct Division division;
-        polynomial_operations->euclidean_divide(local_stack, output_stack, &division, a, b, misc);
+        polynomial_operations->euclidean_divide(local_stack, output_stack, &division, b, a, misc);
         b = division.quotient;
         if (polynomial_operations->ring_operations.equals(b,
             polynomial_operations->ring_operations.multiplicative_identity))
@@ -474,7 +476,7 @@ void*rational_generic_multiply(struct Stack*output_stack, struct Stack*local_sta
 void*rational_generic_reciprocal(struct Stack*output_stack, struct Stack*local_stack, void*a,
     void*unused)
 {
-    return rational_reciprocal(output_stack, local_stack, a);
+    return rational_reciprocal(output_stack, a);
 }
 
 void*rational_generic_divide(struct Stack*output_stack, struct Stack*local_stack, void*dividend,

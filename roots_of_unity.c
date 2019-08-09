@@ -31,8 +31,7 @@ void roots_of_unity_sort(struct Stack*stack_a, struct Stack*stack_b, struct Numb
 {
     void*stack_a_savepoint = stack_a->cursor;
     size_t degree_size_t = integer_to_size_t(degree);
-    struct Rational*interval_size =
-        rational_integer_divide(stack_a, stack_b, pi_estimate_min, degree);
+    struct Rational*interval_size = rational_integer_divide(stack_a, stack_b, pi.min, degree);
     struct FloatInterval**argument_estimates =
         ARRAY_ALLOCATE(stack_a, degree_size_t - 1, struct FloatInterval*);
     for (size_t i = 1; i < degree_size_t; ++i)

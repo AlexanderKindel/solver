@@ -214,12 +214,12 @@ struct IntegerPolynomial*bound_coefficients(struct Stack*output_stack, struct St
         if (integer_compare(output_stack, local_stack, integer_doubled(local_stack, remainder),
             characteristic_power) > 0)
         {
-            a->coefficients[i] =
+            out->coefficients[i] =
                 integer_subtract(output_stack, local_stack, remainder, characteristic_power);
         }
         else
         {
-            a->coefficients[i] = integer_copy(output_stack, remainder);
+            out->coefficients[i] = integer_copy(output_stack, remainder);
         }
     }
     return out;
@@ -339,9 +339,8 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
     struct IntegerPolynomial*product_of_unlifted_factors = modded_a;
     struct IntegerPolynomial*unmodded_b_times_c = modded_polynomial_monic(local_stack, output_stack,
         modded_polynomial_reduced(local_stack, output_stack, a, prime_power), prime_power);
-    struct IntegerPolynomial**lifted_factors = stack_slot_allocate(local_stack,
-        modded_a_factor_count * sizeof(struct IntegerPolynomial*),
-        _Alignof(struct IntegerPolynomial*));
+    struct IntegerPolynomial**lifted_factors =
+        ARRAY_ALLOCATE(local_stack, modded_a_factor_count, struct IntegerPolynomial*);
     size_t lifted_factor_count = 0;
     modded_a_factor_count -= 1;
     for (size_t i = 0; i < modded_a_factor_count; ++i)
