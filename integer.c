@@ -70,13 +70,14 @@ struct Integer*integer_from_size_t(struct Stack*output_stack, size_t value)
 
 size_t integer_to_size_t(struct Integer*a)
 {
+    ASSERT(a->sign >= 0, "integer_to_size_t called on a negative Integer.");
     switch (a->value_count)
     {
     case 0:
         return 0;
     case 1:
     case 2:
-        return *(size_t*)&a->value;
+        return *(size_t*)a->value;
     default:
         crash("integer_to_size_t called on an Integer too large to fit in a size_t.");
     }

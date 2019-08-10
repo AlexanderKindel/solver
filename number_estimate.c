@@ -44,18 +44,8 @@ void number_argument_cosine_estimate(struct Stack*output_stack, struct Stack*loc
     struct RationalInterval argument_max_cosine;
     rational_estimate_cosine(local_stack, output_stack, &argument_max_cosine, argument_estimate.max,
         argument_interval_size);
-    if (rational_compare(output_stack, local_stack, argument_min_cosine.min,
-        argument_min_cosine.max) > 0 ||
-        rational_compare(output_stack, local_stack, argument_max_cosine.min,
-            argument_max_cosine.max) > 0)
-    {
-        out->max = &rational_one;
-    }
-    else
-    {
-        out->max = rational_copy(output_stack, rational_max(output_stack, local_stack,
-            argument_min_cosine.max, argument_max_cosine.max));
-    }
+    out->max = rational_copy(output_stack, rational_max(output_stack, local_stack,
+        argument_min_cosine.max, argument_max_cosine.max));
     pi_shrink_interval_to_one_side_of_value(argument_estimate.min);
     pi_shrink_interval_to_one_side_of_value(argument_estimate.max);
     if (rational_compare(output_stack, local_stack, argument_estimate.min, pi.min) <= 0 &&
@@ -489,9 +479,6 @@ void float_argument_estimate_for_part_sum(struct Stack*output_stack, struct Stac
     number_float_argument_estimate(output_stack, local_stack, out, a, interval_size);
 }
 
-
-//out->min and out->max are both always in [0, pi). This means that when the interval straddles the
-//positive x axis, out->min > out->max.
 void number_float_argument_estimate(struct Stack*output_stack, struct Stack*local_stack,
     struct FloatInterval*out, struct Number*a, struct Rational*interval_size)
 {
@@ -507,8 +494,6 @@ void number_float_argument_estimate(struct Stack*output_stack, struct Stack*loca
     }
 }
 
-//out->min and out->max are both always in [0, pi). This means that when the interval straddles the
-//positive x axis, out->min > out->max.
 void number_rational_argument_estimate(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct Number*a, struct Rational*interval_size)
 {
@@ -555,53 +540,54 @@ void number_rational_argument_estimate(struct Stack*output_stack, struct Stack*l
     case '+':
     {
         void*local_stack_savepoint = local_stack->cursor;
-        interval_size =
-            rational_integer_divide(local_stack, output_stack, interval_size, &INT(3, +));
         struct RationalInterval real_part_estimate;
         struct RationalInterval imaginary_part_estimate;
         struct Rational*part_interval_size = &rational_one;
         while (true)
         {
-            number_rational_real_part_estimate(local_stack, output_stack, &real_part_estimate, a,
-                part_interval_size);
-            if (real_part_estimate.min->numerator->sign != -real_part_estimate.max->numerator->sign)
-            {
-                number_rational_imaginary_part_estimate(local_stack, output_stack,
-                    &imaginary_part_estimate, a, rational_multiply(local_stack, output_stack, 
-                        rational_subtract(local_stack, output_stack, real_part_estimate.max,
-                            real_part_estimate.min), interval_size));
-                if (imaginary_part_estimate.min->numerator->sign !=
-                    -imaginary_part_estimate.max->numerator->sign)
-                {
-                    break;
-                }
-                rational_interval_estimate_atan2(output_stack, local_stack, out,
-                    &imaginary_part_estimate, &real_part_estimate, interval_size);
-                local_stack->cursor = local_stack_savepoint;
-                return;
-            }
             number_rational_imaginary_part_estimate(local_stack, output_stack,
                 &imaginary_part_estimate, a, part_interval_size);
-            if (imaginary_part_estimate.min->numerator->sign !=
-                -imaginary_part_estimate.max->numerator->sign)
+            if (imaginary_part_estimate.min->numerator->sign ==
+                imaginary_part_estimate.max->numerator->sign)
             {
-                number_rational_real_part_estimate(local_stack, output_stack,
-                    &real_part_estimate, a, rational_multiply(local_stack, output_stack,
-                        rational_subtract(local_stack, output_stack, imaginary_part_estimate.max,
-                            imaginary_part_estimate.min), interval_size));
-                if (real_part_estimate.min->numerator->sign !=
+                break;
+            }
+            number_rational_real_part_estimate(local_stack, output_stack, &real_part_estimate, a,
+                part_interval_size);
+            struct Rational*imaginary_max_magnitude = rational_interval_max_magnitude(local_stack,
+                output_stack, &imaginary_part_estimate);
+            if (rational_polynomial_root_count_in_rectangle(local_stack, output_stack,
+                a->minimal_polynomial, &real_part_estimate,
+                &(struct RationalInterval){rational_negative(local_stack, imaginary_max_magnitude),
+                imaginary_max_magnitude}) == 1)
+            {
+                while (real_part_estimate.min->numerator->sign ==
                     -real_part_estimate.max->numerator->sign)
                 {
-                    break;
+                    part_interval_size->denominator =
+                        integer_doubled(local_stack, part_interval_size->denominator);
+                    number_rational_real_part_estimate(local_stack, output_stack,
+                        &real_part_estimate, a, part_interval_size);
                 }
-                rational_interval_estimate_atan2(output_stack, local_stack, out,
-                    &imaginary_part_estimate, &real_part_estimate, interval_size);
+                if (real_part_estimate.max->numerator->sign > 0)
+                {
+                    out->min = &rational_zero;
+                    out->max = &rational_zero;
+                }
+                else
+                {
+                    pi_estimate(interval_size);
+                    out->min = pi.min;
+                    out->max = pi.max;
+                }
                 local_stack->cursor = local_stack_savepoint;
                 return;
             }
             part_interval_size->denominator =
                 integer_doubled(local_stack, part_interval_size->denominator);
         }
+        interval_size =
+            rational_integer_divide(local_stack, output_stack, interval_size, &INT(3, +));
         struct Rational*imaginary_part_interval_size =
             rational_interval_factor_interval_size(local_stack, output_stack,
                 &imaginary_part_estimate, &(struct RationalInterval){
@@ -617,8 +603,8 @@ void number_rational_argument_estimate(struct Stack*output_stack, struct Stack*l
             rational_subtract(local_stack, output_stack, &rational_one, real_part_interval_size));
         number_rational_real_part_estimate(local_stack, output_stack, &real_part_estimate, a,
             real_part_interval_size);
-        rational_interval_estimate_atan2(output_stack, local_stack, out,
-            &imaginary_part_estimate, &real_part_estimate, interval_size);
+        rational_interval_estimate_atan2(output_stack, local_stack, out, &imaginary_part_estimate,
+            &real_part_estimate, interval_size);
         local_stack->cursor = local_stack_savepoint;
         return;
     }

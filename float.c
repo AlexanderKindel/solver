@@ -67,24 +67,12 @@ struct Float*float_add(struct Stack*output_stack, struct Stack*local_stack, stru
     return out;
 }
 
-struct Float*float_generic_add(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
-    struct Float*b, void*unused)
-{
-    return float_add(output_stack, local_stack, a, b);
-}
-
 struct Float*float_negative(struct Stack*output_stack, struct Float*a)
 {
     struct Float*out = ALLOCATE(output_stack, struct Float);
     out->significand = integer_negative(output_stack, a->significand);
     out->exponent = integer_copy(output_stack, a->exponent);
     return out;
-}
-
-struct Float*float_generic_negative(struct Stack*output_stack, struct Stack*unused_stack,
-    struct Float*a, void*unused)
-{
-    return float_negative(output_stack, a);
 }
 
 struct Float*float_subtract(struct Stack*output_stack, struct Stack*local_stack,
@@ -106,12 +94,6 @@ struct Float*float_multiply(struct Stack*output_stack, struct Stack*local_stack,
         integer_add(local_stack, a->exponent, b->exponent));
     local_stack->cursor = local_stack_savepoint;
     return out;
-}
-
-struct Float*float_generic_multiply(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float*a, struct Float*b, void*unused)
-{
-    return float_multiply(output_stack, local_stack, a, b);
 }
 
 int8_t float_compare(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b)

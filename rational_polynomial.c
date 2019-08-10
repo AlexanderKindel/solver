@@ -181,6 +181,123 @@ struct RationalPolynomial*rational_polynomial_derivative(struct Stack*output_sta
         (struct Polynomial*)a);
 }
 
+void*rational_polynomial_evaluate(struct RingOperations*argument_operations,
+    void*(argument_rational_multiply)(struct Stack*, struct Stack*, void*, struct Rational*),
+    struct Stack*output_stack, struct Stack*local_stack, struct RationalPolynomial*a, void*argument)
+{
+    void*local_stack_savepoint = local_stack->cursor;
+    void*out = argument_operations->additive_identity;
+    void*argument_power = argument_operations->multiplicative_identity;
+    for (size_t i = 0; i < a->coefficient_count; ++i)
+    {
+        out = argument_operations->add(local_stack, output_stack, out,
+            argument_rational_multiply(local_stack, output_stack, argument_power,
+                a->coefficients[i]), 0);
+        argument_power =
+            argument_operations->multiply(local_stack, output_stack, argument_power, argument, 0);
+    }
+    local_stack->cursor = local_stack_savepoint;
+    return out;
+}
+
+struct Rational*rational_polynomial_evaluate_at_rational(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalPolynomial*a, struct Rational*argument)
+{
+    return rational_polynomial_evaluate(&rational_operations.ring_operations, rational_multiply,
+        output_stack, local_stack, a, argument);
+}
+
+struct Integer*sturm_chain_sign_variation(struct Stack*output_stack, struct Stack*local_stack,
+    struct RationalPolynomial*first_element, struct RationalPolynomial*second_element)
+{
+    void*local_stack_savepoint = local_stack->cursor;
+    int8_t start_sign = rational_polynomial_evaluate_at_rational(local_stack, output_stack,
+        first_element, &rational_zero)->numerator->sign;
+    size_t start_sign_change_count = 0;
+    int8_t end_sign = rational_polynomial_evaluate_at_rational(local_stack, output_stack,
+        first_element, &rational_one)->numerator->sign;
+    size_t end_sign_change_count = 0;
+    while (second_element->coefficient_count > 1)
+    {
+        struct Rational*second_element_at_edge_start =
+            rational_polynomial_evaluate_at_rational(local_stack, output_stack, second_element,
+                &rational_zero);
+        int8_t sign_change = second_element_at_edge_start->numerator->sign - start_sign;
+        start_sign_change_count += sign_change * sign_change;
+        start_sign = second_element_at_edge_start->numerator->sign;
+        struct Rational*second_element_at_edge_end =
+            rational_polynomial_evaluate_at_rational(local_stack, output_stack, second_element,
+                &rational_one);
+        sign_change = second_element_at_edge_end->numerator->sign - end_sign;
+        end_sign_change_count += sign_change * sign_change;
+        end_sign = second_element_at_edge_end->numerator->sign;
+        struct RationalPolynomial*remainder = rational_polynomial_negative(local_stack, 
+            rational_polynomial_euclidean_remainder(local_stack, output_stack, first_element,
+                second_element));
+        first_element = second_element;
+        second_element = remainder;
+    }
+    struct Integer*out = integer_subtract(output_stack, local_stack,
+        integer_from_size_t(local_stack, start_sign_change_count),
+        integer_from_size_t(local_stack, end_sign_change_count));
+    local_stack->cursor = local_stack_savepoint;
+    return out;
+}
+
+//Returns a->coefficient_count if a has a zero on the rectangle boundary.
+size_t rational_polynomial_root_count_in_rectangle(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalPolynomial*a, struct RationalInterval*real,
+    struct RationalInterval*imaginary)
+{
+    void*local_stack_savepoint = local_stack->cursor;
+    struct GaussianRational corners[5] = { { real->min, imaginary->min },
+        { real->max, imaginary->min }, { real->max, imaginary->max }, { real->min, imaginary->max },
+        { real->min, imaginary->min } };
+    struct GaussianRationalPolynomial*edges[4];
+    struct Integer*sign_variation_total = &zero;
+    for (size_t i = 0; i < 4; ++i)
+    {
+        edges[i] = polynomial_allocate(local_stack, 2);
+        edges[i]->coefficients[0] = &corners[i];
+        edges[i]->coefficients[1] =
+            gaussian_rational_subtract(local_stack, output_stack, &corners[i + 1], &corners[i]);
+        struct GaussianRationalPolynomial*a_at_edge =
+            rational_polynomial_evaluate(&gaussian_rational_polynomial_operations,
+                gaussian_rational_polynomial_rational_multiply, local_stack, output_stack, a,
+                edges[i]);
+        struct RationalPolynomial*real_part =
+            polynomial_allocate(local_stack, a->coefficient_count);
+        struct RationalPolynomial*imaginary_part =
+            polynomial_allocate(local_stack, a->coefficient_count);
+        for (size_t i = 0; i < a->coefficient_count; ++i)
+        {
+            real_part->coefficients[i] =
+                rational_copy(local_stack, a_at_edge->coefficients[i]->real);
+            imaginary_part->coefficients[i] =
+                rational_copy(local_stack, a_at_edge->coefficients[i]->imaginary);
+        }
+        polynomial_trim_leading_zeroes(&rational_operations.ring_operations,
+            (struct Polynomial*)real_part);
+        polynomial_trim_leading_zeroes(&rational_operations.ring_operations,
+            (struct Polynomial*)imaginary_part);
+        struct RationalPolynomial*sturm_chain_first_element =
+            rational_polynomial_gcd(local_stack, output_stack, real_part, imaginary_part);
+        if (sturm_chain_sign_variation(local_stack, output_stack, sturm_chain_first_element,
+            rational_polynomial_derivative(local_stack, output_stack,
+                sturm_chain_first_element))->sign)
+        {
+            local_stack->cursor = local_stack_savepoint;
+            return a->coefficient_count;
+        }
+        sign_variation_total = integer_add(local_stack, sign_variation_total,
+            sturm_chain_sign_variation(local_stack, output_stack, real_part, imaginary_part));
+    }
+    sign_variation_total->sign = -sign_variation_total->sign;
+    size_t out = integer_to_size_t(integer_half(output_stack, sign_variation_total));
+    local_stack->cursor = local_stack_savepoint;
+    return out;
+}
+
 struct IntegerPolynomial*rational_polynomial_primitive_part(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a)
 {

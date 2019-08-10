@@ -485,6 +485,36 @@ void*rational_generic_divide(struct Stack*output_stack, struct Stack*local_stack
     return rational_divide(output_stack, local_stack, dividend, divisor);
 }
 
+struct Float*float_generic_add(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
+    struct Float*b, void*unused)
+{
+    return float_add(output_stack, local_stack, a, b);
+}
+
+struct Float*float_generic_negative(struct Stack*output_stack, struct Stack*unused_stack,
+    struct Float*a, void*unused)
+{
+    return float_negative(output_stack, a);
+}
+
+struct Float*float_generic_multiply(struct Stack*output_stack, struct Stack*local_stack,
+    struct Float*a, struct Float*b, void*unused)
+{
+    return float_multiply(output_stack, local_stack, a, b);
+}
+
+void*gaussian_rational_generic_add(struct Stack*output_stack, struct Stack*local_stack, void*a,
+    void*b, void*unused)
+{
+    return gaussian_rational_add(output_stack, local_stack, a, b);
+}
+
+void*gaussian_rational_generic_multiply(struct Stack*output_stack, struct Stack*local_stack, void*a,
+    void*b, void*unused)
+{
+    return gaussian_rational_multiply(output_stack, local_stack, a, b);
+}
+
 void*integer_polynomial_generic_add(struct Stack*output_stack, struct Stack*local_stack, void*a,
     void*b, void*unused)
 {
@@ -539,6 +569,12 @@ void rational_polynomial_generic_euclidean_divide(struct Stack*output_stack,
 {
     rational_polynomial_euclidean_divide(output_stack, local_stack, (struct PolynomialDivision*)out,
         dividend, divisor);
+}
+
+void*gaussian_rational_polynomial_generic_multiply(struct Stack*output_stack,
+    struct Stack*local_stack, void*a, void*b, void*unused)
+{
+    return gaussian_rational_polynomial_multiply(output_stack, local_stack, a, b);
 }
 
 void*nested_polynomial_generic_add(struct Stack*output_stack, struct Stack*local_stack,
