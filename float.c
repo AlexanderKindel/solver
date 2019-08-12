@@ -104,6 +104,18 @@ int8_t float_compare(struct Stack*stack_a, struct Stack*stack_b, struct Float*a,
     return out;
 }
 
+struct Float*float_min(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b)
+{
+    if (float_compare(stack_a, stack_b, a, b) < 0)
+    {
+        return a;
+    }
+    else
+    {
+        return b;
+    }
+}
+
 struct Float*float_max(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b)
 {
     if (float_compare(stack_a, stack_b, a, b) > 0)

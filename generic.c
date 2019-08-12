@@ -270,7 +270,7 @@ void polynomial_euclidean_divide(struct EuclideanDomainOperations*coefficient_op
                 divisor->coefficient_count] = division.quotient;
             for (size_t i = 1; i < divisor->coefficient_count; ++i)
             {
-                out->remainder->coefficients[divisor->coefficient_count - i] =
+                out->remainder->coefficients[out->remainder->coefficient_count - i] =
                     coefficient_operations->ring_operations.add(local_stack, output_stack,
                         out->remainder->coefficients[out->remainder->coefficient_count - i],
                         coefficient_operations->ring_operations.negative(local_stack, output_stack,

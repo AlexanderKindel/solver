@@ -62,9 +62,10 @@ struct Integer*integer_from_size_t(struct Stack*output_stack, size_t value)
     size_t value_count = sizeof(size_t) / sizeof(uint32_t);
     struct Integer*out = integer_allocate(output_stack, value_count);
     out->value_count = value_count;
-    *(size_t*)&out->value = value;
+    out->sign = 1;
+    *(size_t*)out->value = value;
     integer_trim_leading_zeroes(out);
-    output_stack->cursor = &out->value[out->value_count];
+    output_stack->cursor = out->value + out->value_count;
     return out;
 }
 
