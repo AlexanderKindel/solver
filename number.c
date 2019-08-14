@@ -17,6 +17,7 @@ struct Number*number_copy(struct Stack*output_stack, struct Number*a)
         out->right = number_copy(output_stack, a->right);
         return out;
     case '+':
+        out->generator = number_copy(output_stack, a->generator);
         out->terms_in_terms_of_generator =
             ARRAY_ALLOCATE(output_stack, a->term_count, struct RationalPolynomial*);
         for (size_t i = 0; i < a->term_count; ++i)
@@ -73,6 +74,104 @@ struct Number*number_surd_initialize(struct Stack*output_stack, struct Stack*loc
         local_stack, annulling_polynomial, out);
     local_stack->cursor = local_stack_savepoint;
     return out;
+}
+
+int8_t number_formal_compare(struct Number*a, struct Number*b)
+{
+    switch (a->operation)
+    {
+    case 'r':
+        if (b->operation == 'r' && rational_equals(&a->value, &b->value))
+        {
+            return 0;
+        }
+        return -1;
+    case '^':
+        switch (b->operation)
+        {
+        case 'r':
+            return 1;
+        case '^':
+        {
+            int8_t out = number_formal_compare(a->right, b->right);
+            if (out)
+            {
+                return out;
+            }
+            return number_formal_compare(a->left, b->left);
+        }
+        }
+        return -1;
+    case '*':
+        switch (b->operation)
+        {
+        case '+':
+            return -1;
+        case '*':
+        {
+            int8_t out = number_formal_compare(a->left, b->left);
+            if (out)
+            {
+                return out;
+            }
+            return number_formal_compare(a->right, b->right);
+        }
+        }
+        return 1;
+    case '+':
+        if (b->operation != '+')
+        {
+            return 1;
+        }
+        if (a->term_count > b->term_count)
+        {
+            return 1;
+        }
+        if (a->term_count < b->term_count)
+        {
+            return -1;
+        }
+        for (size_t i = 0; i < a->term_count; ++i)
+        {
+            int8_t out = number_formal_compare(a->terms[i], b->terms[i]);
+            if (out)
+            {
+                return out;
+            }
+        }
+        return 0;
+    }
+    crash("Number operation not recognized.");
+}
+
+bool number_formal_equals(struct Number*a, struct Number*b)
+{
+    if (a->operation != b->operation)
+    {
+        return false;
+    }
+    switch (a->operation)
+    {
+    case 'r':
+        return rational_equals(&a->value, &b->value);
+    case '^':
+    case '*':
+        return number_formal_equals(a->left, b->left) && number_formal_equals(a->right, b->right);
+    case '+':
+        if (a->term_count != a->term_count)
+        {
+            return false;
+        }
+        for (size_t i = 0; i < a->term_count; ++i)
+        {
+            if (!number_formal_equals(a->terms[i], a->terms[i]))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+    crash("Number operation not recognized");
 }
 
 struct RationalPolynomial*number_minimal_polynomial_from_annulling_polynomial(
@@ -159,7 +258,7 @@ struct Number*number_reciprocal(struct Stack*output_stack, struct Stack*local_st
         if (!a->value.numerator->value_count)
         {
             puts("Tried to divide by 0.");
-            return number_divide_by_zero_error;
+            return 0;
         }
         out = number_rational_initialize(output_stack, rational_reciprocal(local_stack, &a->value));
         break;
@@ -183,7 +282,7 @@ struct Number*number_reciprocal(struct Stack*output_stack, struct Stack*local_st
     {
         struct Number**conjugates = number_conjugates(local_stack, output_stack, a);
         out = &number_one;
-        for (size_t i = 0; i < a->minimal_polynomial->coefficient_count - 1; ++i)
+        for (size_t i = 1; i < a->minimal_polynomial->coefficient_count - 1; ++i)
         {
             out = number_multiply(local_stack, output_stack, out, conjugates[i]);
         }
@@ -207,9 +306,9 @@ struct Number*number_divide(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*dividend, struct Number*divisor)
 {
     struct Number*reciprocal = number_reciprocal(local_stack, output_stack, divisor);
-    if (reciprocal == number_divide_by_zero_error)
+    if (!reciprocal)
     {
-        return number_divide_by_zero_error;
+        return 0;
     }
     return number_multiply(output_stack, local_stack, dividend, reciprocal);
 }
@@ -258,10 +357,10 @@ struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_
     {
         void*local_stack_savepoint = local_stack->cursor;
         base = number_reciprocal(local_stack, output_stack, base);
-        if (base == number_divide_by_zero_error)
+        if (!base)
         {
             local_stack->cursor = local_stack_savepoint;
-            return number_divide_by_zero_error;
+            return 0;
         }
         struct Number*out = number_exponentiate(output_stack, local_stack, base,
             rational_negative(local_stack, exponent));
@@ -325,7 +424,7 @@ struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_
                 if (integer_equals(new_degree, &one))
                 {
                     struct Rational*rational_radicand = ALLOCATE(output_stack, struct Rational);
-                    rational_radicand->numerator = integer_copy(output_stack, radicand);
+                    rational_radicand->numerator = integer_copy(output_stack, coefficient);
                     rational_radicand->denominator = &one;
                     struct Number*out = number_rational_initialize(output_stack, rational_radicand);
                     local_stack->cursor = local_stack_savepoint;
@@ -435,17 +534,22 @@ struct Number**number_sum_or_product_conjugates(struct Number*(operation)(struct
     {
         for (size_t j = 0; j < b_conjugate_count; ++j)
         {
-            struct Number*candidate =
-                operation(local_stack, output_stack, a_conjugates[i], b_conjugates[j]);
-            if (rational_polynomial_equals(minimal_polynomial, candidate->minimal_polynomial))
+            void*output_stack_savepoint = output_stack->cursor;
+            out[conjugate_count] =
+                operation(output_stack, local_stack, a_conjugates[i], b_conjugates[j]);
+            if (rational_polynomial_equals(minimal_polynomial,
+                out[conjugate_count]->minimal_polynomial))
             {
-                out[conjugate_count] = number_copy(output_stack, candidate);
                 ++conjugate_count;
                 if (conjugate_count == minimal_polynomial->coefficient_count - 1)
                 {
                     local_stack->cursor = local_stack_savepoint;
                     return out;
                 }
+            }
+            else
+            {
+                output_stack->cursor = output_stack_savepoint;
             }
         }
     }
@@ -535,14 +639,14 @@ struct Number*number_evaluate(struct Stack*output_stack, struct Stack*local_stac
     }
     void*local_stack_savepoint = local_stack->cursor;
     a->left = number_evaluate(local_stack, output_stack, a->left);
-    if (a->left == number_divide_by_zero_error)
+    if (!a->left)
     {
-        return number_divide_by_zero_error;
+        return 0;
     }
     a->right = number_evaluate(local_stack, output_stack, a->right);
-    if (a->right == number_divide_by_zero_error)
+    if (!a->right)
     {
-        return number_divide_by_zero_error;
+        return 0;
     }
     struct Number*out;
     switch (a->operation)
@@ -618,9 +722,7 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
         size_t char_count;
         if (a->left->operation == 'r')
         {
-            void*local_stack_savepoint = local_stack->cursor;
-            if (integer_equals(a->left->value.numerator,
-                integer_initialize(local_stack, 1, -1)))
+            if (integer_equals(a->left->value.numerator, &INT(1, -)))
             {
                 *(char*)ALLOCATE(output_stack, char) = '-';
                 char_count = 1 + number_string(output_stack, local_stack, a->right);
@@ -629,15 +731,17 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
             {
                 char_count =
                     integer_string(output_stack, local_stack, a->left->value.numerator);
-                char*right_string = output_stack->cursor;
-                size_t right_char_count = number_string(output_stack, local_stack, a->right);
+                char*right_string = local_stack->cursor;
+                size_t right_char_count = number_string(local_stack, output_stack, a->right);
                 if (right_string[0] != '(')
                 {
-                    ALLOCATE(output_stack, char);
-                    memcpy(right_string + 1, right_string, right_char_count);
-                    *right_string = '*';
-                    char_count += 1 + right_char_count;
+                    *(char*)ALLOCATE(output_stack, char) = '*';
+                    char_count += 1;
                 }
+                char*right_string_out = ARRAY_ALLOCATE(output_stack, right_char_count, char);
+                memcpy(right_string_out, right_string, right_char_count);
+                char_count += right_char_count;
+                local_stack->cursor = right_string;
             }
             else
             {
@@ -649,7 +753,6 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
                 char_count +=
                     1 + integer_string(output_stack, local_stack, a->left->value.denominator);
             }
-            local_stack->cursor = local_stack_savepoint;
         }
         else
         {
@@ -664,8 +767,17 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
         size_t char_count = number_string(output_stack, local_stack, a->terms[0]);
         for (size_t i = 1; i < a->term_count; ++i)
         {
-            *(char*)ALLOCATE(output_stack, char) = '+';
-            char_count += number_string(output_stack, local_stack, a->terms[i]) + 1;
+            char*sum_string = local_stack->cursor;
+            size_t sum_char_count = number_string(local_stack, output_stack, a->terms[i]);
+            if (sum_string[0] != '-')
+            {
+                *(char*)ALLOCATE(output_stack, char) = '+';
+                char_count += 1;
+            }
+            char*sum_string_out = ARRAY_ALLOCATE(output_stack, sum_char_count, char);
+            memcpy(sum_string_out, sum_string, sum_char_count);
+            char_count += sum_char_count;
+            local_stack->cursor = sum_string;
         }
         return char_count;
     }

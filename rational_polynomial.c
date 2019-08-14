@@ -50,7 +50,7 @@ struct RationalPolynomial*rational_polynomial_integer_multiply(struct Stack*outp
 struct RationalPolynomial*rational_polynomial_rational_multiply(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a, struct Rational*b)
 {
-    return polynomial_multiply_by_coefficient(&integer_operations.ring_operations, output_stack,
+    return polynomial_multiply_by_coefficient(&rational_operations.ring_operations, output_stack,
         local_stack, (struct Polynomial*)a, b, 0);
 }
 

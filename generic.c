@@ -571,6 +571,12 @@ void rational_polynomial_generic_euclidean_divide(struct Stack*output_stack,
         dividend, divisor);
 }
 
+void*rational_polynomial_generic_gcd(struct Stack*output_stack, struct Stack*local_stack, void*a,
+    void*b, void*unused)
+{
+    return rational_polynomial_gcd(output_stack, local_stack, a, b);
+}
+
 void*gaussian_rational_polynomial_generic_multiply(struct Stack*output_stack,
     struct Stack*local_stack, void*a, void*b, void*unused)
 {

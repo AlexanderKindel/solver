@@ -337,6 +337,8 @@ void*rational_polynomial_generic_multiply(struct Stack*output_stack, struct Stac
     void*a, void*b, void*unused);
 void rational_polynomial_generic_euclidean_divide(struct Stack*output_stack,
     struct Stack*local_stack, struct Division*out, void*dividend, void*divisor, void*unused);
+void*rational_polynomial_generic_gcd(struct Stack*output_stack, struct Stack*local_stack, void*a,
+    void*b, void*unused);
 void*gaussian_rational_polynomial_generic_multiply(struct Stack*output_stack,
     struct Stack*local_stack, void*a, void*b, void*unused);
 void*nested_polynomial_generic_add(struct Stack*output_stack, struct Stack*local_stack,
@@ -674,6 +676,8 @@ struct NestedPolynomial*nested_polynomial_euclidean_remainder(struct Stack*outpu
     struct Stack*local_stack, struct NestedPolynomial*dividend, struct NestedPolynomial*divisor);
 struct NestedPolynomial*nested_polynomial_rational_polynomial_divide(struct Stack*output_stack,
     struct Stack*local_stack, struct NestedPolynomial*dividend, struct RationalPolynomial*divisor);
+struct RationalPolynomial*nested_polynomial_content(struct Stack*output_stack,
+    struct Stack*local_stack, struct NestedPolynomial*a);
 struct NestedPolynomial*nested_polynomial_derivative(struct Stack*output_stack,
     struct Stack*local_stack, struct NestedPolynomial*a);
 struct RationalPolynomial*nested_polynomial_resultant(struct Stack*output_stack,
@@ -702,20 +706,11 @@ void matrix_row_echelon_form(void*(augmentation_element_rational_multiply)(struc
 void matrix_diagonalize(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
     struct Rational**augmentation);
 
-struct AlgebraicNumber*pool_algebraic_number_allocate(struct Stack*output_stack,
-    struct AlgebraicNumber*free_list);
-void algebraic_number_move_coefficients_to_stack(struct Stack*output_stack,
-    struct AlgebraicNumber*a);
-struct AlgebraicNumber*algebraic_number_add(struct Stack*output_stack,
-    struct Stack*local_stack, struct AlgebraicNumber*a, struct AlgebraicNumber*b);
-struct AlgebraicNumber*algebraic_number_multiply(struct Stack*output_stack,
-    struct Stack*local_stack, struct AlgebraicNumber*a, struct AlgebraicNumber*b,
-    struct RationalPolynomial*generator_annulling_polynomials[2]);
-
 struct Number*number_copy(struct Stack*output_stack, struct Number*a);
 struct Number*number_rational_initialize(struct Stack*output_stack, struct Rational*value);
 struct Number*number_surd_initialize(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*radicand, struct Number*exponent);
+int8_t number_formal_compare(struct Number*a, struct Number*b);
 struct RationalPolynomial*number_minimal_polynomial_from_annulling_polynomial(
     struct Stack*output_stack, struct Stack*local_stack,
     struct RationalPolynomial*annulling_polynomial, struct Number*a);
@@ -817,7 +812,8 @@ struct RationalPolynomial rational_polynomial_one = { 1, &rational_one };
 struct EuclideanDomainOperations rational_polynomial_operations = { { rational_polynomial_copy,
     rational_polynomial_equals, &polynomial_zero, &rational_polynomial_one,
     rational_polynomial_generic_add, rational_polynomial_generic_negative,
-    rational_polynomial_generic_multiply }, rational_polynomial_generic_euclidean_divide, 0 };
+    rational_polynomial_generic_multiply }, rational_polynomial_generic_euclidean_divide, 
+    rational_polynomial_generic_gcd };
 
 struct GaussianRational gaussian_rational_zero = { &rational_zero, &rational_zero };
 struct GaussianRational gaussian_rational_one = { &rational_one, &rational_zero };
@@ -842,9 +838,6 @@ struct EuclideanDomainOperations number_field_polynomial_operations = { { nested
     number_field_polynomial_gcd };
 
 struct Number number_one;
-
-struct Number*number_divide_by_zero_error = 0;
-struct Number*number_product_consolidation_failed = (struct Number*)1;
 
 struct Number**roots_of_unity;
 

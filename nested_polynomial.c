@@ -69,6 +69,13 @@ struct NestedPolynomial*nested_polynomial_rational_polynomial_divide(struct Stac
         local_stack, (struct Polynomial*)dividend, divisor);
 }
 
+struct RationalPolynomial*nested_polynomial_content(struct Stack*output_stack,
+    struct Stack*local_stack, struct NestedPolynomial*a)
+{
+    return polynomial_content(&rational_polynomial_operations, output_stack, local_stack,
+        (struct Polynomial*)a, 0);
+}
+
 struct NestedPolynomial*nested_polynomial_derivative(struct Stack*output_stack,
     struct Stack*local_stack, struct NestedPolynomial*a)
 {
@@ -85,6 +92,15 @@ struct RationalPolynomial*nested_polynomial_resultant(struct Stack*output_stack,
         return (struct RationalPolynomial*)&polynomial_zero;
     }
     void*local_stack_savepoint = local_stack->cursor;
+    struct RationalPolynomial*a_content = nested_polynomial_content(local_stack, output_stack, a);
+    struct RationalPolynomial*b_content = nested_polynomial_content(local_stack, output_stack, b);
+    struct RationalPolynomial*t = rational_polynomial_multiply(local_stack, output_stack,
+        rational_polynomial_exponentiate(local_stack, output_stack, a_content,
+            integer_from_size_t(local_stack, b->coefficient_count - 1)),
+        rational_polynomial_exponentiate(local_stack, output_stack, b_content,
+            integer_from_size_t(local_stack, a->coefficient_count - 1)));
+    a = nested_polynomial_rational_polynomial_divide(local_stack, output_stack, a, a_content);
+    b = nested_polynomial_rational_polynomial_divide(local_stack, output_stack, b, b_content);
     struct RationalPolynomial*g = &rational_polynomial_one;
     struct RationalPolynomial*h = &rational_polynomial_one;
     if (b->coefficient_count > a->coefficient_count)
@@ -127,16 +143,17 @@ struct RationalPolynomial*nested_polynomial_resultant(struct Stack*output_stack,
     struct RationalPolynomial*out;
     if (a->coefficient_count > 2)
     {
-        out = rational_polynomial_euclidean_quotient(output_stack, local_stack, term,
+        out = rational_polynomial_euclidean_quotient(local_stack, output_stack, term,
             rational_polynomial_exponentiate(local_stack, output_stack, h,
                 integer_from_size_t(local_stack, a->coefficient_count - 2)));
     }
     else
     {
-        out = rational_polynomial_multiply(output_stack, local_stack, term,
+        out = rational_polynomial_multiply(local_stack, output_stack, term,
             rational_polynomial_exponentiate(local_stack, output_stack, h,
                 integer_from_size_t(local_stack, 2 - a->coefficient_count)));
     }
+    out = rational_polynomial_multiply(output_stack, local_stack, out, t);
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
