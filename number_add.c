@@ -1,14 +1,39 @@
 #include "declarations.h"
 
+struct RationalPolynomial*sum_minimal_polynomial(struct Stack*output_stack,
+    struct Stack*local_stack, struct Number*a, struct RationalPolynomial*left_minimal_polynomial,
+    struct RationalPolynomial*right_minimal_polynomial)
+{
+    void*local_stack_savepoint = local_stack->cursor;
+    struct NestedPolynomial*power = &nested_polynomial_one;
+    struct NestedPolynomial d = { 2, &(struct RationalPolynomial){2, &rational_zero, &rational_one},
+        &(struct RationalPolynomial){1, &(struct Rational){&INT(1, -), &one}} };
+    struct NestedPolynomial*t = (struct NestedPolynomial*)&polynomial_zero;
+    for (size_t i = 0; i < left_minimal_polynomial->coefficient_count; ++i)
+    {
+        t = nested_polynomial_add(local_stack, output_stack, t,
+            nested_polynomial_rational_polynomial_multiply(local_stack, output_stack, power,
+                &(struct RationalPolynomial){ 1, left_minimal_polynomial->coefficients[i] }));
+        power = nested_polynomial_multiply(local_stack, output_stack, power, &d);
+    }
+    struct RationalPolynomial*out =
+        number_minimal_polynomial_from_annulling_polynomial(output_stack, local_stack,
+            nested_polynomial_resultant(local_stack, output_stack, t,
+                rational_polynomial_to_nested_polynomial(local_stack, right_minimal_polynomial)),
+            a);
+    local_stack->cursor = local_stack_savepoint;
+    return out;
+}
+
 void sun_convert_terms_to_new_generator(struct Stack*output_stack, struct Stack*local_stack,
     struct Matrix*out, struct Number*a, struct RationalPolynomial*old_generator_in_terms_of_new,
     struct RationalPolynomial*new_generator_minimal_polynomial)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    out->width = a->term_count;
+    out->width = a->element_count;
     out->height = 0;
     size_t max_term_coefficient_count = 0;
-    for (size_t i = 0; i < a->term_count; ++i)
+    for (size_t i = 0; i < a->element_count; ++i)
     {
         max_term_coefficient_count = max(max_term_coefficient_count,
             a->terms_in_terms_of_generator[i]->coefficient_count);
@@ -51,19 +76,20 @@ void sun_convert_terms_to_new_generator(struct Stack*output_stack, struct Stack*
     }
 }
 
-void sum_append_term(struct Stack*output_stack, struct Number*a, struct Number*new_term,
-    struct RationalPolynomial*new_term_in_terms_of_generator)
+void sum_append_term(struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
+    struct Number*new_term, struct RationalPolynomial*new_term_in_terms_of_generator)
 {
-    a->terms[a->term_count - 1] = number_copy(output_stack, new_term);
-    a->terms_in_terms_of_generator[a->term_count - 1] =
+    a->elements[a->element_count - 1] = number_copy(output_stack, new_term);
+    a->terms_in_terms_of_generator[a->element_count - 1] =
         rational_polynomial_copy(output_stack, new_term_in_terms_of_generator);
-    for (size_t i = a->term_count; i-- > 1;)
+    for (size_t i = a->element_count; i-- > 1;)
     {
-        if (number_formal_compare(a->terms[i], a->terms[i - 1]) <= 0)
+        if (number_formal_compare(output_stack, local_stack, a->elements[i],
+            a->elements[i - 1]) <= 0)
         {
             return;
         }
-        POINTER_SWAP(a->terms[i], a->terms[i - 1]);
+        POINTER_SWAP(a->elements[i], a->elements[i - 1]);
         POINTER_SWAP(a->terms_in_terms_of_generator[i], a->terms_in_terms_of_generator[i - 1]);
     }
 }
@@ -80,13 +106,13 @@ struct Number*sum_incorporate_term_in_terms_of_new_generator(struct Stack*output
         a_terms_in_terms_of_new_generator->height)
     {
         out->generator = number_copy(output_stack, a->generator);
-        out->term_count = a->term_count + 1;
-        out->terms = ARRAY_ALLOCATE(output_stack, out->term_count, struct Number*);
+        out->element_count = a->element_count + 1;
+        out->elements = ARRAY_ALLOCATE(output_stack, out->element_count, struct Number*);
         out->terms_in_terms_of_generator =
-            ARRAY_ALLOCATE(output_stack, out->term_count, struct RationalPolynomial*);
-        for (size_t i = 0; i < a->term_count; ++i)
+            ARRAY_ALLOCATE(output_stack, out->element_count, struct RationalPolynomial*);
+        for (size_t i = 0; i < a->element_count; ++i)
         {
-            out->terms[i] = number_copy(output_stack, a->terms[i]);
+            out->elements[i] = number_copy(output_stack, a->elements[i]);
             size_t highest_nonzero_coefficient_index = a_terms_in_terms_of_new_generator->height;
             while (highest_nonzero_coefficient_index > 0)
             {
@@ -105,15 +131,16 @@ struct Number*sum_incorporate_term_in_terms_of_new_generator(struct Stack*output
                     a_terms_in_terms_of_new_generator->rows[highest_nonzero_coefficient_index][j]);
             }
         }
-        sum_append_term(output_stack, out, new_term, new_term_in_terms_of_new_generator);
+        sum_append_term(output_stack, local_stack, out, new_term,
+            new_term_in_terms_of_new_generator);
     }
     else
     {
         void*local_stack_savepoint = output_stack->cursor;
         out->generator = number_copy(output_stack, new_generator);
-        out->terms = ARRAY_ALLOCATE(output_stack, a->term_count + 1, struct Number*);
+        out->elements = ARRAY_ALLOCATE(output_stack, a->element_count + 1, struct Number*);
         out->terms_in_terms_of_generator =
-            ARRAY_ALLOCATE(output_stack, a->term_count + 1, struct RationalPolynomial*);
+            ARRAY_ALLOCATE(output_stack, a->element_count + 1, struct RationalPolynomial*);
         struct Rational**augmentation = ARRAY_ALLOCATE(output_stack,
             a_terms_in_terms_of_new_generator->height, struct Rational*);
         memcpy(augmentation, new_term_in_terms_of_new_generator->coefficients,
@@ -130,10 +157,11 @@ struct Number*sum_incorporate_term_in_terms_of_new_generator(struct Stack*output
         {
             if (augmentation[i]->numerator->value_count != 0)
             {
-                memcpy(out->terms, a->terms, a->term_count * sizeof(struct Number*));
+                memcpy(out->elements, a->elements, a->element_count * sizeof(struct Number*));
                 out->minimal_polynomial = sum_minimal_polynomial(output_stack, local_stack, out,
                     a->minimal_polynomial, new_term->minimal_polynomial);
-                sum_append_term(output_stack, out, new_term, new_term_in_terms_of_new_generator);
+                sum_append_term(output_stack, local_stack, out, new_term,
+                    new_term_in_terms_of_new_generator);
                 local_stack->cursor = local_stack_savepoint;
                 return out;
             }
@@ -150,22 +178,22 @@ struct Number*sum_incorporate_term_in_terms_of_new_generator(struct Stack*output
         }
         matrix_diagonalize(local_stack, output_stack, a_terms_in_terms_of_new_generator,
             augmentation);
-        out->term_count = 0;
+        out->element_count = 0;
         for (size_t i = 0; i < a_terms_in_terms_of_new_generator->width; ++i)
         {
             struct Rational*scale =
                 rational_add(local_stack, output_stack, augmentation[i], &rational_one);
             if (scale->numerator->value_count)
             {
-                out->terms[out->term_count] =
-                    number_rational_multiply(output_stack, local_stack, a->terms[i], scale);
-                out->terms_in_terms_of_generator[out->term_count] =
+                out->elements[out->element_count] =
+                    number_rational_multiply(output_stack, local_stack, a->elements[i], scale);
+                out->terms_in_terms_of_generator[out->element_count] =
                     rational_polynomial_rational_multiply(output_stack, local_stack,
                         a->terms_in_terms_of_generator[i], scale);
-                ++out->term_count;
+                ++out->element_count;
             }
         }
-        switch (out->term_count)
+        switch (out->element_count)
         {
         case 0:
         {
@@ -175,7 +203,7 @@ struct Number*sum_incorporate_term_in_terms_of_new_generator(struct Stack*output
         }
         case 1:
         {
-            memmove(output_stack_savepoint, out->terms[0], sizeof(struct Number));
+            memmove(output_stack_savepoint, out->elements[0], sizeof(struct Number));
             output_stack->cursor = (void*)((size_t)output_stack_savepoint + sizeof(struct Number));
             local_stack->cursor = local_stack_savepoint;
             return output_stack_savepoint;
@@ -287,64 +315,75 @@ struct Number*sum_incorporate_term(struct Stack*output_stack, struct Stack*local
     struct Number*a, struct Number*new_term)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    for (size_t i = 0; i < a->term_count; ++i)
+    for (size_t i = 0; i < a->element_count; ++i)
     {
         struct Rational*new_term_in_terms_of_old;
         switch (new_term->operation)
         {
         case 'r':
-            if (a->terms[i]->operation == 'r')
+            if (a->elements[i]->operation == 'r')
             {
                 new_term_in_terms_of_old = rational_divide(local_stack, output_stack,
-                    &new_term->value, &a->terms[i]->value);
+                    new_term->value, a->elements[i]->value);
                 break;
             }
             continue;
         case '*':
-            if (new_term->left->operation == 'r' &&
-                number_formal_compare(new_term->right, a->terms[i]) == 0)
+            if (new_term->elements[0]->operation == 'r')
             {
-                new_term_in_terms_of_old = &new_term->left->value;
-                break;
+                struct Number*right_factors = number_copy(local_stack, new_term);
+                ++right_factors->elements;
+                --right_factors->element_count;
+                if (number_formal_compare(output_stack, local_stack, right_factors,
+                    a->elements[i]) == 0)
+                {
+                    new_term_in_terms_of_old = new_term->elements[0]->value;
+                    break;
+                }
             }
         case '^':
-            if (number_formal_compare(new_term, a->terms[i]) == 0)
+            if (number_formal_compare(output_stack, local_stack, new_term, a->elements[i]) == 0)
             {
                 new_term_in_terms_of_old = &rational_one;
                 break;
             }
-            if (a->terms[i]->operation == '*' && a->terms[i]->left->operation == 'r' &&
-                number_formal_compare(new_term, a->terms[i]->right) == 0)
+            if (a->elements[i]->operation == '*' && a->elements[i]->elements[0]->operation == 'r')
             {
-                new_term_in_terms_of_old =
-                    rational_reciprocal(local_stack, &a->terms[i]->left->value);
-                break;
+                struct Number*right_factors = number_copy(local_stack, a->elements[i]->elements[0]);
+                ++right_factors->elements;
+                --right_factors->element_count;
+                if (!number_formal_compare(output_stack, local_stack, new_term, right_factors))
+                {
+                    new_term_in_terms_of_old =
+                        rational_reciprocal(local_stack, a->elements[i]->elements[0]->value);
+                    break;
+                }
             }
             continue;
         }
         struct Number*out;
         if (rational_equals(new_term_in_terms_of_old, &(struct Rational){&INT(1, -), &one}))
         {
-            if (a->term_count == 2)
+            if (a->element_count == 2)
             {
-                out = number_copy(output_stack, a->terms[a->term_count - i - 1]);
+                out = number_copy(output_stack, a->elements[a->element_count - i - 1]);
                 local_stack->cursor = local_stack_savepoint;
                 return out;
             }
             out = ALLOCATE(output_stack, struct Number);
-            out->term_count = a->term_count - 1;
-            out->terms = ARRAY_ALLOCATE(output_stack, out->term_count, struct Number*);
+            out->element_count = a->element_count - 1;
+            out->elements = ARRAY_ALLOCATE(output_stack, out->element_count, struct Number*);
             out->terms_in_terms_of_generator =
-                ARRAY_ALLOCATE(output_stack, out->term_count, struct RationalPolynomial*);
+                ARRAY_ALLOCATE(output_stack, out->element_count, struct RationalPolynomial*);
         }
         else
         {
             out = ALLOCATE(output_stack, struct Number);
-            out->term_count = a->term_count;
-            out->terms = ARRAY_ALLOCATE(output_stack, out->term_count, struct Number*);
+            out->element_count = a->element_count;
+            out->elements = ARRAY_ALLOCATE(output_stack, out->element_count, struct Number*);
             out->terms_in_terms_of_generator =
-                ARRAY_ALLOCATE(output_stack, out->term_count, struct RationalPolynomial*);
-            out->terms[i] = number_rational_multiply(output_stack, local_stack, a->terms[i],
+                ARRAY_ALLOCATE(output_stack, out->element_count, struct RationalPolynomial*);
+            out->elements[i] = number_rational_multiply(output_stack, local_stack, a->elements[i],
                 rational_integer_add(local_stack, output_stack, new_term_in_terms_of_old,
                     &one));
             out->terms_in_terms_of_generator[i] =
@@ -355,15 +394,15 @@ struct Number*sum_incorporate_term(struct Stack*output_stack, struct Stack*local
         out->generator = number_copy(output_stack, a->generator);
         for (size_t j = 0; j < i; ++j)
         {
-            out->terms[j] = number_copy(output_stack, a->terms[j]);
+            out->elements[j] = number_copy(output_stack, a->elements[j]);
             out->terms_in_terms_of_generator[j] =
                 rational_polynomial_copy(output_stack, a->terms_in_terms_of_generator[j]);
         }
-        for (size_t j = 1; j < a->term_count - i; ++j)
+        for (size_t j = 1; j < a->element_count - i; ++j)
         {
-            size_t out_term_index = out->term_count - j;
-            size_t a_term_index = a->term_count - j;
-            out->terms[out_term_index] = number_copy(output_stack, a->terms[a_term_index]);
+            size_t out_term_index = out->element_count - j;
+            size_t a_term_index = a->element_count - j;
+            out->elements[out_term_index] = number_copy(output_stack, a->elements[a_term_index]);
             out->terms_in_terms_of_generator[out_term_index] =
                 rational_polynomial_copy(output_stack,
                     a->terms_in_terms_of_generator[a_term_index]);
@@ -379,14 +418,14 @@ struct Number*sum_incorporate_term(struct Stack*output_stack, struct Stack*local
     {
         struct Matrix a_terms_in_terms_of_a_generator = { ARRAY_ALLOCATE(local_stack,
             a->generator->minimal_polynomial->coefficient_count - 1, struct Rational**),
-            a->term_count, a->generator->minimal_polynomial->coefficient_count - 1 };
+            a->element_count, a->generator->minimal_polynomial->coefficient_count - 1 };
         for (size_t i = 0; i < a_terms_in_terms_of_a_generator.height; ++i)
         {
             a_terms_in_terms_of_a_generator.rows[i] = ARRAY_ALLOCATE(local_stack,
                 a_terms_in_terms_of_a_generator.width, struct Rational*);
         }
         size_t max_term_coefficient_count = 0;
-        for (size_t i = 0; i < a->term_count; ++i)
+        for (size_t i = 0; i < a->element_count; ++i)
         {
             max_term_coefficient_count = max(max_term_coefficient_count,
                 a->terms_in_terms_of_generator[i]->coefficient_count);
@@ -423,18 +462,19 @@ struct Number*sum_incorporate_term(struct Stack*output_stack, struct Stack*local
     }
     struct Number*new_generator = ALLOCATE(local_stack, struct Number);
     new_generator->operation = 'g';
-    new_generator->term_count = a->generator->term_count + 1;
-    new_generator->terms = ARRAY_ALLOCATE(local_stack, new_generator->term_count, struct Number*);
-    memcpy(new_generator->terms, a->generator->terms,
-        a->generator->term_count * sizeof(struct Number*));
+    new_generator->element_count = a->generator->element_count + 1;
+    new_generator->elements =
+        ARRAY_ALLOCATE(local_stack, new_generator->element_count, struct Number*);
+    memcpy(new_generator->elements, a->generator->elements,
+        a->generator->element_count * sizeof(struct Number*));
     struct Rational*k = &rational_one;
     while (true)
     {
-        new_generator->terms[a->generator->term_count] = number_rational_multiply(local_stack,
+        new_generator->elements[a->generator->element_count] = number_rational_multiply(local_stack,
             output_stack, new_term, k);
         new_generator->minimal_polynomial = sum_minimal_polynomial(local_stack, output_stack,
             new_generator, a->generator->minimal_polynomial,
-            new_generator->terms[a->generator->term_count]->minimal_polynomial);
+            new_generator->elements[a->generator->element_count]->minimal_polynomial);
         struct RationalPolynomial*term_in_terms_of_new_generator =
             number_a_in_terms_of_b(local_stack, output_stack, new_term, new_generator);
         if (term_in_terms_of_new_generator)
@@ -462,7 +502,7 @@ struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, st
     switch (a->operation)
     {
     case 'r':
-        if (a->value.numerator->value_count == 0)
+        if (a->value->numerator->value_count == 0)
         {
             return number_copy(output_stack, b);
         }
@@ -470,7 +510,7 @@ struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, st
         {
             void*local_stack_savepoint = local_stack->cursor;
             struct Number*out = number_rational_initialize(output_stack,
-                rational_add(local_stack, output_stack, &a->value, &b->value));
+                rational_add(local_stack, output_stack, a->value, b->value));
             local_stack->cursor = local_stack_savepoint;
             return out;
         }
@@ -482,11 +522,11 @@ struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, st
         case 'r':
             struct Number*out = ALLOCATE(output_stack, struct Number);
             out->operation = '+';
-            out->term_count = 2;
+            out->element_count = 2;
             out->generator = number_copy(output_stack, a);
-            out->terms = ARRAY_ALLOCATE(output_stack, 2, struct Number);
-            out->terms[0] = out->generator;
-            out->terms[1] = number_copy(output_stack, b);
+            out->elements = ARRAY_ALLOCATE(output_stack, 2, struct Number);
+            out->elements[0] = out->generator;
+            out->elements[1] = number_copy(output_stack, b);
             out->terms_in_terms_of_generator =
                 ARRAY_ALLOCATE(output_stack, 2, struct RationalPolynomial);
             out->terms_in_terms_of_generator[0] = polynomial_allocate(output_stack, 2);
@@ -494,7 +534,7 @@ struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, st
             out->terms_in_terms_of_generator[0]->coefficients[1] = &rational_one;
             out->terms_in_terms_of_generator[1] = polynomial_allocate(output_stack, 1);
             out->terms_in_terms_of_generator[1]->coefficients[0] =
-                rational_copy(output_stack, &b->value);
+                rational_copy(output_stack, b->value);
             out->minimal_polynomial = sum_minimal_polynomial(output_stack, local_stack, out,
                 a->minimal_polynomial, b->minimal_polynomial);
             return out;
@@ -505,9 +545,9 @@ struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, st
             struct Number*a_term = ALLOCATE(local_stack, struct Number);
             a_term->operation = '+';
             a_term->generator = number_copy(local_stack, a);
-            a_term->term_count = 1;
-            a_term->terms = ALLOCATE(local_stack, struct Number*);
-            a_term->terms[0] = a;
+            a_term->element_count = 1;
+            a_term->elements = ALLOCATE(local_stack, struct Number*);
+            a_term->elements[0] = a;
             a_term->terms_in_terms_of_generator =
                 ALLOCATE(local_stack, struct RationalPolynomial*);
             a_term->terms_in_terms_of_generator[0] =
@@ -523,11 +563,11 @@ struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, st
         if (b->operation == '+')
         {
             void*local_stack_savepoint = local_stack->cursor;
-            for (size_t i = b->term_count; i-- > 1;)
+            for (size_t i = b->element_count; i-- > 1;)
             {
-                a = number_add(local_stack, output_stack, a, b->terms[i]);
+                a = number_add(local_stack, output_stack, a, b->elements[i]);
             }
-            a = number_add(output_stack, local_stack, a, b->terms[0]);
+            a = number_add(output_stack, local_stack, a, b->elements[0]);
             local_stack->cursor = local_stack_savepoint;
             return a;
         }

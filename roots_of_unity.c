@@ -238,7 +238,7 @@ void roots_of_unity_sort(struct Stack*stack_a, struct Stack*stack_b, struct Numb
         ARRAY_ALLOCATE(stack_a, degree_size_t - 1, struct FloatInterval*);
     for (size_t i = 1; i < degree_size_t; ++i)
     {
-        number_float_argument_estimate(stack_a, stack_b, argument_estimates[i - 1], roots[i],
+        argument_estimates[i - 1] = number_float_argument_estimate(stack_a, stack_b, roots[i],
             interval_size);
     }
     quick_sort(stack_a, stack_b, &roots[1], argument_estimates, 0, degree_size_t - 1);
@@ -251,8 +251,9 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
     size_t degree_size_t = integer_to_size_t(degree);
     size_t degree_minus_one_size_t = degree_size_t - 1;
     struct Integer*degree_minus_one = integer_from_size_t(stack_a, degree_minus_one_size_t);
-    struct Number**out = roots_of_unity + integer_to_size_t(
-        integer_half(stack_a, integer_multiply(stack_a, stack_b, degree, degree_minus_one)));
+    struct Number**out = roots_of_unity +
+        integer_to_size_t(integer_half(stack_a,
+            integer_multiply(stack_a, stack_b, degree, degree_minus_one)));
     if (out[0])
     {
         stack_a->cursor = stack_a_savepoint;
@@ -419,8 +420,8 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
         ARRAY_ALLOCATE(stack_a, degree_minus_one_size_t, struct Number*);
     resolvent_values[0] = ALLOCATE(stack_a, struct Number);
     resolvent_values[0]->operation = 'r';
-    resolvent_values[0]->value.numerator = integer_initialize(stack_a, 1, -1);
-    resolvent_values[0]->value.denominator = &one;
+    resolvent_values[0]->value->numerator = integer_initialize(stack_a, 1, -1);
+    resolvent_values[0]->value->denominator = &one;
     resolvent_values[1] = number_exponentiate(stack_a, stack_b,
         resolvent_product_values[0], &(struct Rational){&one, degree_minus_one});
     for (size_t i = 1; i < resolvent_count_minus_one; ++i)
@@ -436,7 +437,7 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
     {
         out[i] = ALLOCATE(stack_a, struct Number);
         out[i]->operation = 'r';
-        out[i]->value = rational_zero;
+        out[i]->value = &rational_zero;
         size_t degree_minus_first_root_exponent = 0;
         for (size_t j = 0; j < degree_minus_one_size_t; ++j)
         {

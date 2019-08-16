@@ -96,6 +96,11 @@ struct Float*float_multiply(struct Stack*output_stack, struct Stack*local_stack,
     return out;
 }
 
+int8_t float_sign(struct Float*a)
+{
+    return a->significand->sign;
+}
+
 int8_t float_compare(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b)
 {
     void*stack_a_savepoint = stack_a->cursor;
@@ -158,16 +163,16 @@ void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, st
                     float_to_rational(local_stack, output_stack,
                         float_exponentiate(local_stack, output_stack, *out_max, index_minus_one))),
                 float_to_rational(local_stack, output_stack, *out_max)), index);
-        struct FloatInterval delta_float_estimate;
-        rational_float_estimate(local_stack, output_stack, &delta_float_estimate, delta,
-            rational_integer_divide(local_stack, output_stack, delta, &INT(2, -)));
-        *out_max = float_add(local_stack, output_stack, *out_max, delta_float_estimate.max);
+        struct FloatInterval*delta_float_estimate =
+            rational_float_estimate(local_stack, output_stack, delta,
+                rational_integer_divide(local_stack, output_stack, delta, &INT(2, -)));
+        *out_max = float_add(local_stack, output_stack, *out_max, delta_float_estimate->max);
         if (rational_compare(output_stack, local_stack,
             rational_subtract(local_stack, output_stack,
-                float_to_rational(local_stack, output_stack, delta_float_estimate.max),
+                float_to_rational(local_stack, output_stack, delta_float_estimate->max),
                 rational_doubled(local_stack, output_stack, delta)), interval_size) <= 0)
         {
-            *out_min = float_add(output_stack, local_stack, *out_max, delta_float_estimate.max);
+            *out_min = float_add(output_stack, local_stack, *out_max, delta_float_estimate->max);
             *out_max = float_copy(output_stack, *out_max);
             local_stack->cursor = local_stack_savepoint;
             return;

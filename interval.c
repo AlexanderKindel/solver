@@ -1,14 +1,96 @@
 #include "declarations.h"
 
+void*interval_max_magnitude(struct IntervalBoundOperations*operations, struct Stack*output_stack,
+    struct Stack*local_stack, struct Interval*a)
+{
+    void*local_stack_savepoint = local_stack->cursor;
+    void*out = operations->bmax(output_stack, local_stack,
+        operations->magnitude(local_stack, a->min), operations->magnitude(local_stack, a->max));
+    local_stack->cursor = local_stack_savepoint;
+    return out;
+}
+
+void*interval_add(struct IntervalBoundOperations*operations, struct Stack*output_stack,
+    struct Stack*local_stack, struct Interval*a, struct Interval*b)
+{
+    struct Interval*out = ALLOCATE(output_stack, struct Interval);
+    out->min = operations->add(output_stack, local_stack, a->min, a->min);
+    out->max = operations->add(output_stack, local_stack, a->max, a->max);
+    return out;
+}
+
+void*interval_negative(struct IntervalBoundOperations*operations, struct Stack*output_stack,
+    struct Stack*local_stack, struct Interval*a)
+{
+    struct Interval*out = ALLOCATE(output_stack, struct Interval);
+    if (operations->sign(a->min) != -operations->sign(a->max))
+    {
+        out->min = operations->negative(output_stack, a->max);
+        out->max = operations->negative(output_stack, a->min);
+    }
+    else
+    {
+        void*local_stack_savepoint = local_stack->cursor;
+        out->min = operations->copy(output_stack, operations->bmin(output_stack, local_stack, a->min,
+            operations->negative(local_stack, a->max)));
+        out->max = operations->copy(output_stack, operations->bmax(output_stack, local_stack,
+            operations->negative(local_stack, a->min), a->max));
+        local_stack->cursor = local_stack_savepoint;
+    }
+    return out;
+}
+
+void*interval_multiply(struct IntervalBoundOperations*operations, struct Stack*output_stack,
+    struct Stack*local_stack, struct Interval*a, struct Interval*b)
+{
+    struct Interval*out = ALLOCATE(output_stack, struct Interval);
+    if (operations->sign(a->min) >= 0)
+    {
+        if (operations->sign(b->min) >= 0)
+        {
+            out->min = operations->multiply(output_stack, local_stack, a->min, b->min);
+        }
+        else
+        {
+            out->min = operations->multiply(output_stack, local_stack, a->max, b->min);
+        }
+        out->max = operations->multiply(output_stack, local_stack, a->max, b->max);
+    }
+    else
+    {
+        if (operations->sign(b->min) >= 0)
+        {
+            out->min = operations->multiply(output_stack, local_stack, a->min, b->max);
+            out->max = operations->multiply(output_stack, local_stack, a->max, b->max);
+        }
+        else
+        {
+            void*local_stack_savepoint = local_stack->cursor;
+            out->min = operations->copy(output_stack, operations->bmin(output_stack, local_stack,
+                operations->multiply(local_stack, output_stack, a->min, b->max),
+                operations->multiply(local_stack, output_stack, a->max, b->min)));
+            out->max = operations->copy(output_stack, operations->bmax(output_stack, local_stack,
+                operations->multiply(local_stack, output_stack, a->min, b->min),
+                operations->multiply(local_stack, output_stack, a->max, b->max)));
+            local_stack->cursor = local_stack_savepoint;
+        }
+    }
+    return out;
+}
+
+struct RationalInterval*rational_interval_copy(struct Stack*output_stack, struct RationalInterval*a)
+{
+    struct RationalInterval*out = ALLOCATE(output_stack, struct RationalInterval);
+    out->min = rational_copy(output_stack, a->min);
+    out->max = rational_copy(output_stack, a->max);
+    return out;
+}
+
 struct Rational*rational_interval_max_magnitude(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*a)
 {
-    void*local_stack_savepoint = local_stack->cursor;
-    struct Rational*out = rational_max(output_stack, local_stack,
-        rational_magnitude(local_stack, a->min), rational_magnitude(local_stack, a->max));
-    out = rational_copy(output_stack, out);
-    local_stack->cursor = local_stack_savepoint;
-    return out;
+    return interval_max_magnitude(&rational_interval_bound_operations, output_stack, local_stack,
+        (struct Interval*)a);
 }
 
 void rational_interval_expand_bounds(struct Stack*stack_a, struct Stack*stack_b,
@@ -38,37 +120,59 @@ struct Rational*rational_interval_factor_interval_size(struct Stack*output_stack
     return out;
 }
 
+struct RationalInterval*rational_interval_add(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalInterval*a, struct RationalInterval*b)
+{
+    return interval_add(&rational_interval_bound_operations, output_stack, local_stack,
+        (struct Interval*)a, (struct Interval*)b);
+}
+
+struct RationalInterval*rational_interval_negative(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalInterval*a)
+{
+    return interval_negative(&rational_interval_bound_operations, output_stack, local_stack,
+        (struct Interval*)a);
+}
+
+struct RationalInterval*rational_interval_multiply(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalInterval*a, struct RationalInterval*b)
+{
+    return interval_multiply(&rational_interval_bound_operations, output_stack, local_stack,
+        (struct Interval*)a, (struct Interval*)b);
+}
+
 //Requires that if x straddles an axis, y does not and vice versa.
-void rational_interval_estimate_atan2(struct Stack*output_stack, struct Stack*local_stack,
-    struct RationalInterval*out, struct RationalInterval*y, struct RationalInterval*x,
+struct RationalInterval*rational_interval_estimate_atan2(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalInterval*y, struct RationalInterval*x,
     struct Rational*bound_interval_size)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct RationalInterval bound_estimate;
+    struct RationalInterval*out = ALLOCATE(output_stack, struct RationalInterval);
+    struct RationalInterval*bound_estimate;
     if (x->min->numerator->sign >= 0)
     {
         if (y->min->numerator->sign >= 0)
         {
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->max, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->min,
                 bound_interval_size);
-            out->min = rational_copy(output_stack, bound_estimate.min);
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->min, y->max,
+            out->min = rational_copy(output_stack, bound_estimate->min);
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->max,
                 bound_interval_size);
         }
         else if (y->max->numerator->sign >= 0)
         {
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->min, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->min,
                 bound_interval_size);
-            out->min = rational_copy(output_stack, bound_estimate.min);
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->min, y->max,
+            out->min = rational_copy(output_stack, bound_estimate->min);
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->max,
                 bound_interval_size);
         }
         else
         {
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->min, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->min,
                 bound_interval_size);
-            out->min = rational_copy(output_stack, bound_estimate.min);
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->max, y->max,
+            out->min = rational_copy(output_stack, bound_estimate->min);
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->max,
                 bound_interval_size);
         }
     }
@@ -78,18 +182,18 @@ void rational_interval_estimate_atan2(struct Stack*output_stack, struct Stack*lo
             "rational_interval_estimate_atan2 x and y arguments both straddled an axis.");
         if (y->min->numerator->sign >= 0)
         {
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->max, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->min,
                 bound_interval_size);
-            out->min = rational_copy(output_stack, bound_estimate.min);
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->min, y->min,
+            out->min = rational_copy(output_stack, bound_estimate->min);
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->min,
                 bound_interval_size);
         }
         else
         {
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->min, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->max,
                 bound_interval_size);
-            out->min = rational_copy(output_stack, bound_estimate.min);
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->max, y->max,
+            out->min = rational_copy(output_stack, bound_estimate->min);
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->max,
                 bound_interval_size);
         }
     }
@@ -97,43 +201,45 @@ void rational_interval_estimate_atan2(struct Stack*output_stack, struct Stack*lo
     {
         if (y->min->numerator->sign >= 0)
         {
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->max, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->max,
                 bound_interval_size);
-            out->min = rational_copy(output_stack, bound_estimate.min);
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->min, y->min,
+            out->min = rational_copy(output_stack, bound_estimate->min);
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->min,
                 bound_interval_size);
         }
         else if (y->max->numerator->sign >= 0)
         {
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->max, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->max,
                 bound_interval_size);
-            out->min = rational_copy(output_stack, bound_estimate.min);
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->max, y->min,
+            out->min = rational_copy(output_stack, bound_estimate->min);
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->min,
                 bound_interval_size);
         }
         else
         {
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->min, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->max,
                 bound_interval_size);
-            out->min = rational_copy(output_stack, bound_estimate.min);
-            rational_estimate_atan2(local_stack, output_stack, &bound_estimate, x->max, y->min,
+            out->min = rational_copy(output_stack, bound_estimate->min);
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->min,
                 bound_interval_size);
         }
     }
-    out->max = rational_copy(output_stack, bound_estimate.max);
+    out->max = rational_copy(output_stack, bound_estimate->max);
     local_stack->cursor = local_stack_savepoint;
+    return out;
 }
 
-void rational_interval_to_float_interval(struct Stack*output_stack, struct Stack*local_stack,
-    struct FloatInterval*out, struct RationalInterval*a, struct Rational*bound_interval_size)
+struct FloatInterval*rational_interval_to_float_interval(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalInterval*a, struct Rational*bound_interval_size)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct FloatInterval min_estimate;
-    rational_float_estimate(local_stack, output_stack, &min_estimate, a->min, bound_interval_size);
-    rational_float_estimate(local_stack, output_stack, out, a->max, bound_interval_size);
-    out->min = float_copy(output_stack, min_estimate.min);
-    out->max = float_copy(output_stack, out->max);
+    struct FloatInterval*out = ALLOCATE(output_stack, struct FloatInterval);
+    out->min = float_copy(output_stack,
+        rational_float_estimate(local_stack, output_stack, a->min, bound_interval_size)->min);
+    out->max = float_copy(output_stack,
+        rational_float_estimate(local_stack, output_stack, a->max, bound_interval_size)->max);
     local_stack->cursor = local_stack_savepoint;
+    return out;
 }
 
 struct FloatInterval*float_interval_copy(struct Stack*output_stack, struct FloatInterval*a)
@@ -142,6 +248,13 @@ struct FloatInterval*float_interval_copy(struct Stack*output_stack, struct Float
     out->min = float_copy(output_stack, a->min);
     out->max = float_copy(output_stack, a->max);
     return out;
+}
+
+struct Float*float_interval_max_magnitude(struct Stack*output_stack, struct Stack*local_stack,
+    struct FloatInterval*a)
+{
+    return interval_max_magnitude(&float_interval_bound_operations, output_stack, local_stack,
+        (struct Interval*)a);
 }
 
 bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
@@ -154,31 +267,15 @@ bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
 struct FloatInterval*float_interval_add(struct Stack*output_stack, struct Stack*local_stack,
     struct FloatInterval*a, struct FloatInterval*b)
 {
-    struct FloatInterval*out = ALLOCATE(output_stack, struct FloatInterval);
-    out->min = float_add(output_stack, local_stack, a->min, a->min);
-    out->max = float_add(output_stack, local_stack, a->max, a->max);
-    return out;
+    return interval_add(&float_interval_bound_operations, output_stack, local_stack,
+        (struct Interval*)a, (struct Interval*)b);
 }
 
 struct FloatInterval*float_interval_negative(struct Stack*output_stack, struct Stack*local_stack,
     struct FloatInterval*a)
 {
-    struct FloatInterval*out = ALLOCATE(output_stack, struct FloatInterval);
-    if (a->min->significand->sign != -a->max->significand->sign)
-    {
-        out->min = float_negative(output_stack, a->max);
-        out->max = float_negative(output_stack, a->min);
-    }
-    else
-    {
-        void*local_stack_savepoint = local_stack->cursor;
-        out->min = float_copy(output_stack, float_min(output_stack, local_stack, a->min,
-            float_negative(local_stack, a->max)));
-        out->max = float_copy(output_stack, float_max(output_stack, local_stack,
-            float_negative(local_stack, a->min), a->max));
-        local_stack->cursor = local_stack_savepoint;
-    }
-    return out;
+    return interval_negative(&float_interval_bound_operations, output_stack, local_stack,
+        (struct Interval*)a);
 }
 
 struct FloatInterval*float_interval_subtract(struct Stack*output_stack, struct Stack*local_stack,
@@ -194,46 +291,17 @@ struct FloatInterval*float_interval_subtract(struct Stack*output_stack, struct S
 struct FloatInterval*float_interval_multiply(struct Stack*output_stack, struct Stack*local_stack,
     struct FloatInterval*a, struct FloatInterval*b)
 {
-    struct FloatInterval*out = ALLOCATE(output_stack, struct FloatInterval);
-    if (a->min->significand->sign >= 0)
-    {
-        if (b->min->significand->sign >= 0)
-        {
-            out->min = float_multiply(output_stack, local_stack, a->min, b->min);
-        }
-        else
-        {
-            out->min = float_multiply(output_stack, local_stack, a->max, b->min);
-        }
-        out->max = float_multiply(output_stack, local_stack, a->max, b->max);
-    }
-    else
-    {
-        if (b->min->significand->sign >= 0)
-        {
-            out->min = float_multiply(output_stack, local_stack, a->min, b->max);
-            out->max = float_multiply(output_stack, local_stack, a->max, b->max);
-        }
-        else
-        {
-            void*local_stack_savepoint = local_stack->cursor;
-            out->min = float_copy(output_stack, float_min(output_stack, local_stack,
-                float_multiply(local_stack, output_stack, a->min, b->max),
-                float_multiply(local_stack, output_stack, a->max, b->min)));
-            out->max = float_copy(output_stack, float_max(output_stack, local_stack,
-                float_multiply(local_stack, output_stack, a->min, b->min),
-                float_multiply(local_stack, output_stack, a->max, b->max)));
-            local_stack->cursor = local_stack_savepoint;
-        }
-    }
-    return out;
+    return interval_multiply(&float_interval_bound_operations, output_stack, local_stack,
+        (struct Interval*)a, (struct Interval*)b);
 }
 
-void float_interval_to_rational_interval(struct Stack*output_stack, struct Stack*local_stack,
-    struct RationalInterval*out, struct FloatInterval*a)
+struct RationalInterval*float_interval_to_rational_interval(struct Stack*output_stack,
+    struct Stack*local_stack, struct FloatInterval*a)
 {
+    struct RationalInterval*out = ALLOCATE(output_stack, struct RationalInterval);
     out->min = float_to_rational(output_stack, local_stack, a->min);
     out->max = float_to_rational(output_stack, local_stack, a->max);
+    return out;
 }
 
 bool rectangular_estimates_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,

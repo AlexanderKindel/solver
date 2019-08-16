@@ -77,6 +77,7 @@ size_t integer_to_size_t(struct Integer*a)
     case 0:
         return 0;
     case 1:
+        return a->value[0];
     case 2:
         return *(size_t*)a->value;
     default:

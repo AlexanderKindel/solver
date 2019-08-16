@@ -8,29 +8,27 @@ struct Number*number_copy(struct Stack*output_stack, struct Number*a)
     switch (a->operation)
     {
     case 'r':
-        out->value.numerator = integer_copy(output_stack, a->value.numerator);
-        out->value.denominator = integer_copy(output_stack, a->value.denominator);
+        out->value = rational_copy(output_stack, a->value);
         return out;
     case '^':
-    case '*':
-        out->left = number_copy(output_stack, a->left);
-        out->right = number_copy(output_stack, a->right);
+        out->radicand = number_copy(output_stack, a->radicand);
+        out->index = integer_copy(output_stack, a->index);
         return out;
     case '+':
         out->generator = number_copy(output_stack, a->generator);
         out->terms_in_terms_of_generator =
-            ARRAY_ALLOCATE(output_stack, a->term_count, struct RationalPolynomial*);
-        for (size_t i = 0; i < a->term_count; ++i)
+            ARRAY_ALLOCATE(output_stack, a->element_count, struct RationalPolynomial*);
+        for (size_t i = 0; i < a->element_count; ++i)
         {
             out->terms_in_terms_of_generator[i] =
                 rational_polynomial_copy(output_stack, a->terms_in_terms_of_generator[i]);
         }
     }
-    out->term_count = a->term_count;
-    out->terms = ARRAY_ALLOCATE(output_stack, out->term_count, struct Number*);
-    for (size_t i = 0; i < a->term_count; ++i)
+    out->element_count = a->element_count;
+    out->elements = ARRAY_ALLOCATE(output_stack, out->element_count, struct Number*);
+    for (size_t i = 0; i < a->element_count; ++i)
     {
-        out->terms[i] = number_copy(output_stack, a->terms[i]);
+        out->elements[i] = number_copy(output_stack, a->elements[i]);
     }
     return out;
 }
@@ -39,23 +37,26 @@ struct Number*number_rational_initialize(struct Stack*output_stack, struct Ratio
 {
     struct Number*out = ALLOCATE(output_stack, struct Number);
     out->operation = 'r';
-    out->value.numerator = integer_copy(output_stack, value->numerator);
-    out->value.denominator = integer_copy(output_stack, value->denominator);
-    out->minimal_polynomial = rational_minimal_polynomial(output_stack, value);
+    out->value = rational_copy(output_stack, value);
+    out->minimal_polynomial = polynomial_allocate(output_stack, 2);
+    out->minimal_polynomial->coefficients[0] = ALLOCATE(output_stack, struct Rational);
+    out->minimal_polynomial->coefficients[0]->numerator =
+        integer_negative(output_stack, value->numerator);
+    out->minimal_polynomial->coefficients[0]->denominator =
+        integer_copy(output_stack, value->denominator);
+    out->minimal_polynomial->coefficients[1] = &rational_one;
     return out;
 }
 
-//Assigns radicand and exponent directly to the left and right fields of the return value without
-//copying them to output_stack.
 struct Number*number_surd_initialize(struct Stack*output_stack, struct Stack*local_stack,
-    struct Number*radicand, struct Number*exponent)
+    struct Number*radicand, struct Integer*index)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct Number*out = ALLOCATE(output_stack, struct Number);
     out->operation = '^';
-    out->left = radicand;
-    out->right = exponent;
-    size_t surd_index = integer_to_size_t(exponent->value.denominator);
+    out->radicand = number_copy(output_stack, radicand);
+    out->index = integer_copy(output_stack, index);
+    size_t surd_index = integer_to_size_t(index);
     struct RationalPolynomial*annulling_polynomial = polynomial_allocate(local_stack,
         surd_index * (radicand->minimal_polynomial->coefficient_count - 1) + 1);
     annulling_polynomial->coefficients[0] = radicand->minimal_polynomial->coefficients[0];
@@ -76,14 +77,37 @@ struct Number*number_surd_initialize(struct Stack*output_stack, struct Stack*loc
     return out;
 }
 
-int8_t number_formal_compare(struct Number*a, struct Number*b)
+int8_t sum_or_product_formal_compare(struct Stack*stack_a, struct Stack*stack_b, struct Number*a,
+    struct Number*b)
+{
+    if (a->element_count > b->element_count)
+    {
+        return 1;
+    }
+    if (a->element_count < b->element_count)
+    {
+        return -1;
+    }
+    for (size_t i = 0; i < a->element_count; ++i)
+    {
+        int8_t out = number_formal_compare(stack_a, stack_b, a->elements[i], b->elements[i]);
+        if (out)
+        {
+            return out;
+        }
+    }
+    return 0;
+}
+
+int8_t number_formal_compare(struct Stack*stack_a, struct Stack*stack_b, struct Number*a,
+    struct Number*b)
 {
     switch (a->operation)
     {
     case 'r':
-        if (b->operation == 'r' && rational_equals(&a->value, &b->value))
+        if (b->operation == 'r')
         {
-            return 0;
+            return rational_compare(stack_a, stack_b, a->value, b->value);
         }
         return -1;
     case '^':
@@ -93,12 +117,12 @@ int8_t number_formal_compare(struct Number*a, struct Number*b)
             return 1;
         case '^':
         {
-            int8_t out = number_formal_compare(a->right, b->right);
+            int8_t out = integer_compare(stack_a, stack_b, a->index, b->index);
             if (out)
             {
-                return out;
+                return -out;
             }
-            return number_formal_compare(a->left, b->left);
+            return number_formal_compare(stack_a, stack_b, a->radicand, b->radicand);
         }
         }
         return -1;
@@ -108,14 +132,7 @@ int8_t number_formal_compare(struct Number*a, struct Number*b)
         case '+':
             return -1;
         case '*':
-        {
-            int8_t out = number_formal_compare(a->left, b->left);
-            if (out)
-            {
-                return out;
-            }
-            return number_formal_compare(a->right, b->right);
-        }
+            return sum_or_product_formal_compare(stack_a, stack_b, a, b);
         }
         return 1;
     case '+':
@@ -123,55 +140,9 @@ int8_t number_formal_compare(struct Number*a, struct Number*b)
         {
             return 1;
         }
-        if (a->term_count > b->term_count)
-        {
-            return 1;
-        }
-        if (a->term_count < b->term_count)
-        {
-            return -1;
-        }
-        for (size_t i = 0; i < a->term_count; ++i)
-        {
-            int8_t out = number_formal_compare(a->terms[i], b->terms[i]);
-            if (out)
-            {
-                return out;
-            }
-        }
-        return 0;
+        return sum_or_product_formal_compare(stack_a, stack_b, a, b);
     }
     crash("Number operation not recognized.");
-}
-
-bool number_formal_equals(struct Number*a, struct Number*b)
-{
-    if (a->operation != b->operation)
-    {
-        return false;
-    }
-    switch (a->operation)
-    {
-    case 'r':
-        return rational_equals(&a->value, &b->value);
-    case '^':
-    case '*':
-        return number_formal_equals(a->left, b->left) && number_formal_equals(a->right, b->right);
-    case '+':
-        if (a->term_count != a->term_count)
-        {
-            return false;
-        }
-        for (size_t i = 0; i < a->term_count; ++i)
-        {
-            if (!number_formal_equals(a->terms[i], a->terms[i]))
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-    crash("Number operation not recognized");
 }
 
 struct RationalPolynomial*number_minimal_polynomial_from_annulling_polynomial(
@@ -221,31 +192,6 @@ struct RationalPolynomial*number_minimal_polynomial_from_annulling_polynomial(
     }
 }
 
-struct RationalPolynomial*sum_minimal_polynomial(struct Stack*output_stack,
-    struct Stack*local_stack, struct Number*a, struct RationalPolynomial*left_minimal_polynomial,
-    struct RationalPolynomial*right_minimal_polynomial)
-{
-    void*local_stack_savepoint = local_stack->cursor;
-    struct NestedPolynomial*power = &nested_polynomial_one;
-    struct NestedPolynomial d = { 2, &(struct RationalPolynomial){2, &rational_zero, &rational_one},
-        &(struct RationalPolynomial){1, &(struct Rational){&INT(1, -), &one}} };
-    struct NestedPolynomial*t = (struct NestedPolynomial*)&polynomial_zero;
-    for (size_t i = 0; i < left_minimal_polynomial->coefficient_count; ++i)
-    {
-        t = nested_polynomial_add(local_stack, output_stack, t,
-            nested_polynomial_rational_polynomial_multiply(local_stack, output_stack, power,
-                &(struct RationalPolynomial){ 1, left_minimal_polynomial->coefficients[i] }));
-        power = nested_polynomial_multiply(local_stack, output_stack, power, &d);
-    }
-    struct RationalPolynomial*out =
-        number_minimal_polynomial_from_annulling_polynomial(output_stack, local_stack,
-            nested_polynomial_resultant(local_stack, output_stack, t,
-                rational_polynomial_to_nested_polynomial(local_stack, right_minimal_polynomial)),
-            a);
-    local_stack->cursor = local_stack_savepoint;
-    return out;
-}
-
 struct Number*number_reciprocal(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*a)
 {
@@ -254,28 +200,29 @@ struct Number*number_reciprocal(struct Stack*output_stack, struct Stack*local_st
     switch (a->operation)
     {
     case 'r':
-    {
-        if (!a->value.numerator->value_count)
+        if (!a->value->numerator->value_count)
         {
             puts("Tried to divide by 0.");
             return 0;
         }
-        out = number_rational_initialize(output_stack, rational_reciprocal(local_stack, &a->value));
+        out = number_rational_initialize(output_stack, rational_reciprocal(local_stack, a->value));
         break;
-    }
     case '^':
-    {
         out = number_divide(output_stack, local_stack,
-            number_exponentiate(local_stack, output_stack, a->left,
-                &(struct Rational){ integer_add(local_stack, a->right->value.denominator,
-                    &INT(1, -)), a->right->value.denominator }), a->left);
+            number_exponentiate(local_stack, output_stack, a->radicand,
+                &(struct Rational){ integer_add(local_stack, a->index, &INT(1, -)), a->index }),
+            a->radicand);
         break;
-    }
     case '*':
     {
-        out = number_multiply(output_stack, local_stack,
-            number_reciprocal(local_stack, output_stack, a->left),
-            number_reciprocal(local_stack, output_stack, a->right));
+        out = &number_one;
+        for (size_t i = a->element_count; i-- > 1;)
+        {
+            out = number_multiply(local_stack, output_stack, out,
+                number_reciprocal(local_stack, output_stack, a->elements[i]));
+        }
+        out = number_multiply(output_stack, local_stack, out,
+            number_reciprocal(local_stack, output_stack, a->elements[0]));
         break;
     }
     case '+':
@@ -319,20 +266,24 @@ struct Rational*number_rational_factor(struct Stack*output_stack, struct Stack*l
     switch (a->operation)
     {
     case 'r':
-        return rational_copy(output_stack, &a->value);
+        return rational_copy(output_stack, a->value);
     case '^':
         return &rational_one;
     case '*':
-        return number_rational_factor(output_stack, local_stack, a->left);
+        if (a->elements[0]->operation == 'r')
+        {
+            return rational_copy(output_stack, a->elements[0]->value);
+        }
+        return &rational_one;
     case '+':
     case 'g':
     {
         void*local_stack_savepoint = local_stack->cursor;
         struct Rational*out = &rational_one;
-        for (size_t i = 0; i < a->term_count; ++i)
+        for (size_t i = 0; i < a->element_count; ++i)
         {
             struct Rational*term_factor =
-                number_rational_factor(local_stack, output_stack, a->terms[i]);
+                number_rational_factor(local_stack, output_stack, a->elements[i]);
             out = rational_reduced(local_stack, output_stack,
                 integer_gcd(local_stack, output_stack, out->numerator, term_factor->numerator),
                 integer_lcm(local_stack, output_stack, out->denominator, term_factor->denominator));
@@ -371,7 +322,7 @@ struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_
     {
     case 'r':
     {
-        if (base->value.numerator->value_count == 0)
+        if (base->value->numerator->value_count == 0)
         {
             return number_copy(output_stack, base);
         }
@@ -379,27 +330,27 @@ struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_
         if (!integer_equals(exponent->numerator, &one))
         {
             struct Number*out = number_rational_initialize(output_stack,
-                rational_exponentiate(local_stack, output_stack, &base->value,
-                    exponent->numerator));
+                rational_exponentiate(local_stack, output_stack, base->value, exponent->numerator));
             local_stack->cursor = local_stack_savepoint;
             return out;
         }
-        if (!integer_equals(base->value.denominator, &one))
+        if (!integer_equals(base->value->denominator, &one))
         {
             struct Number*out = number_rational_multiply(output_stack, local_stack,
                 number_exponentiate(local_stack, output_stack,
                     number_rational_initialize(local_stack,
                         &(struct Rational){integer_multiply(local_stack, output_stack,
-                            base->value.numerator,
-                            integer_exponentiate(local_stack, output_stack, base->value.denominator,
+                            base->value->numerator,
+                            integer_exponentiate(local_stack, output_stack,
+                                base->value->denominator,
                                 integer_add(local_stack, exponent->denominator, &INT(1, -)))),
-                        &one}), exponent), &(struct Rational){&one, base->value.denominator});
+                        &one}), exponent), &(struct Rational){&one, base->value->denominator});
             local_stack->cursor = local_stack_savepoint;
             return out;
         }
         if (!integer_equals(exponent->denominator, &one))
         {
-            struct Integer*radicand = integer_magnitude(local_stack, base->value.numerator);
+            struct Integer*radicand = integer_magnitude(local_stack, base->value->numerator);
             struct Factor*factors;
             size_t factor_count = integer_factor(local_stack, output_stack, &factors, radicand);
             struct Integer*coefficient = &one;
@@ -416,12 +367,12 @@ struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_
                 multiplicity_gcd = integer_gcd(local_stack, output_stack, multiplicity_gcd,
                     factors[factor_index].multiplicity);
             }
-            struct Integer*new_degree;
-            if (base->value.numerator->sign > 0)
+            struct Integer*new_index;
+            if (base->value->numerator->sign > 0)
             {
-                new_degree = integer_euclidean_quotient(local_stack, output_stack,
+                new_index = integer_euclidean_quotient(local_stack, output_stack,
                     exponent->denominator, multiplicity_gcd);
-                if (integer_equals(new_degree, &one))
+                if (integer_equals(new_index, &one))
                 {
                     struct Rational*rational_radicand = ALLOCATE(output_stack, struct Rational);
                     rational_radicand->numerator = integer_copy(output_stack, coefficient);
@@ -433,9 +384,9 @@ struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_
             }
             else
             {
-                new_degree = exponent->denominator;
+                new_index = exponent->denominator;
             }
-            radicand = integer_initialize(local_stack, 1, base->value.numerator->sign);
+            radicand = integer_initialize(local_stack, 1, base->value->numerator->sign);
             for (size_t factor_index = 0; factor_index < factor_count; ++factor_index)
             {
                 struct Integer*reduced_multiplicity = integer_euclidean_quotient(local_stack,
@@ -447,7 +398,7 @@ struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_
             struct Number*out = number_rational_multiply(output_stack, local_stack, 
                 number_surd_initialize(local_stack, output_stack,
                     number_rational_initialize(local_stack, &(struct Rational){radicand, &one}),
-                    number_rational_initialize(local_stack, &(struct Rational){&one, new_degree})),
+                    new_index),
                 &(struct Rational){coefficient, &one});
             local_stack->cursor = local_stack_savepoint;
             return out;
@@ -457,17 +408,23 @@ struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_
     case '^':
     {
         void*local_stack_savepoint = local_stack->cursor;
-        struct Number*out = number_exponentiate(output_stack, local_stack, base->left,
-            rational_multiply(local_stack, output_stack, exponent, &base->right->value));
+        struct Number*out = number_exponentiate(output_stack, local_stack, base->radicand,
+            rational_multiply(local_stack, output_stack, exponent,
+                &(struct Rational){ &one, base->index }));
         local_stack->cursor = local_stack_savepoint;
         return out;
     }
     case '*':
     {
         void*local_stack_savepoint = local_stack->cursor;
-        struct Number*out = number_multiply(output_stack, local_stack,
-            number_exponentiate(local_stack, output_stack, base->left, exponent),
-            number_exponentiate(local_stack, output_stack, base->right, exponent));
+        struct Number*out = &number_one;
+        for (size_t i = base->element_count; i-- > 1;)
+        {
+            out = number_multiply(local_stack, output_stack, out,
+                number_exponentiate(local_stack, output_stack, base->elements[i], exponent));
+        }
+        out = number_multiply(output_stack, local_stack, out,
+            number_exponentiate(local_stack, output_stack, base->elements[0], exponent));
         local_stack->cursor = local_stack_savepoint;
         return out;
     }
@@ -510,8 +467,8 @@ struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_
         struct Number*out = number_rational_multiply(output_stack, local_stack,
             number_surd_initialize(local_stack, output_stack,
                 number_rational_multiply(local_stack, output_stack, base,
-                    &base_cancelling_rational_factor), 
-                number_rational_initialize(local_stack, exponent)), &product_rational_factor);
+                    &base_cancelling_rational_factor), exponent->denominator),
+            &product_rational_factor);
         local_stack->cursor = local_stack_savepoint;
         return out;
     }
@@ -520,7 +477,7 @@ struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_
     }
 }
 
-struct Number**number_sum_or_product_conjugates(struct Number*(operation)(struct Stack*,
+struct Number**binary_sum_or_product_conjugates(struct Number*(operation)(struct Stack*,
     struct Stack*, struct Number*, struct Number*), struct Stack*output_stack,
     struct Stack*local_stack, struct Number**a_conjugates, size_t a_conjugate_count,
     struct Number**b_conjugates, size_t b_conjugate_count,
@@ -556,6 +513,39 @@ struct Number**number_sum_or_product_conjugates(struct Number*(operation)(struct
     crash("Not enough conjugates found.");
 }
 
+struct Number**sum_or_product_conjugates(struct Number*(operation)(struct Stack*, struct Stack*,
+    struct Number*, struct Number*),
+    struct RationalPolynomial*(get_minimal_polynomial)(struct Stack*, struct Stack*, struct Number*,
+        struct RationalPolynomial*, struct RationalPolynomial*),
+    struct Stack*output_stack, struct Stack*local_stack, struct Number*a)
+{
+    void*local_stack_savepoint = local_stack->cursor;
+    struct Number**out = number_conjugates(local_stack, output_stack, a->elements[0]);
+    struct RationalPolynomial*left_minimal_polynomial = a->elements[0]->minimal_polynomial;
+    size_t original_element_count = a->element_count;
+    a->element_count = 2;
+    while (a->element_count < original_element_count)
+    {
+        struct Number*right_element = a->elements[a->element_count - 1];
+        struct RationalPolynomial*new_left_minimal_polynomial =
+            get_minimal_polynomial(local_stack, output_stack, a, left_minimal_polynomial,
+                right_element->minimal_polynomial);
+        out = binary_sum_or_product_conjugates(operation, local_stack, output_stack, out,
+            left_minimal_polynomial->coefficient_count - 1,
+            number_conjugates(local_stack, output_stack, right_element),
+            right_element->minimal_polynomial->coefficient_count - 1, new_left_minimal_polynomial);
+        left_minimal_polynomial = new_left_minimal_polynomial;
+        ++a->element_count;
+    }
+    out = binary_sum_or_product_conjugates(operation, output_stack, local_stack, out,
+        left_minimal_polynomial->coefficient_count - 1,
+        number_conjugates(local_stack, output_stack, a->elements[a->element_count - 1]),
+        a->elements[a->element_count - 1]->minimal_polynomial->coefficient_count - 1,
+        a->minimal_polynomial);
+    local_stack->cursor = local_stack_savepoint;
+    return out;
+}
+
 struct Number**number_conjugates(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*a)
 {
@@ -570,117 +560,53 @@ struct Number**number_conjugates(struct Stack*output_stack, struct Stack*local_s
     case '^':
     {
         void*local_stack_savepoint = local_stack->cursor;
-        struct Number**radicand_conjugates = number_conjugates(local_stack, output_stack, a->left);
-        for (size_t i = 0; i < a->left->minimal_polynomial->coefficient_count - 1; ++i)
+        struct Number**radicand_conjugates =
+            number_conjugates(local_stack, output_stack, a->radicand);
+        for (size_t i = 0; i < a->radicand->minimal_polynomial->coefficient_count - 1; ++i)
         {
             radicand_conjugates[i] = number_exponentiate(local_stack, output_stack,
-                radicand_conjugates[i], &a->right->value);
+                radicand_conjugates[i], &(struct Rational){&one, a->index});
         }
-        size_t roots_of_unity_count = integer_to_size_t(a->right->value.denominator);
-        struct Number**roots_of_unity =
-            get_roots_of_unity(output_stack, local_stack, a->right->value.denominator);
-        struct Number**out = number_sum_or_product_conjugates(number_multiply, output_stack,
-            local_stack, radicand_conjugates, a->left->minimal_polynomial->coefficient_count - 1,
-            roots_of_unity, roots_of_unity_count, a->minimal_polynomial);
+        size_t roots_of_unity_count = integer_to_size_t(a->index);
+        struct Number**roots_of_unity = get_roots_of_unity(output_stack, local_stack, a->index);
+        struct Number**out =
+            binary_sum_or_product_conjugates(number_multiply, output_stack, local_stack,
+                radicand_conjugates, a->radicand->minimal_polynomial->coefficient_count - 1,
+                roots_of_unity, roots_of_unity_count, a->minimal_polynomial);
         local_stack->cursor = local_stack_savepoint;
         return out;
     }
     case '*':
     {
-        void*local_stack_savepoint = local_stack->cursor;
-        struct Number**left_conjugates = number_conjugates(local_stack, output_stack, a->left);
-        struct Number**right_conjugates = number_conjugates(local_stack, output_stack, a->right);
-        struct Number**out = number_sum_or_product_conjugates(number_multiply, output_stack,
-            local_stack, left_conjugates, a->left->minimal_polynomial->coefficient_count - 1,
-            right_conjugates, a->right->minimal_polynomial->coefficient_count - 1,
-            a->minimal_polynomial);
-        local_stack->cursor = local_stack_savepoint;
-        return out;
+        return sum_or_product_conjugates(number_multiply, product_minimal_polynomial, output_stack,
+            local_stack, a);
     }
     case '+':
     {
-        void*local_stack_savepoint = local_stack->cursor;
-        struct Number**out = number_conjugates(local_stack, output_stack, a->terms[0]);
-        struct RationalPolynomial*left_minimal_polynomial = a->terms[0]->minimal_polynomial;
-        size_t original_term_count = a->term_count;
-        a->term_count = 2;
-        while (a->term_count < original_term_count)
-        {
-            struct Number*right_term = a->terms[a->term_count - 1];
-            struct RationalPolynomial*new_left_minimal_polynomial =
-                sum_minimal_polynomial(local_stack, output_stack, a, left_minimal_polynomial,
-                    right_term->minimal_polynomial);
-            out = number_sum_or_product_conjugates(number_add, local_stack, output_stack, out,
-                left_minimal_polynomial->coefficient_count - 1,
-                number_conjugates(local_stack, output_stack, right_term),
-                right_term->minimal_polynomial->coefficient_count - 1, new_left_minimal_polynomial);
-            left_minimal_polynomial = new_left_minimal_polynomial;
-            ++a->term_count;
-        }
-        out = number_sum_or_product_conjugates(number_add, output_stack, local_stack, out,
-            left_minimal_polynomial->coefficient_count - 1,
-            number_conjugates(local_stack, output_stack, a->terms[a->term_count - 1]),
-            a->terms[a->term_count - 1]->minimal_polynomial->coefficient_count - 1,
-            a->minimal_polynomial);
-        local_stack->cursor = local_stack_savepoint;
-        return out;
+        return sum_or_product_conjugates(number_add, sum_minimal_polynomial, output_stack,
+            local_stack, a);
     }
     default:
         crash("Number operation not recognized.");
     }
 }
 
-struct Number*number_evaluate(struct Stack*output_stack, struct Stack*local_stack, struct Number*a)
+size_t factor_range_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
+    size_t starting_factor_index)
 {
-    if (a->operation == 'r')
+    size_t char_count = 0;
+    for (size_t i = starting_factor_index; i < a->element_count; ++i)
     {
-        a->minimal_polynomial = rational_minimal_polynomial(output_stack, &a->value);
-        return a;
+        *(char*)ALLOCATE(output_stack, char) = '*';
+        char_count += 1 + number_string(output_stack, local_stack, a->elements[i]);
     }
-    void*local_stack_savepoint = local_stack->cursor;
-    a->left = number_evaluate(local_stack, output_stack, a->left);
-    if (!a->left)
-    {
-        return 0;
-    }
-    a->right = number_evaluate(local_stack, output_stack, a->right);
-    if (!a->right)
-    {
-        return 0;
-    }
-    struct Number*out;
-    switch (a->operation)
-    {
-    case '+':
-        out = number_add(output_stack, local_stack, a->left, a->right);
-        break;
-    case '-':
-    {
-        out = number_add(output_stack, local_stack, a->left,
-            number_rational_multiply(local_stack, output_stack, a->right,
-                &(struct Rational){ integer_initialize(local_stack, 1, -1), &one }));
-        break;
-    }
-    case '*':
-        out = number_multiply(output_stack, local_stack, a->left, a->right);
-        break;
-    case '/':
-        out = number_divide(output_stack, local_stack, a->left, a->right);
-        break;
-    case '^':
-        if (a->right->operation != 'r')
-        {
-            puts("The input expression contains an exponentiation whose exponent is not both real "
-                "and rational; this program doesn't handle transcendental numbers.");
-            return 0;
-        }
-        out = number_exponentiate(output_stack, local_stack, a->left, &a->right->value);
-        break;
-    default:
-        crash("Number operation not recognized.");
-    }
-    local_stack->cursor = local_stack_savepoint;
-    return out;
+    return char_count;
+}
+
+size_t product_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*a)
+{
+    size_t char_count = number_string(output_stack, local_stack, a->elements[0]);
+    return char_count + factor_range_string(output_stack, local_stack, a, 1);
 }
 
 size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*a)
@@ -689,86 +615,84 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
     {
     case 'r':
     {
-        size_t char_count = integer_string(output_stack, local_stack, a->value.numerator);
-        if (!integer_equals(a->value.denominator, &one))
+        size_t char_count = integer_string(output_stack, local_stack, a->value->numerator);
+        if (!integer_equals(a->value->denominator, &one))
         {
             *(char*)ALLOCATE(output_stack, char) = '/';
-            char_count += 1 + integer_string(output_stack, local_stack, a->value.denominator);
+            char_count += 1 + integer_string(output_stack, local_stack, a->value->denominator);
         }
         return char_count;
     }
     case '^':
     {
         size_t char_count;
-        if (a->left->operation != 'r' || a->left->value.numerator->sign < 0)
+        if (a->radicand->operation != 'r' || a->radicand->value->numerator->sign < 0)
         {
             *(char*)ALLOCATE(output_stack, char) = '(';
-            char_count = 2 + number_string(output_stack, local_stack, a->left);
+            char_count = 2 + number_string(output_stack, local_stack, a->radicand);
             *(char*)ALLOCATE(output_stack, char) = ')';
         }
         else
         {
-            char_count = number_string(output_stack, local_stack, a->left);
+            char_count = number_string(output_stack, local_stack, a->radicand);
         }
-        char*exponent = ARRAY_ALLOCATE(output_stack, 2, char);
+        char*exponent = ARRAY_ALLOCATE(output_stack, 4, char);
         exponent[0] = '^';
         exponent[1] = '(';
-        char_count += 3 + number_string(output_stack, local_stack, a->right);
+        exponent[2] = '1';
+        exponent[3] = '/';
+        char_count += 4 + integer_string(output_stack, local_stack, a->index);
         *(char*)ALLOCATE(output_stack, char) = ')';
         return char_count;
     }
     case '*':
     {
         size_t char_count;
-        if (a->left->operation == 'r')
+        if (a->elements[0]->operation == 'r')
         {
-            if (integer_equals(a->left->value.numerator, &INT(1, -)))
+            if (integer_equals(a->elements[0]->value->numerator, &INT(1, -)))
             {
                 *(char*)ALLOCATE(output_stack, char) = '-';
-                char_count = 1 + number_string(output_stack, local_stack, a->right);
+                char_count = 1 + product_string(output_stack, local_stack, a);
             }
-            else if (!integer_equals(a->left->value.numerator, &one))
+            else
             {
                 char_count =
-                    integer_string(output_stack, local_stack, a->left->value.numerator);
-                char*right_string = local_stack->cursor;
-                size_t right_char_count = number_string(local_stack, output_stack, a->right);
-                if (right_string[0] != '(')
+                    integer_string(output_stack, local_stack, a->elements[0]->value->numerator);
+                char*next_factor = local_stack->cursor;
+                size_t next_factor_char_count =
+                    number_string(local_stack, output_stack, a->elements[1]);
+                if (next_factor[0] != '(')
                 {
                     *(char*)ALLOCATE(output_stack, char) = '*';
                     char_count += 1;
                 }
-                char*right_string_out = ARRAY_ALLOCATE(output_stack, right_char_count, char);
-                memcpy(right_string_out, right_string, right_char_count);
-                char_count += right_char_count;
-                local_stack->cursor = right_string;
+                char*next_factor_out = ARRAY_ALLOCATE(output_stack, next_factor_char_count, char);
+                memcpy(next_factor_out, next_factor, next_factor_char_count);
+                char_count +=
+                    next_factor_char_count + factor_range_string(output_stack, local_stack, a, 2);
+                local_stack->cursor = next_factor;
             }
-            else
-            {
-                char_count = number_string(output_stack, local_stack, a->right);
-            }
-            if (!integer_equals(a->left->value.denominator, &one))
+            if (!integer_equals(a->elements[0]->value->denominator, &one))
             {
                 *(char*)ALLOCATE(output_stack, char) = '/';
-                char_count +=
-                    1 + integer_string(output_stack, local_stack, a->left->value.denominator);
+                char_count += 1 + integer_string(output_stack, local_stack,
+                    a->elements[0]->value->denominator);
             }
         }
         else
         {
-            char_count = number_string(output_stack, local_stack, a->left) + 1;
-            *(char*)ALLOCATE(output_stack, char) = '*';
-            char_count += number_string(output_stack, local_stack, a->right);
+            char_count = product_string(output_stack, local_stack, a);
         }
         return char_count;
     }
     case '+':
     {
-        size_t char_count = number_string(output_stack, local_stack, a->terms[0]);
-        for (size_t i = 1; i < a->term_count; ++i)
+        size_t char_count = number_string(output_stack, local_stack, a->elements[0]);
+        for (size_t i = 1; i < a->element_count; ++i)
         {
             char*sum_string = local_stack->cursor;
-            size_t sum_char_count = number_string(local_stack, output_stack, a->terms[i]);
+            size_t sum_char_count = number_string(local_stack, output_stack, a->elements[i]);
             if (sum_string[0] != '-')
             {
                 *(char*)ALLOCATE(output_stack, char) = '+';

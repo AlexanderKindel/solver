@@ -318,16 +318,16 @@ void rational_polynomial_evaluate_at_rectangular_estimate(struct Stack*output_st
             float_subtract(local_stack, output_stack, argument->real_part_estimate->max,
                 argument->real_part_estimate->min)),
         integer_from_size_t(local_stack, a->coefficient_count));
-    struct FloatInterval*coefficients =
-        ARRAY_ALLOCATE(local_stack, a->coefficient_count, struct FloatInterval);
+    struct FloatInterval**coefficients =
+        ARRAY_ALLOCATE(local_stack, a->coefficient_count, struct FloatInterval*);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
-        rational_float_estimate(local_stack, output_stack, coefficients + i, a->coefficients[i],
+        coefficients[i] = rational_float_estimate(local_stack, output_stack, a->coefficients[i],
             coefficient_interval_size);
     }
     out->real_part_estimate = ALLOCATE(output_stack, struct FloatInterval);
-    out->real_part_estimate->min = coefficients[0].min;
-    out->real_part_estimate->max = coefficients[0].max;
+    out->real_part_estimate->min = coefficients[0]->min;
+    out->real_part_estimate->max = coefficients[0]->max;
     out->imaginary_part_estimate->min = &float_zero;
     out->imaginary_part_estimate->max = &float_zero;
     struct RectangularEstimate argument_power = { &(struct FloatInterval){&float_one, &float_one},
@@ -350,10 +350,10 @@ void rational_polynomial_evaluate_at_rectangular_estimate(struct Stack*output_st
         argument_power.imaginary_part_estimate = new_argument_power_imaginary_part;
         out->real_part_estimate = float_interval_add(local_stack, output_stack,
             float_interval_multiply(local_stack, output_stack, argument_power.real_part_estimate,
-                &coefficients[i]), out->real_part_estimate);
+                coefficients[i]), out->real_part_estimate);
         out->imaginary_part_estimate = float_interval_add(local_stack, output_stack,
             float_interval_multiply(local_stack, output_stack,
-                argument_power.imaginary_part_estimate, &coefficients[i]), out->real_part_estimate);
+                argument_power.imaginary_part_estimate, coefficients[i]), out->real_part_estimate);
     }
     out->real_part_estimate = float_interval_copy(output_stack, out->real_part_estimate);
     out->imaginary_part_estimate = float_interval_copy(output_stack, out->imaginary_part_estimate);
