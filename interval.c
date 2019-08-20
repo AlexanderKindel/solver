@@ -14,8 +14,8 @@ void*interval_add(struct IntervalBoundOperations*operations, struct Stack*output
     struct Stack*local_stack, struct Interval*a, struct Interval*b)
 {
     struct Interval*out = ALLOCATE(output_stack, struct Interval);
-    out->min = operations->add(output_stack, local_stack, a->min, a->min);
-    out->max = operations->add(output_stack, local_stack, a->max, a->max);
+    out->min = operations->add(output_stack, local_stack, a->min, b->min);
+    out->max = operations->add(output_stack, local_stack, a->max, b->max);
     return out;
 }
 
@@ -31,8 +31,8 @@ void*interval_negative(struct IntervalBoundOperations*operations, struct Stack*o
     else
     {
         void*local_stack_savepoint = local_stack->cursor;
-        out->min = operations->copy(output_stack, operations->bmin(output_stack, local_stack, a->min,
-            operations->negative(local_stack, a->max)));
+        out->min = operations->copy(output_stack, operations->bmin(output_stack, local_stack,
+            operations->negative(local_stack, a->max), a->min));
         out->max = operations->copy(output_stack, operations->bmax(output_stack, local_stack,
             operations->negative(local_stack, a->min), a->max));
         local_stack->cursor = local_stack_savepoint;
@@ -49,12 +49,40 @@ void*interval_multiply(struct IntervalBoundOperations*operations, struct Stack*o
         if (operations->sign(b->min) >= 0)
         {
             out->min = operations->multiply(output_stack, local_stack, a->min, b->min);
+            out->max = operations->multiply(output_stack, local_stack, a->max, b->max);
         }
         else
         {
             out->min = operations->multiply(output_stack, local_stack, a->max, b->min);
+            if (operations->sign(b->max) <= 0)
+            {
+                out->max = operations->multiply(output_stack, local_stack, a->min, b->max);
+            }
+            else
+            {
+                out->max = operations->multiply(output_stack, local_stack, a->max, b->max);
+            }
         }
-        out->max = operations->multiply(output_stack, local_stack, a->max, b->max);
+    }
+    else if (operations->sign(a->max) <= 0)
+    {
+        if (operations->sign(b->min) >= 0)
+        {
+            out->min = operations->multiply(output_stack, local_stack, a->min, b->max);
+            out->max = operations->multiply(output_stack, local_stack, a->max, b->min);
+        }
+        else
+        {
+            if (operations->sign(b->max) <= 0)
+            {
+                out->min = operations->multiply(output_stack, local_stack, a->max, b->max);
+            }
+            else
+            {
+                out->min = operations->multiply(output_stack, local_stack, a->min, b->max);
+            }
+            out->max = operations->multiply(output_stack, local_stack, a->min, b->min);
+        }
     }
     else
     {
@@ -62,6 +90,11 @@ void*interval_multiply(struct IntervalBoundOperations*operations, struct Stack*o
         {
             out->min = operations->multiply(output_stack, local_stack, a->min, b->max);
             out->max = operations->multiply(output_stack, local_stack, a->max, b->max);
+        }
+        else if (operations->sign(b->max) <= 0)
+        {
+            out->min = operations->multiply(output_stack, local_stack, a->max, b->min);
+            out->max = operations->multiply(output_stack, local_stack, a->min, b->min);
         }
         else
         {

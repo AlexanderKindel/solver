@@ -146,16 +146,16 @@ struct Polynomial
     void*coefficients[];
 };
 
-struct PolynomialExtendedGCDInfo
-{
-    struct Polynomial*gcd;
-    struct Polynomial*a_coefficient;
-};
-
 struct PolynomialDivision
 {
     struct Polynomial*quotient;
     struct Polynomial*remainder;
+};
+
+struct PolynomialExtendedGCDInfo
+{
+    struct Polynomial*gcd;
+    struct RationalPolynomial*a_coefficient;
 };
 
 struct IntegerPolynomial
@@ -241,7 +241,7 @@ struct Number
             struct Integer*index;
         };
         struct
-        {//When operation == '*' || operation == '+' || operation == 'g'.
+        {//When operation == '*' || operation == '+'.
             size_t element_count;
             struct Number**elements;
         };
@@ -458,9 +458,9 @@ struct Rational*rational_half(struct Stack*output_stack, struct Stack*local_stac
 int8_t rational_sign(struct Rational*a);
 int8_t rational_compare(struct Stack*stack_a, struct Stack*stack_b, struct Rational*a,
     struct Rational*b);
-struct Rational*rational_min(struct Stack*stack_a, struct Stack*stack_b, struct Rational*a,
+struct Rational*rational_min(struct Stack*output_stack, struct Stack*local_stack, struct Rational*a,
     struct Rational*b);
-struct Rational*rational_max(struct Stack*stack_a, struct Stack*stack_b, struct Rational*a,
+struct Rational*rational_max(struct Stack*output_stack, struct Stack*local_stack, struct Rational*a,
     struct Rational*b);
 struct Rational*rational_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
     struct Rational*base, struct Integer*exponent);
@@ -489,8 +489,10 @@ struct Float*float_multiply(struct Stack*output_stack, struct Stack*local_stack,
     struct Float*b);
 int8_t float_sign(struct Float*a);
 int8_t float_compare(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b);
-struct Float*float_min(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b);
-struct Float*float_max(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b);
+struct Float*float_min(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
+    struct Float*b);
+struct Float*float_max(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
+    struct Float*b);
 struct Float*float_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
     struct Float*base, struct Integer*exponent);
 void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, struct Float**out_min,
@@ -576,6 +578,8 @@ struct IntegerPolynomial*integer_polynomial_derivative(struct Stack*output_stack
     struct Stack*local_stack, struct IntegerPolynomial*a);
 struct RationalPolynomial*integer_polynomial_to_monic(struct Stack*output_stack,
     struct Stack*local_stack, struct IntegerPolynomial*a);
+struct RationalPolynomial*integer_polynomial_to_rational_polynomial(struct Stack*output_stack,
+    struct IntegerPolynomial*a);
 
 struct Integer*modded_integer_reciprocal(struct Stack*output_stack, struct Stack*local_stack,
     struct Integer*a, struct Integer*characteristic);

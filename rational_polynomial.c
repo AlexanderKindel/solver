@@ -85,7 +85,7 @@ struct Integer*denominator_lcm(struct Stack*output_stack, struct Stack*local_sta
     struct Integer*out = &one;
     for (size_t i = 0; i < element_count; ++i)
     {
-        out = integer_multiply(local_stack, output_stack, out, list[i]->denominator);
+        out = integer_lcm(local_stack, output_stack, out, list[i]->denominator);
     }
     out = integer_copy(output_stack, out);
     local_stack->cursor = local_stack_savepoint;
@@ -125,28 +125,14 @@ void rational_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*lo
         rational_polynomial_to_integer_polynomial(local_stack, output_stack, a, lcm);
     struct IntegerPolynomial*integer_b =
         rational_polynomial_to_integer_polynomial(local_stack, output_stack, b, lcm);
-    struct Integer*content = integer_gcd(local_stack, output_stack,
-        integer_polynomial_content(local_stack, output_stack, integer_a),
-        integer_polynomial_content(local_stack, output_stack, integer_b));
     struct PolynomialExtendedGCDInfo info;
-    integer_polynomial_extended_gcd(local_stack, output_stack, &info,
-        integer_polynomial_integer_divide(local_stack, output_stack, integer_a, content),
-        integer_polynomial_integer_divide(local_stack, output_stack, integer_b, content));
-    out->a_coefficient = polynomial_allocate(output_stack, info.a_coefficient->coefficient_count);
-    for (size_t i = 0; i < info.a_coefficient->coefficient_count; ++i)
-    {
-        out->a_coefficient->coefficients[i] = ALLOCATE(output_stack, struct Rational);
-        ((struct Rational*)out->a_coefficient->coefficients[i])->numerator =
-            integer_copy(output_stack, info.a_coefficient->coefficients[i]);
-        ((struct Rational*)out->a_coefficient->coefficients[i])->denominator =
-            integer_initialize(output_stack, 1, 1);
-    }
-    out->gcd = polynomial_allocate(output_stack, info.gcd->coefficient_count);
-    for (size_t i = 0; i < info.gcd->coefficient_count; ++i)
-    {
-        out->gcd->coefficients[i] = rational_reduced(output_stack, local_stack,
-            integer_multiply(local_stack, output_stack, content, info.gcd->coefficients[i]), lcm);
-    }
+    integer_polynomial_extended_gcd(local_stack, output_stack, &info, integer_a, integer_b);
+    struct Rational lcm_reciprocal = { &(struct Integer) { 1, lcm->sign, 1 }, lcm };
+    lcm_reciprocal.denominator->sign = 1;
+    out->gcd = (struct Polynomial*)rational_polynomial_rational_multiply(output_stack, local_stack,
+        integer_polynomial_to_rational_polynomial(local_stack, (struct IntegerPolynomial*)info.gcd),
+        &lcm_reciprocal);
+    out->a_coefficient = rational_polynomial_copy(output_stack, info.a_coefficient);
     local_stack->cursor = local_stack_savepoint;
 }
 
@@ -353,7 +339,8 @@ void rational_polynomial_evaluate_at_rectangular_estimate(struct Stack*output_st
                 coefficients[i]), out->real_part_estimate);
         out->imaginary_part_estimate = float_interval_add(local_stack, output_stack,
             float_interval_multiply(local_stack, output_stack,
-                argument_power.imaginary_part_estimate, coefficients[i]), out->real_part_estimate);
+                argument_power.imaginary_part_estimate, coefficients[i]),
+            out->imaginary_part_estimate);
     }
     out->real_part_estimate = float_interval_copy(output_stack, out->real_part_estimate);
     out->imaginary_part_estimate = float_interval_copy(output_stack, out->imaginary_part_estimate);
@@ -364,10 +351,9 @@ struct IntegerPolynomial*rational_polynomial_primitive_part(struct Stack*output_
     struct Stack*local_stack, struct RationalPolynomial*a)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct Integer*lcm =
-        denominator_lcm(local_stack, output_stack, a->coefficients, a->coefficient_count);
     struct IntegerPolynomial*out = integer_polynomial_primitive_part(output_stack, local_stack,
-        rational_polynomial_to_integer_polynomial(local_stack, output_stack, a, lcm));
+        rational_polynomial_to_integer_polynomial(local_stack, output_stack, a, 
+            denominator_lcm(local_stack, output_stack, a->coefficients, a->coefficient_count)));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
@@ -378,8 +364,15 @@ struct NestedPolynomial*rational_polynomial_to_nested_polynomial(struct Stack*ou
     struct NestedPolynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
-        out->coefficients[i] = polynomial_allocate(output_stack, 1);
-        out->coefficients[i]->coefficients[0] = rational_copy(output_stack, a->coefficients[i]);
+        if (a->coefficients[i]->numerator->value_count)
+        {
+            out->coefficients[i] = polynomial_allocate(output_stack, 1);
+            out->coefficients[i]->coefficients[0] = rational_copy(output_stack, a->coefficients[i]);
+        }
+        else
+        {
+            out->coefficients[i] = (struct RationalPolynomial*)&polynomial_zero;
+        }
     }
     return out;
 }

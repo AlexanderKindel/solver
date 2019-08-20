@@ -11,13 +11,17 @@ struct Float*float_copy(struct Stack*output_stack, struct Float*a)
 struct Float*float_reduced(struct Stack*output_stack, struct Stack*local_stack,
     struct Integer*significand, struct Integer*exponent)
 {
+    if (!significand->value_count)
+    {
+        return &float_zero;
+    }
     void*local_stack_savepoint = local_stack->cursor;
+    struct Float*out = ALLOCATE(output_stack, struct Float);
     while (!(significand->value[0] & 1))
     {
         significand = integer_half(local_stack, significand);
         exponent = integer_add(local_stack, exponent, &one);
     }
-    struct Float*out = ALLOCATE(output_stack, struct Float);
     out->significand = integer_copy(output_stack, significand);
     out->exponent = integer_copy(output_stack, exponent);
     local_stack->cursor = local_stack_savepoint;
@@ -109,27 +113,29 @@ int8_t float_compare(struct Stack*stack_a, struct Stack*stack_b, struct Float*a,
     return out;
 }
 
-struct Float*float_min(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b)
+struct Float*float_min(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
+    struct Float*b)
 {
-    if (float_compare(stack_a, stack_b, a, b) < 0)
+    if (float_compare(output_stack, local_stack, a, b) < 0)
     {
-        return a;
+        return float_copy(output_stack, a);
     }
     else
     {
-        return b;
+        return float_copy(output_stack, b);
     }
 }
 
-struct Float*float_max(struct Stack*stack_a, struct Stack*stack_b, struct Float*a, struct Float*b)
+struct Float*float_max(struct Stack*output_stack, struct Stack*local_stack, struct Float*a,
+    struct Float*b)
 {
-    if (float_compare(stack_a, stack_b, a, b) > 0)
+    if (float_compare(output_stack, local_stack, a, b) > 0)
     {
-        return a;
+        return float_copy(output_stack, a);
     }
     else
     {
-        return b;
+        return float_copy(output_stack, b);
     }
 }
 

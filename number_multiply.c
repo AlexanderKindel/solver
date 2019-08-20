@@ -145,14 +145,17 @@ struct Number*number_rational_multiply(struct Stack*output_stack,
     }
     void*local_stack_savepoint = local_stack->cursor;
     out->minimal_polynomial =
-        polynomial_allocate(output_stack, a->minimal_polynomial->coefficient_count);
+        polynomial_allocate(local_stack, a->minimal_polynomial->coefficient_count);
     struct Rational*power = &rational_one;
     for (size_t i = 0; i < a->minimal_polynomial->coefficient_count; ++i)
     {
-        out->minimal_polynomial->coefficients[i] = rational_divide(output_stack, local_stack,
+        out->minimal_polynomial->coefficients[i] = rational_divide(local_stack, output_stack,
             a->minimal_polynomial->coefficients[i], power);
         power = rational_unreduced_multiply(local_stack, output_stack, power, b, 0);
     }
+    out->minimal_polynomial = rational_polynomial_rational_multiply(output_stack, local_stack,
+        out->minimal_polynomial, rational_reciprocal(local_stack,
+            out->minimal_polynomial->coefficients[out->minimal_polynomial->coefficient_count - 1]));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
@@ -358,7 +361,6 @@ struct Number*number_multiply(struct Stack*output_stack, struct Stack*local_stac
         }
         break;
     case '+':
-    case 'g':
     {
         void*local_stack_savepoint = local_stack->cursor;
         struct Number*out = number_rational_initialize(local_stack, &rational_zero);

@@ -4,7 +4,9 @@ struct Rational*rational_place_value(struct Stack*output_stack, struct Stack*loc
     struct Rational*a)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct Rational*out = &rational_one;
+    struct Rational*out = ALLOCATE(output_stack, struct Rational);
+    out->numerator = &one;
+    out->denominator = &one;
     while (rational_compare(output_stack, local_stack, out, a) > 0)
     {
         out->denominator = integer_doubled(local_stack, out->denominator);
@@ -62,21 +64,6 @@ struct FloatInterval*number_refine_float_estimate_interval(float_estimate_getter
     {
         out = float_interval_copy(output_stack, estimate);
     }
-    local_stack->cursor = local_stack_savepoint;
-    return out;
-}
-
-struct FloatInterval*number_halve_float_estimate_interval(float_estimate_getter get_float_estimate,
-    struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
-    struct FloatInterval*estimate)
-{
-    void*local_stack_savepoint = local_stack->cursor;
-    struct Float*current_interval_size =
-        float_subtract(local_stack, output_stack, estimate->max, estimate->min);
-    struct FloatInterval* out = get_float_estimate(output_stack, local_stack, a,
-        float_to_rational(local_stack, output_stack,
-            &(struct Float){current_interval_size->significand,
-                integer_add(local_stack, current_interval_size->significand, &INT(1, -))}));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
@@ -237,21 +224,7 @@ struct FloatInterval*number_float_real_part_estimate(struct Stack*output_stack,
     switch (a->operation)
     {
     case 'r':
-    {
-        void*local_stack_savepoint = local_stack->cursor;
-        struct FloatInterval*out =
-            number_float_magnitude_estimate(local_stack, output_stack, a, interval_size);
-        if (a->value->numerator->sign < 0)
-        {
-            out = float_interval_negative(output_stack, local_stack, out);
-        }
-        else
-        {
-            out = float_interval_copy(output_stack, out);
-        }
-        local_stack->cursor = local_stack_savepoint;
-        return out;
-    }
+        return rational_float_estimate(output_stack, local_stack, a->value, interval_size);
     case '^':
         return number_float_estimate_from_rational(number_rational_real_part_estimate, output_stack,
             local_stack, a, interval_size);
@@ -371,8 +344,8 @@ void number_rectangular_estimate(struct Stack*output_stack, struct Stack*local_s
             float_to_rational(local_stack, output_stack,
                 float_subtract(local_stack, output_stack, interval_scale, term_to_subtract)));
         out->real_part_estimate = ALLOCATE(output_stack, struct FloatInterval);
-        out->real_part_estimate->min = &float_zero;
-        out->real_part_estimate->max = &float_zero;
+        out->real_part_estimate->min = &float_one;
+        out->real_part_estimate->max = &float_one;
         out->imaginary_part_estimate = ALLOCATE(output_stack, struct FloatInterval);
         out->imaginary_part_estimate->min = &float_zero;
         out->imaginary_part_estimate->max = &float_zero;
@@ -414,11 +387,29 @@ void number_rectangular_estimate(struct Stack*output_stack, struct Stack*local_s
 void number_rectangular_estimate_halve_dimensions(struct Stack*output_stack,
     struct Stack*local_stack, struct RectangularEstimate*out, struct Number*a)
 {
-    out->real_part_estimate = number_halve_float_estimate_interval(number_float_real_part_estimate,
-        output_stack, local_stack, a, out->real_part_estimate);
-    out->imaginary_part_estimate =
-        number_halve_float_estimate_interval(number_float_imaginary_part_estimate, output_stack,
-            local_stack, a, out->imaginary_part_estimate);
+    void*local_stack_savepoint = local_stack->cursor;
+    struct Float*real_interval_size = float_subtract(local_stack, output_stack,
+        out->real_part_estimate->max, out->real_part_estimate->min);
+    struct Float*imaginary_interval_size = float_subtract(local_stack, output_stack,
+        out->imaginary_part_estimate->max, out->imaginary_part_estimate->min);
+    struct Float*interval_size;
+    if (!real_interval_size->significand->value_count)
+    {
+        interval_size = imaginary_interval_size;
+    }
+    else if (!imaginary_interval_size->significand->value_count)
+    {
+        interval_size = real_interval_size;
+    }
+    else
+    {
+        interval_size =
+            float_min(local_stack, output_stack, real_interval_size, imaginary_interval_size);
+    }
+    number_rectangular_estimate(output_stack, local_stack, out, a,
+        rational_half(local_stack, output_stack,
+            float_to_rational(local_stack, output_stack, interval_size)));
+    local_stack->cursor = local_stack_savepoint;
 }
 
 struct FloatInterval*number_rectangular_part_estimate_for_magnitude_estimate(
@@ -455,7 +446,12 @@ struct FloatInterval*number_float_magnitude_estimate(struct Stack*output_stack,
     switch (a->operation)
     {
     case 'r':
-        return rational_float_estimate(output_stack, local_stack, a->value, interval_size);
+    {
+        struct FloatInterval*out = rational_float_estimate(output_stack, local_stack,
+            rational_magnitude(local_stack, a->value), interval_size);
+        local_stack->cursor = local_stack_savepoint;
+        return out;
+    }
     case '^':
     {
         struct FloatInterval*radicand_magnitude_estimate = 

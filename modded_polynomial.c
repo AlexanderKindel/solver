@@ -223,27 +223,27 @@ size_t cantor_zassenhaus_split(struct Stack*output_stack, struct Stack*local_sta
             {
                 break;
             }
-        }
-        size_t i = t->coefficient_count - 2;
-        while (true)
-        {
-            if (t->coefficients[i]->value_count)
+            size_t i = t->coefficient_count - 2;
+            while (true)
             {
-                t->coefficients[i] = integer_add(local_stack, t->coefficients[i], &INT(1, -));
-                break;
-            }
-            if (i == 0)
-            {
-                t->coefficient_count -= 1;
-                for (size_t i = 0; i < t->coefficient_count - 1; ++i)
+                if (t->coefficients[i]->value_count)
                 {
-                    t->coefficients[i] = p_minus_one;
+                    t->coefficients[i] = integer_add(local_stack, t->coefficients[i], &INT(1, -));
+                    break;
                 }
-                t->coefficients[t->coefficient_count - 1] = &one;
-                break;
+                if (i == 0)
+                {
+                    t->coefficient_count -= 1;
+                    for (size_t i = 0; i < t->coefficient_count - 1; ++i)
+                    {
+                        t->coefficients[i] = p_minus_one;
+                    }
+                    t->coefficients[t->coefficient_count - 1] = &one;
+                    break;
+                }
+                t->coefficients[i] = p_minus_one;
+                --i;
             }
-            t->coefficients[i] = p_minus_one;
-            --i;
         }
     }
     size_t factor_count =

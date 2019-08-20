@@ -174,7 +174,7 @@ struct Rational*rational_half(struct Stack*output_stack, struct Stack*local_stac
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct Rational*out = rational_reduced(output_stack, local_stack, a->numerator,
-        integer_half(local_stack, a->denominator));
+        integer_doubled(local_stack, a->denominator));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
@@ -195,29 +195,29 @@ int8_t rational_compare(struct Stack*stack_a, struct Stack*stack_b, struct Ratio
     return out;
 }
 
-struct Rational*rational_min(struct Stack*stack_a, struct Stack*stack_b, struct Rational*a,
+struct Rational*rational_min(struct Stack*output_stack, struct Stack*local_stack, struct Rational*a,
     struct Rational*b)
 {
-    if (rational_compare(stack_a, stack_b, a, b) < 0)
+    if (rational_compare(output_stack, local_stack, a, b) < 0)
     {
-        return a;
+        return rational_copy(output_stack, a);
     }
     else
     {
-        return b;
+        return rational_copy(output_stack, b);
     }
 }
 
-struct Rational*rational_max(struct Stack*stack_a, struct Stack*stack_b, struct Rational*a,
+struct Rational*rational_max(struct Stack*output_stack, struct Stack*local_stack, struct Rational*a,
     struct Rational*b)
 {
-    if (rational_compare(stack_a, stack_b, a, b) > 0)
+    if (rational_compare(output_stack, local_stack, a, b) > 0)
     {
-        return a;
+        return rational_copy(output_stack, a);
     }
     else
     {
-        return b;
+        return rational_copy(output_stack, b);
     }
 }
 
@@ -264,8 +264,7 @@ void rational_estimate_cosine(struct Stack*output_stack, struct Stack*local_stac
     struct RationalInterval*out, struct Rational*a, struct Rational*interval_size)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    out->min->numerator = &one;
-    out->min->denominator = &one;
+    out->min = &rational_one;
     struct Rational*a_squared = rational_multiply(local_stack, output_stack, a, a);
     struct Integer*factorial_component = &INT(2, +);
     struct Rational*delta =

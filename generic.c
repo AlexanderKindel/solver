@@ -383,17 +383,11 @@ size_t polynomial_squarefree_factor(struct EuclideanDomainOperations*polynomial_
     struct Polynomial*b = a;
     struct Polynomial*c = derivative(local_stack, output_stack, a);
     a = polynomial_operations->gcd(local_stack, output_stack, b, c, misc);
-    while (true)
+    struct Division division;
+    polynomial_operations->euclidean_divide(local_stack, output_stack, &division, b, a, misc);
+    b = division.quotient;
+    do
     {
-        struct Division division;
-        polynomial_operations->euclidean_divide(local_stack, output_stack, &division, b, a, misc);
-        b = division.quotient;
-        if (polynomial_operations->ring_operations.equals(b,
-            polynomial_operations->ring_operations.multiplicative_identity))
-        {
-            local_stack->cursor = local_stack_savepoint;
-            return factor_count;
-        }
         polynomial_operations->euclidean_divide(local_stack, output_stack, &division, c, a, misc);
         c = polynomial_operations->ring_operations.add(local_stack, output_stack, division.quotient,
             polynomial_operations->ring_operations.negative(local_stack, output_stack,
@@ -401,7 +395,11 @@ size_t polynomial_squarefree_factor(struct EuclideanDomainOperations*polynomial_
         a = polynomial_operations->gcd(output_stack, local_stack, b, c, misc);
         out[factor_count] = a;
         ++factor_count;
-    }
+        polynomial_operations->euclidean_divide(local_stack, output_stack, &division, b, a, misc);
+        b = division.quotient;
+    } while (b->coefficient_count > 1);
+    local_stack->cursor = local_stack_savepoint;
+    return factor_count;
 }
 
 void*polynomial_derivative(void*(coefficient_times_integer)(struct Stack*, struct Stack*, void*,

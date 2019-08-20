@@ -9,26 +9,30 @@ struct Number*number_copy(struct Stack*output_stack, struct Number*a)
     {
     case 'r':
         out->value = rational_copy(output_stack, a->value);
-        return out;
+        break;
     case '^':
         out->radicand = number_copy(output_stack, a->radicand);
         out->index = integer_copy(output_stack, a->index);
-        return out;
+        break;
     case '+':
-        out->generator = number_copy(output_stack, a->generator);
-        out->terms_in_terms_of_generator =
-            ARRAY_ALLOCATE(output_stack, a->element_count, struct RationalPolynomial*);
+        if (a->generator)
+        {
+            out->generator = number_copy(output_stack, a->generator);
+            out->terms_in_terms_of_generator =
+                ARRAY_ALLOCATE(output_stack, a->element_count, struct RationalPolynomial*);
+            for (size_t i = 0; i < a->element_count; ++i)
+            {
+                out->terms_in_terms_of_generator[i] =
+                    rational_polynomial_copy(output_stack, a->terms_in_terms_of_generator[i]);
+            }
+        }
+    case '*':
+        out->element_count = a->element_count;
+        out->elements = ARRAY_ALLOCATE(output_stack, out->element_count, struct Number*);
         for (size_t i = 0; i < a->element_count; ++i)
         {
-            out->terms_in_terms_of_generator[i] =
-                rational_polynomial_copy(output_stack, a->terms_in_terms_of_generator[i]);
+            out->elements[i] = number_copy(output_stack, a->elements[i]);
         }
-    }
-    out->element_count = a->element_count;
-    out->elements = ARRAY_ALLOCATE(output_stack, out->element_count, struct Number*);
-    for (size_t i = 0; i < a->element_count; ++i)
-    {
-        out->elements[i] = number_copy(output_stack, a->elements[i]);
     }
     return out;
 }
@@ -276,7 +280,6 @@ struct Rational*number_rational_factor(struct Stack*output_stack, struct Stack*l
         }
         return &rational_one;
     case '+':
-    case 'g':
     {
         void*local_stack_savepoint = local_stack->cursor;
         struct Rational*out = &rational_one;
@@ -591,22 +594,24 @@ struct Number**number_conjugates(struct Stack*output_stack, struct Stack*local_s
     }
 }
 
-size_t factor_range_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
-    size_t starting_factor_index)
+size_t trailing_factor_string(struct Stack*output_stack, struct Stack*local_stack,
+    struct Number**factors, size_t factor_count)
 {
     size_t char_count = 0;
-    for (size_t i = starting_factor_index; i < a->element_count; ++i)
+    for (size_t i = 0; i < factor_count; ++i)
     {
         *(char*)ALLOCATE(output_stack, char) = '*';
-        char_count += 1 + number_string(output_stack, local_stack, a->elements[i]);
+        char_count += 1 + number_string(output_stack, local_stack, factors[i]);
     }
     return char_count;
 }
 
-size_t product_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*a)
+size_t product_string(struct Stack*output_stack, struct Stack*local_stack, struct Number**factors,
+    size_t factor_count)
 {
-    size_t char_count = number_string(output_stack, local_stack, a->elements[0]);
-    return char_count + factor_range_string(output_stack, local_stack, a, 1);
+    size_t char_count = number_string(output_stack, local_stack, factors[0]);
+    return char_count +
+        trailing_factor_string(output_stack, local_stack, factors + 1, factor_count - 1);
 }
 
 size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*a)
@@ -641,7 +646,7 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
         exponent[1] = '(';
         exponent[2] = '1';
         exponent[3] = '/';
-        char_count += 4 + integer_string(output_stack, local_stack, a->index);
+        char_count += 5 + integer_string(output_stack, local_stack, a->index);
         *(char*)ALLOCATE(output_stack, char) = ')';
         return char_count;
     }
@@ -653,7 +658,13 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
             if (integer_equals(a->elements[0]->value->numerator, &INT(1, -)))
             {
                 *(char*)ALLOCATE(output_stack, char) = '-';
-                char_count = 1 + product_string(output_stack, local_stack, a);
+                char_count =
+                    1 + product_string(output_stack, local_stack, a->elements, a->element_count);
+            }
+            else if (integer_equals(a->elements[0]->value->numerator, &one))
+            {
+                char_count = product_string(output_stack, local_stack, a->elements + 1,
+                    a->element_count - 1);
             }
             else
             {
@@ -669,8 +680,8 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
                 }
                 char*next_factor_out = ARRAY_ALLOCATE(output_stack, next_factor_char_count, char);
                 memcpy(next_factor_out, next_factor, next_factor_char_count);
-                char_count +=
-                    next_factor_char_count + factor_range_string(output_stack, local_stack, a, 2);
+                char_count += next_factor_char_count + trailing_factor_string(output_stack,
+                    local_stack, a->elements + 2, a->element_count - 2);
                 local_stack->cursor = next_factor;
             }
             if (!integer_equals(a->elements[0]->value->denominator, &one))
@@ -682,7 +693,7 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
         }
         else
         {
-            char_count = product_string(output_stack, local_stack, a);
+            char_count = product_string(output_stack, local_stack, a->elements, a->element_count);
         }
         return char_count;
     }

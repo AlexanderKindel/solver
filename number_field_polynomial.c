@@ -47,9 +47,8 @@ size_t number_field_polynomial_factor(struct Stack*output_stack, struct Stack*lo
     struct NestedPolynomial**out)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct NestedPolynomial**squarefree_factors = stack_slot_allocate(local_stack,
-        (a->coefficient_count - 1) * sizeof(struct NestedPolynomial*),
-        _Alignof(struct NestedPolynomial*));
+    struct NestedPolynomial**squarefree_factors =
+        ARRAY_ALLOCATE(local_stack, a->coefficient_count - 1, struct NestedPolynomial*);
     size_t squarefree_factor_count = number_field_polynomial_squarefree_factor(local_stack,
         output_stack, a, squarefree_factors, generator_minimal_polynomial);
     struct NestedPolynomial*nested_minimal_polynomial =
@@ -82,9 +81,8 @@ size_t number_field_polynomial_factor(struct Stack*output_stack, struct Stack*lo
                 rational_polynomial_derivative(local_stack, output_stack, resultant),
                 resultant)->coefficient_count < 2)
             {
-                struct IntegerPolynomial**resultant_factors = stack_slot_allocate(local_stack,
-                    (resultant->coefficient_count - 1) * sizeof(struct IntegerPolynomial*),
-                    _Alignof(struct IntegerPolynomial*));
+                struct IntegerPolynomial**resultant_factors = ARRAY_ALLOCATE(local_stack,
+                    resultant->coefficient_count - 1, struct IntegerPolynomial*);
                 size_t resultant_factor_count =
                     primitive_integer_polynomial_factor(local_stack, output_stack,
                         rational_polynomial_primitive_part(local_stack, output_stack, resultant),
@@ -101,17 +99,15 @@ size_t number_field_polynomial_factor(struct Stack*output_stack, struct Stack*lo
                     e = (struct NestedPolynomial*)&polynomial_zero;
                     for (size_t k = 0; k < resultant_factors[j]->coefficient_count; ++k)
                     {
-                        struct RationalPolynomial*coefficient = polynomial_allocate(local_stack, 1);
-                        coefficient->coefficients[0] =
-                            &(struct Rational) { resultant_factors[j]->coefficients[k], &one };
                         e = nested_polynomial_add(local_stack, output_stack, e,
                             nested_polynomial_rational_polynomial_multiply(local_stack,
-                                output_stack, power, coefficient));
+                                output_stack, power, &(struct RationalPolynomial){1,
+                                &(struct Rational){resultant_factors[j]->coefficients[k], &one}}));
                         power = number_field_polynomial_multiply(local_stack, output_stack, power,
                             d, generator_minimal_polynomial);
                     }
                     struct NestedPolynomial*factor = number_field_polynomial_gcd(local_stack,
-                        output_stack, e, squarefree_factors[i], generator_minimal_polynomial);
+                        output_stack, squarefree_factors[i], e, generator_minimal_polynomial);
                     out[factor_count] =
                         number_field_polynomial_element_multiply(output_stack, local_stack, factor,
                             number_field_element_reciprocal(local_stack, output_stack,
