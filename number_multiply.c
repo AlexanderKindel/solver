@@ -184,10 +184,10 @@ struct Number*factor_consolidate(struct Stack*output_stack, struct Stack*local_s
     integer_extended_gcd(local_stack, output_stack, &info, a->index, b->index);
     struct Integer*product_index = integer_euclidean_quotient(local_stack, output_stack,
         integer_multiply(local_stack, output_stack, a->index, b->index), info.gcd);
-    struct Number*radicand_factor_a = number_exponentiate(local_stack, output_stack, a->radicand,
-        &(struct Rational){ info.b_over_gcd, &one });
-    struct Number*radicand_factor_b = number_exponentiate(local_stack, output_stack, b->radicand,
-        &(struct Rational){ info.a_over_gcd, &one });
+    struct Number*radicand_factor_a = number_integer_exponentiate(local_stack, output_stack,
+        a->radicand, integer_magnitude(local_stack, info.b_over_gcd));
+    struct Number*radicand_factor_b = number_integer_exponentiate(local_stack, output_stack,
+        b->radicand, integer_magnitude(local_stack, info.a_over_gcd));
     struct RationalInterval*radicand_factor_a_argument_estimate =
         number_rational_argument_estimate(local_stack, output_stack, radicand_factor_a,
             &rational_one);
@@ -215,8 +215,7 @@ struct Number*factor_consolidate(struct Stack*output_stack, struct Stack*local_s
     }
     struct Number*product_radicand =
         number_multiply(local_stack, output_stack, radicand_factor_a, radicand_factor_b);
-    struct Number*out = number_exponentiate(local_stack, output_stack, product_radicand,
-        &(struct Rational){ &one, product_index });
+    struct Number*out = number_root(local_stack, output_stack, product_radicand, product_index);
     if (rational_compare(output_stack, local_stack,
         number_rational_argument_estimate(local_stack, output_stack, product_radicand, pi.min)->max,
         rational_add(local_stack, output_stack, radicand_factor_a_argument_estimate->min,
@@ -367,10 +366,10 @@ struct Number*number_multiply(struct Stack*output_stack, struct Stack*local_stac
         for (size_t i = a->element_count; i-- > 1;)
         {
             out = number_add(local_stack, output_stack, out,
-                number_multiply(local_stack, output_stack, a->elements[i], b));
+                number_multiply(local_stack, output_stack, b, a->elements[i]));
         }
         out = number_add(output_stack, local_stack, out,
-            number_multiply(local_stack, output_stack, a->elements[0], b));
+            number_multiply(local_stack, output_stack, b, a->elements[0]));
         local_stack->cursor = local_stack_savepoint;
         return out;
     }

@@ -17,20 +17,27 @@ void array_reverse(void**a, size_t element_count)
 void*generic_exponentiate(struct RingOperations*operations, struct Stack*output_stack,
     struct Stack*local_stack, void*base, struct Integer*exponent, void*misc)
 {
+    if (!exponent->value_count)
+    {
+        return operations->multiplicative_identity;
+    }
     void*local_stack_savepoint = local_stack->cursor;
     void*out = operations->multiplicative_identity;
-    while (exponent->sign > 0)
+    while (true)
     {
         if (exponent->value[0] & 1)
         {
             out = operations->multiply(local_stack, output_stack, out, base, misc);
         }
-        base = operations->multiply(local_stack, output_stack, base, base, misc);
         exponent = integer_half(local_stack, exponent);
+        if (!exponent->value_count)
+        {
+            out = operations->copy(output_stack, out);
+            local_stack->cursor = local_stack_savepoint;
+            return out;
+        }
+        base = operations->multiply(local_stack, output_stack, base, base, misc);
     }
-    out = operations->copy(output_stack, out);
-    local_stack->cursor = local_stack_savepoint;
-    return out;
 }
 
 void*generic_gcd(struct EuclideanDomainOperations*operations, struct Stack*output_stack,

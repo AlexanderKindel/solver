@@ -232,6 +232,8 @@ struct Token
 
 struct Number
 {
+    char operation;
+    struct RationalPolynomial*minimal_polynomial;
     union
     {
         struct Rational*value;//When operation == 'r'.
@@ -250,9 +252,6 @@ struct Number
     //When operation == '+'.
     struct Number*generator;
     struct RationalPolynomial**terms_in_terms_of_generator;
-
-    struct RationalPolynomial*minimal_polynomial;
-    char operation;
 };
 
 typedef struct RationalInterval*(*rational_estimate_getter)(struct Stack*, struct Stack*,
@@ -751,6 +750,8 @@ void matrix_row_echelon_form(void*(augmentation_element_rational_multiply)(struc
     struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a, void**augmentation);
 void matrix_diagonalize(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
     struct Rational**augmentation);
+struct RationalPolynomial*matrix_extract_column(struct Stack*output_stack, struct Matrix*a,
+    size_t column_index);
 
 struct Number*number_copy(struct Stack*output_stack, struct Number*a);
 struct Number*number_rational_initialize(struct Stack*output_stack, struct Rational*value);
@@ -770,8 +771,12 @@ struct Number*number_divide(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*dividend, struct Number*divisor);
 struct Rational*number_rational_factor(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*a);
-struct Number*number_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
+struct Number*number_integer_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
+    struct Number*base, struct Integer*exponent);
+struct Number*number_rational_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*base, struct Rational*exponent);
+struct Number*number_root(struct Stack*output_stack, struct Stack*local_stack, struct Number*base,
+    struct Integer*index);
 struct Number**number_conjugates(struct Stack*output_stack, struct Stack*local_stack,
     struct Number*a);
 size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct Number*a);

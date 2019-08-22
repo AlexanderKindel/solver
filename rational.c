@@ -442,23 +442,23 @@ struct RationalInterval*rational_estimate_atan2(struct Stack*output_stack, struc
     return out;
 }
 
-void positive_rational_float_estimate(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float**out_min, struct Float**out_max, struct Rational*a, struct Rational*interval_size)
+struct FloatInterval*positive_rational_float_estimate(struct Stack*output_stack,
+    struct Stack*local_stack, struct Rational*a, struct Rational*interval_size)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct IntegerDivision division;
     integer_euclidean_divide(local_stack, output_stack, &division, a->numerator, a->denominator);
-    (*out_min)->significand = division.quotient;
-    (*out_min)->exponent = &zero;
+    struct FloatInterval*out = ALLOCATE(output_stack, struct FloatInterval);
+    struct Float out_min = { division.quotient, &zero };
     struct Integer*estimate_denominator = &one;
     while (true)
     {
         if (division.remainder->value_count == 0)
         {
-            *out_min = float_copy(output_stack, *out_min);
-            *out_max = *out_min;
+            out->min = float_copy(output_stack, &out_min);
+            out->max = out->min;
             local_stack->cursor = local_stack_savepoint;
-            return;
+            return out;
         }
         if (integer_compare(output_stack, local_stack, interval_size->denominator,
             integer_multiply(local_stack, output_stack, estimate_denominator,
@@ -469,36 +469,29 @@ void positive_rational_float_estimate(struct Stack*output_stack, struct Stack*lo
         integer_euclidean_divide(local_stack, output_stack, &division,
             integer_doubled(local_stack, division.remainder), a->denominator);
         estimate_denominator = integer_doubled(local_stack, estimate_denominator);
-        (*out_min)->significand = integer_add(local_stack, division.quotient,
-            integer_doubled(local_stack, (*out_min)->significand));
-        (*out_min)->exponent = integer_add(local_stack, (*out_min)->exponent, &INT(1, -));
+        out_min.significand = integer_add(local_stack, division.quotient,
+            integer_doubled(local_stack, out_min.significand));
+        out_min.exponent = integer_add(local_stack, out_min.exponent, &INT(1, -));
     }
-    *out_min =
-        float_reduced(output_stack, local_stack, (*out_min)->significand, (*out_min)->exponent);
-    *out_max = float_reduced(output_stack, local_stack,
-        integer_add(local_stack, (*out_min)->significand, &one), (*out_min)->exponent);
+    out->min =
+        float_reduced(output_stack, local_stack, out_min.significand, out_min.exponent);
+    out->max = float_reduced(output_stack, local_stack,
+        integer_add(local_stack, out->min->significand, &one), out->min->exponent);
     local_stack->cursor = local_stack_savepoint;
+    return out;
 }
 
 struct FloatInterval*rational_float_estimate(struct Stack*output_stack, struct Stack*local_stack,
     struct Rational*a, struct Rational*interval_size)
 {
-    void*local_stack_savepoint = local_stack->cursor;
-    struct FloatInterval*out = ALLOCATE(output_stack, struct FloatInterval);
-    out->min = ALLOCATE(output_stack, struct Float);
-    out->max = ALLOCATE(output_stack, struct Float);
     if (a->numerator->sign < 0)
     {
-        positive_rational_float_estimate(output_stack, local_stack, &out->max, &out->min,
-            rational_negative(local_stack, a), interval_size);
-        out->min->significand->sign = -1;
-        out->max->significand->sign = -1;
+        void*local_stack_savepoint = local_stack->cursor;
+        struct FloatInterval*out = float_interval_negative(output_stack, local_stack,
+            positive_rational_float_estimate(local_stack, output_stack,
+                rational_negative(local_stack, a), interval_size));
+        local_stack->cursor = local_stack_savepoint;
+        return out;
     }
-    else
-    {
-        positive_rational_float_estimate(output_stack, local_stack, &out->min, &out->max, a,
-            interval_size);
-    }
-    local_stack->cursor = local_stack_savepoint;
-    return out;
+    return positive_rational_float_estimate(output_stack, local_stack, a, interval_size);
 }

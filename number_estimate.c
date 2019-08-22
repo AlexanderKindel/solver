@@ -1,21 +1,5 @@
 #include "declarations.h"
 
-struct Rational*rational_place_value(struct Stack*output_stack, struct Stack*local_stack,
-    struct Rational*a)
-{
-    void*local_stack_savepoint = local_stack->cursor;
-    struct Rational*out = ALLOCATE(output_stack, struct Rational);
-    out->numerator = &one;
-    out->denominator = &one;
-    while (rational_compare(output_stack, local_stack, out, a) > 0)
-    {
-        out->denominator = integer_doubled(local_stack, out->denominator);
-    }
-    out->denominator = integer_doubled(output_stack, out->denominator);
-    local_stack->cursor = local_stack_savepoint;
-    return out;
-}
-
 struct RationalInterval*number_refine_rational_estimate_interval(
     rational_estimate_getter get_rational_estimate, struct Stack*output_stack,
     struct Stack*local_stack, struct Number*a, struct RationalInterval*estimate,
@@ -73,11 +57,9 @@ struct FloatInterval*number_float_estimate_from_rational(
     struct Stack*local_stack, struct Number*a, struct Rational*interval_size)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct Rational*rational_estimate_interval_size =
-        rational_place_value(local_stack, output_stack, interval_size);
+    interval_size = rational_integer_divide(local_stack, output_stack, interval_size, &INT(3, +));
     struct FloatInterval*out = rational_interval_to_float_interval(output_stack, local_stack,
-        get_rational_estimate(local_stack, output_stack, a, rational_estimate_interval_size),
-        rational_estimate_interval_size);
+        get_rational_estimate(local_stack, output_stack, a, interval_size), interval_size);
     local_stack->cursor = local_stack_savepoint;
     return out;
 }

@@ -215,82 +215,74 @@ void integer_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*loc
     }
 }
 
-struct IntegerPolynomial*bound_coefficients(struct Stack*output_stack, struct Stack*local_stack,
-    struct IntegerPolynomial*a, struct Integer*characteristic_power)
+bool find_factor(struct Stack*output_stack, struct Stack*local_stack,
+    struct IntegerPolynomial*candidate, size_t components_to_add,
+    struct IntegerPolynomial**factor_components, size_t component_count,
+    struct IntegerPolynomial**a, struct Integer*characteristic_power,
+    struct IntegerPolynomial**factors, size_t*factor_count)
 {
-    struct IntegerPolynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
-    for (size_t i = 0; i < a->coefficient_count; ++i)
-    {
-        struct Integer*remainder = integer_euclidean_remainder(local_stack, output_stack,
-            a->coefficients[i], characteristic_power);
-        if (remainder->sign < 0)
-        {
-            remainder = integer_add(local_stack, remainder, characteristic_power);
-        }
-        if (integer_compare(output_stack, local_stack, integer_doubled(local_stack, remainder),
-            characteristic_power) > 0)
-        {
-            out->coefficients[i] =
-                integer_subtract(output_stack, local_stack, remainder, characteristic_power);
-        }
-        else
-        {
-            out->coefficients[i] = integer_copy(output_stack, remainder);
-        }
-    }
-    return out;
-}
-
-struct IntegerPolynomial*find_valid_combination(struct Stack*output_stack, struct Stack*local_stack,
-    struct IntegerPolynomial*combination, size_t combination_size,
-    struct IntegerPolynomial**factor_candidates, size_t candidate_count,
-    struct IntegerPolynomial**a, struct Integer*characteristic_power)
-{
-    if (combination_size == 0)
+    if (components_to_add == 0)
     {
         void*local_stack_savepoint = local_stack->cursor;
-        struct IntegerPolynomial*bounded_combination =
-            bound_coefficients(local_stack, output_stack, combination, characteristic_power);
+        candidate = integer_polynomial_integer_multiply(local_stack, output_stack, candidate,
+            (*a)->coefficients[(*a)->coefficient_count - 1]);
+        for (size_t i = 0; i < candidate->coefficient_count; ++i)
+        {
+            candidate->coefficients[i] = integer_euclidean_remainder(local_stack, output_stack,
+                candidate->coefficients[i], characteristic_power);
+            if (candidate->coefficients[i]->sign < 0)
+            {
+                candidate->coefficients[i] =
+                    integer_add(local_stack, candidate->coefficients[i], characteristic_power);
+            }
+            if (integer_compare(output_stack, local_stack,
+                integer_doubled(local_stack, candidate->coefficients[i]), characteristic_power) > 0)
+            {
+                candidate->coefficients[i] = integer_subtract(local_stack, output_stack,
+                    candidate->coefficients[i], characteristic_power);
+            }
+        }
         struct PolynomialDivision division;
         integer_polynomial_euclidean_divide(local_stack, output_stack, &division,
             integer_polynomial_integer_multiply(local_stack, output_stack, *a,
-            (*a)->coefficients[(*a)->coefficient_count - 1]), bounded_combination);
+            (*a)->coefficients[(*a)->coefficient_count - 1]), candidate);
         if (division.remainder && division.remainder->coefficient_count == 0)
         {
-            do
+            factors[*factor_count] =
+                integer_polynomial_primitive_part(output_stack, local_stack, candidate);
+            while (true)
             {
+                integer_polynomial_euclidean_divide(local_stack, output_stack, &division, *a,
+                    factors[*factor_count]);
+                if (!division.remainder || division.remainder->coefficient_count != 0)
+                {
+                    *factor_count += 1;
+                    local_stack->cursor = local_stack_savepoint;
+                    return true;
+                }
                 *a = (struct IntegerPolynomial*)division.quotient;
-                integer_polynomial_euclidean_divide(local_stack, output_stack, &division,
-                    integer_polynomial_integer_multiply(local_stack, output_stack, *a,
-                    (*a)->coefficients[(*a)->coefficient_count - 1]),
-                    bounded_combination);
-            } while (division.remainder && division.remainder->coefficient_count == 0);
-            struct IntegerPolynomial*factor =
-                integer_polynomial_primitive_part(output_stack, local_stack, bounded_combination);
-            local_stack->cursor = local_stack_savepoint;
-            return factor;
+            }
         }
         local_stack->cursor = local_stack_savepoint;
     }
     else
     {
-        for (size_t i = 0; i <= candidate_count - combination_size; ++i)
+        for (size_t i = 0; i <= component_count - components_to_add; ++i)
         {
             void*local_stack_savepoint = local_stack->cursor;
-            struct IntegerPolynomial*factor = find_valid_combination(output_stack, local_stack,
-                integer_polynomial_multiply(local_stack, output_stack, combination,
-                    factor_candidates[i]),
-                combination_size - 1, factor_candidates + 1, candidate_count - 1, a,
-                characteristic_power);
+            bool factor_found = find_factor(output_stack, local_stack,
+                integer_polynomial_multiply(local_stack, output_stack, candidate,
+                    factor_components[i]), components_to_add - 1, factor_components + 1,
+                component_count - 1, a, characteristic_power, factors, factor_count);
             local_stack->cursor = local_stack_savepoint;
-            if (factor)
+            if (factor_found)
             {
-                factor_candidates[i] = factor_candidates[candidate_count - 1];
-                return factor;
+                factor_components[i] = factor_components[component_count - 1];
+                return factor_found;
             }
         }
     }
-    return 0;
+    return false;
 }
 
 size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct Stack*local_stack,
@@ -407,53 +399,32 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
     }
     lifted_factors[lifted_factor_count] = unmodded_b_times_c;
     ++lifted_factor_count;
-    struct IntegerPolynomial*a_times_leading_coefficient =
-        integer_polynomial_integer_multiply(local_stack, output_stack, a,
-            a->coefficients[a->coefficient_count - 1]);
     size_t factor_count = 0;
     size_t combination_size = 1;
-    struct IntegerPolynomial*unfactored_component_of_a = a;
     while (2 * combination_size < lifted_factor_count)
     {
         while (true)
         {
-            struct IntegerPolynomial*factor = find_valid_combination(output_stack, local_stack,
-                &integer_polynomial_one, combination_size, lifted_factors, lifted_factor_count,
-                &unfactored_component_of_a, prime_power);
-            if (!factor)
+            bool factor_found = find_factor(output_stack, local_stack, &integer_polynomial_one,
+                combination_size, lifted_factors, lifted_factor_count, &a, prime_power, out,
+                &factor_count);
+            if (!factor_found)
             {
                 break;
             }
             lifted_factor_count -= combination_size;
-            out[factor_count] = factor;
-            ++factor_count;
         }
         ++combination_size;
     }
     if (2 * combination_size == lifted_factor_count)
     {
-        struct IntegerPolynomial*factor = find_valid_combination(output_stack, local_stack,
-            lifted_factors[lifted_factor_count - 1], combination_size - 1, lifted_factors,
-            lifted_factor_count - 1, &unfactored_component_of_a, prime_power);
-        if (factor)
-        {
-            lifted_factor_count -= combination_size;
-            out[factor_count] = factor;
-            ++factor_count;
-        }
+        find_factor(output_stack, local_stack, lifted_factors[lifted_factor_count - 1],
+            combination_size - 1, lifted_factors, lifted_factor_count - 1, &a, prime_power, out,
+            &factor_count);
     }
-    struct IntegerPolynomial*final_factor = polynomial_allocate(local_stack, 1);
-    final_factor->coefficients[0] =
-        unfactored_component_of_a->coefficients[unfactored_component_of_a->coefficient_count - 1];
-    for (size_t i = 0; i < lifted_factor_count; ++i)
+    if (a->coefficient_count > 1)
     {
-        final_factor =
-            integer_polynomial_multiply(local_stack, output_stack, final_factor, lifted_factors[i]);
-    }
-    if (final_factor->coefficient_count > 1)
-    {
-        out[factor_count] = integer_polynomial_primitive_part(output_stack, local_stack,
-            bound_coefficients(local_stack, output_stack, final_factor, prime_power));
+        out[factor_count] = integer_polynomial_primitive_part(output_stack, local_stack, a);
         ++factor_count;
     }
     local_stack->cursor = local_stack_savepoint;
@@ -521,25 +492,19 @@ size_t primitive_integer_polynomial_factor(struct Stack*output_stack, struct Sta
         {
             array_reverse(squarefree_factors[i]->coefficients,
                 squarefree_factors[i]->coefficient_count);
-            struct IntegerPolynomial**reversed_irreducible_factors =
-                stack_slot_allocate(local_stack,
-                (squarefree_factor_count - 1) * sizeof(struct IntegerPolynomial*),
-                    _Alignof(struct IntegerPolynomial*));
-            size_t reversed_factor_count = squarefree_integer_polynomial_factor(local_stack,
-                output_stack, squarefree_factors[i], reversed_irreducible_factors);
+            size_t reversed_factor_count = squarefree_integer_polynomial_factor(output_stack,
+                local_stack, squarefree_factors[i], out + factor_count);
             for (size_t j = 0; j < reversed_factor_count; ++j)
             {
-                array_reverse(reversed_irreducible_factors[j]->coefficients,
-                    reversed_irreducible_factors[j]->coefficient_count);
-                out[factor_count] =
-                    integer_polynomial_copy(output_stack, reversed_irreducible_factors[j]);
+                array_reverse(out[factor_count]->coefficients,
+                    out[factor_count]->coefficient_count);
                 ++factor_count;
             }
         }
         else
         {
             factor_count += squarefree_integer_polynomial_factor(output_stack, local_stack,
-                squarefree_factors[i], out);
+                squarefree_factors[i], out + factor_count);
         }
     }
     local_stack->cursor = local_stack_savepoint;

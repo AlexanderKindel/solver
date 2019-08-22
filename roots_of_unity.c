@@ -279,9 +279,8 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
             {
                 for (size_t j = 0; j < quotient; ++j)
                 {
-                    out[i] = number_copy(&permanent_stack, number_multiply(stack_a, stack_b,
-                        prime_degree_roots[i], number_exponentiate(stack_a, stack_b,
-                            quotient_degree_roots[j], &(struct Rational){&one, prime})));
+                    out[i] = number_multiply(&permanent_stack, stack_b, prime_degree_roots[i],
+                        number_root(stack_a, stack_b, quotient_degree_roots[j], prime));
                 }
             }
             roots_of_unity_sort(stack_a, stack_b, out, degree);
@@ -422,8 +421,8 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
     resolvent_values[0]->operation = 'r';
     resolvent_values[0]->value->numerator = integer_initialize(stack_a, 1, -1);
     resolvent_values[0]->value->denominator = &one;
-    resolvent_values[1] = number_exponentiate(stack_a, stack_b,
-        resolvent_product_values[0], &(struct Rational){&one, degree_minus_one});
+    resolvent_values[1] =
+        number_root(stack_a, stack_b, resolvent_product_values[0], degree_minus_one);
     for (size_t i = 1; i < resolvent_count_minus_one; ++i)
     {
         resolvent_values[i + 1] = number_divide(stack_a, stack_b, resolvent_values[1],

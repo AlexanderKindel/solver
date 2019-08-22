@@ -78,3 +78,24 @@ void matrix_diagonalize(struct Stack*output_stack, struct Stack*local_stack, str
         }
     }
 }
+
+struct RationalPolynomial*matrix_extract_column(struct Stack*output_stack, struct Matrix*a,
+    size_t column_index)
+{
+    size_t highest_nonzero_coefficient_index = a->height;
+    while (highest_nonzero_coefficient_index > 0)
+    {
+        --highest_nonzero_coefficient_index;
+        if (a->rows[highest_nonzero_coefficient_index][column_index]->numerator->value_count)
+        {
+            break;
+        }
+    }
+    struct RationalPolynomial*out =
+        polynomial_allocate(output_stack, highest_nonzero_coefficient_index + 1);
+    for (size_t i = 0; i < out->coefficient_count; ++i)
+    {
+        out->coefficients[i] = rational_copy(output_stack, a->rows[i][column_index]);
+    }
+    return out;
+}

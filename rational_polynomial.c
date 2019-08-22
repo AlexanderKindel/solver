@@ -139,9 +139,17 @@ void rational_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*lo
 struct RationalPolynomial*rational_polynomial_gcd(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a, struct RationalPolynomial*b)
 {
+    void*local_stack_savepoint = local_stack->cursor;
     struct PolynomialExtendedGCDInfo info;
-    rational_polynomial_extended_gcd(output_stack, local_stack, &info, a, b);
-    return (struct RationalPolynomial*)info.gcd;
+    integer_polynomial_extended_gcd(local_stack, output_stack, &info,
+        rational_polynomial_to_integer_polynomial(local_stack, output_stack, a,
+            denominator_lcm(local_stack, output_stack, a->coefficients, a->coefficient_count)),
+        rational_polynomial_to_integer_polynomial(local_stack, output_stack, b,
+            denominator_lcm(local_stack, output_stack, b->coefficients, b->coefficient_count)));
+    struct RationalPolynomial*out =
+        integer_polynomial_to_monic(output_stack, local_stack, (struct IntegerPolynomial*)info.gcd);
+    local_stack->cursor = local_stack_savepoint;
+    return out;
 }
 
 size_t rational_polynomial_factor(struct Stack*output_stack, struct Stack*local_stack,
@@ -153,7 +161,7 @@ size_t rational_polynomial_factor(struct Stack*output_stack, struct Stack*local_
         (struct IntegerPolynomial**)out);
     for (size_t i = 0; i < factor_count; ++i)
     {
-        out[i] = integer_polynomial_to_monic(local_stack, output_stack,
+        out[i] = integer_polynomial_to_monic(output_stack, local_stack,
             (struct IntegerPolynomial*)out[i]);
     }
     local_stack->cursor = local_stack_savepoint;
