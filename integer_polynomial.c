@@ -260,7 +260,8 @@ bool find_factor(struct Stack*output_stack, struct Stack*local_stack,
                     local_stack->cursor = local_stack_savepoint;
                     return true;
                 }
-                *a = (struct IntegerPolynomial*)division.quotient;
+                *a = integer_polynomial_copy(output_stack,
+                    (struct IntegerPolynomial*)division.quotient);
             }
         }
         local_stack->cursor = local_stack_savepoint;

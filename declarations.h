@@ -463,6 +463,8 @@ struct Rational*rational_max(struct Stack*output_stack, struct Stack*local_stack
     struct Rational*b);
 struct Rational*rational_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
     struct Rational*base, struct Integer*exponent);
+struct RationalInterval*rational_argument(struct Stack*output_stack, struct Rational*a,
+    struct Rational*interval_size);
 void rational_estimate_cosine(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct Rational*a, struct Rational*interval_size);
 void rational_estimate_sine(struct Stack*output_stack, struct Stack*local_stack,
@@ -744,14 +746,10 @@ size_t number_field_polynomial_factor(struct Stack*output_stack, struct Stack*lo
     struct NestedPolynomial*a, struct RationalPolynomial*generator_minimal_polynomial,
     struct NestedPolynomial**out);
 
-void matrix_row_echelon_form(void*(augmentation_element_rational_multiply)(struct Stack*,
-    struct Stack*, void*, struct Rational*),
-    void*(augmentation_element_subtract)(struct Stack*, struct Stack*, void*, void*),
-    struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a, void**augmentation);
+void matrix_row_echelon_form(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
+    struct Rational**augmentation);
 void matrix_diagonalize(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
     struct Rational**augmentation);
-struct RationalPolynomial*matrix_extract_column(struct Stack*output_stack, struct Matrix*a,
-    size_t column_index);
 
 struct Number*number_copy(struct Stack*output_stack, struct Number*a);
 struct Number*number_rational_initialize(struct Stack*output_stack, struct Rational*value);

@@ -1,11 +1,8 @@
 #include "declarations.h"
 
 //Leaves garbage allocations on local stack along with the new matrix and augmentation values.
-void leaking_matrix_row_echelon_form(void*(augmentation_element_rational_multiply)(struct Stack*,
-    struct Stack*, void*, struct Rational*),
-    void*(augmentation_element_subtract)(struct Stack*, struct Stack*, void*, void*),
-    struct Stack*output_stack, struct Stack*local_stack,
-    struct Matrix*a, void**augmentation)
+void leaking_matrix_row_echelon_form(struct Stack*output_stack, struct Stack*local_stack,
+    struct Matrix*a, struct Rational**augmentation)
 {
     size_t small_dimension = min(a->width, a->height);
     for (size_t i = 0; i < small_dimension; ++i)
@@ -28,9 +25,8 @@ void leaking_matrix_row_echelon_form(void*(augmentation_element_rational_multipl
                         a->rows[k][l] = rational_subtract(local_stack, output_stack, a->rows[k][l],
                             rational_multiply(local_stack, output_stack, a->rows[i][l], scalar));
                     }
-                    augmentation[k] = augmentation_element_subtract(local_stack, output_stack,
-                        augmentation[k], augmentation_element_rational_multiply(local_stack,
-                            output_stack, augmentation[i], scalar));
+                    augmentation[k] = rational_subtract(local_stack, output_stack, augmentation[k],
+                        rational_multiply(local_stack, output_stack, augmentation[i], scalar));
                 }
                 break;
             }
@@ -38,20 +34,18 @@ void leaking_matrix_row_echelon_form(void*(augmentation_element_rational_multipl
     }
 }
 
-void matrix_row_echelon_form(void*(augmentation_element_rational_multiply)(struct Stack*,
-    struct Stack*, void*, struct Rational*),
-    void*(augmentation_element_subtract)(struct Stack*, struct Stack*, void*, void*),
-    struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a, void**augmentation)
+void matrix_row_echelon_form(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
+    struct Rational**augmentation)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    leaking_matrix_row_echelon_form(augmentation_element_rational_multiply,
-        augmentation_element_subtract, output_stack, local_stack, a, augmentation);
+    leaking_matrix_row_echelon_form(output_stack, local_stack, a, augmentation);
     for (size_t i = 0; i < a->height; ++i)
     {
         for (size_t j = 0; j < a->width; ++j)
         {
             a->rows[i][j] = rational_copy(output_stack, a->rows[i][j]);
         }
+        augmentation[i] = rational_copy(output_stack, augmentation[i]);
     }
     local_stack->cursor = local_stack_savepoint;
 }
@@ -60,8 +54,7 @@ void matrix_row_echelon_form(void*(augmentation_element_rational_multiply)(struc
 void matrix_diagonalize(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
     struct Rational**augmentation)
 {
-    leaking_matrix_row_echelon_form(rational_multiply, rational_subtract, output_stack, local_stack,
-        a, augmentation);
+    leaking_matrix_row_echelon_form(output_stack, local_stack, a, augmentation);
     for (size_t i = a->height; i-- > 0;)
     {
         augmentation[i] =
@@ -77,25 +70,4 @@ void matrix_diagonalize(struct Stack*output_stack, struct Stack*local_stack, str
                 rational_multiply(local_stack, output_stack, augmentation[i], a->rows[j][i]));
         }
     }
-}
-
-struct RationalPolynomial*matrix_extract_column(struct Stack*output_stack, struct Matrix*a,
-    size_t column_index)
-{
-    size_t highest_nonzero_coefficient_index = a->height;
-    while (highest_nonzero_coefficient_index > 0)
-    {
-        --highest_nonzero_coefficient_index;
-        if (a->rows[highest_nonzero_coefficient_index][column_index]->numerator->value_count)
-        {
-            break;
-        }
-    }
-    struct RationalPolynomial*out =
-        polynomial_allocate(output_stack, highest_nonzero_coefficient_index + 1);
-    for (size_t i = 0; i < out->coefficient_count; ++i)
-    {
-        out->coefficients[i] = rational_copy(output_stack, a->rows[i][column_index]);
-    }
-    return out;
 }
