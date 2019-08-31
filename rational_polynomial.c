@@ -201,100 +201,171 @@ struct Rational*rational_polynomial_evaluate_at_rational(struct Stack*output_sta
         output_stack, local_stack, a, argument);
 }
 
-struct Integer*sturm_chain_sign_variation(struct Stack*output_stack, struct Stack*local_stack,
+struct GaussianRational*rational_polynomial_evaluate_at_gaussian_rational(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalPolynomial*a, struct GaussianRational*argument)
+{
+    return rational_polynomial_evaluate(&gaussian_rational_operations,
+        gaussian_rational_rational_multiply, output_stack, local_stack, a, argument);
+}
+
+size_t sign_variation(int8_t previous_sign, int8_t sign)
+{
+    int8_t out = sign - previous_sign;
+    if (out < 0)
+    {
+        return -out;
+    }
+    return out;
+}
+
+size_t sturm_chain_sign_variation(struct Stack*stack_a, struct Stack*stack_b,
     struct RationalPolynomial*first_element, struct RationalPolynomial*second_element)
 {
-    void*local_stack_savepoint = local_stack->cursor;
-    int8_t start_sign = rational_polynomial_evaluate_at_rational(local_stack, output_stack,
-        first_element, &rational_zero)->numerator->sign;
+    void*stack_a_savepoint = stack_a->cursor;
+    int8_t start_sign = rational_polynomial_evaluate_at_rational(stack_a, stack_b, first_element,
+        &rational_zero)->numerator->sign;
     size_t start_sign_change_count = 0;
-    int8_t end_sign = rational_polynomial_evaluate_at_rational(local_stack, output_stack,
-        first_element, &rational_one)->numerator->sign;
+    int8_t end_sign = rational_polynomial_evaluate_at_rational(stack_a, stack_b, first_element,
+        &rational_one)->numerator->sign;
     size_t end_sign_change_count = 0;
     while (second_element->coefficient_count > 1)
     {
-        struct Rational*second_element_at_edge_start =
-            rational_polynomial_evaluate_at_rational(local_stack, output_stack, second_element,
-                &rational_zero);
-        int8_t sign_change = second_element_at_edge_start->numerator->sign - start_sign;
-        start_sign_change_count += sign_change * sign_change;
-        start_sign = second_element_at_edge_start->numerator->sign;
-        struct Rational*second_element_at_edge_end =
-            rational_polynomial_evaluate_at_rational(local_stack, output_stack, second_element,
-                &rational_one);
-        sign_change = second_element_at_edge_end->numerator->sign - end_sign;
-        end_sign_change_count += sign_change * sign_change;
-        end_sign = second_element_at_edge_end->numerator->sign;
-        struct RationalPolynomial*remainder = rational_polynomial_negative(local_stack, 
-            rational_polynomial_euclidean_remainder(local_stack, output_stack, first_element,
+        int8_t next_start_sign = rational_polynomial_evaluate_at_rational(stack_a, stack_b,
+            second_element, &rational_zero)->numerator->sign;
+        start_sign_change_count += sign_variation(start_sign, next_start_sign);
+        start_sign = next_start_sign;
+        int8_t next_end_sign = rational_polynomial_evaluate_at_rational(stack_a, stack_b,
+            second_element, &rational_one)->numerator->sign;
+        end_sign_change_count += sign_variation(end_sign, next_end_sign);
+        end_sign = next_end_sign;
+        struct RationalPolynomial*remainder = rational_polynomial_negative(stack_a, 
+            rational_polynomial_euclidean_remainder(stack_a, stack_b, first_element,
                 second_element));
         first_element = second_element;
         second_element = remainder;
     }
-    struct Integer*out = integer_subtract(output_stack, local_stack,
-        integer_from_size_t(local_stack, start_sign_change_count),
-        integer_from_size_t(local_stack, end_sign_change_count));
-    local_stack->cursor = local_stack_savepoint;
-    return out;
+    start_sign_change_count +=
+        sign_variation(start_sign, second_element->coefficients[0]->numerator->sign);
+    end_sign_change_count +=
+        sign_variation(end_sign, second_element->coefficients[0]->numerator->sign);
+    stack_a->cursor = stack_a_savepoint;
+    return start_sign_change_count - end_sign_change_count;
 }
 
-//Returns a->coefficient_count if a has a zero on the rectangle boundary.
-size_t rational_polynomial_root_count_in_rectangle(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*a, struct RationalInterval*real,
-    struct RationalInterval*imaginary)
+void rational_polynomial_parameterize_over_segment(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalPolynomial**out_real,
+    struct RationalPolynomial**out_imaginary, struct RationalPolynomial*a,
+    struct GaussianRational*endpoint_a, struct GaussianRational*endpoint_b)
 {
-    void*local_stack_savepoint = local_stack->cursor;
+    struct GaussianRationalPolynomial*a_at_edge =
+        rational_polynomial_evaluate(&gaussian_rational_polynomial_operations,
+            gaussian_rational_polynomial_rational_multiply, local_stack, output_stack, a,
+            &(struct GaussianRationalPolynomial){2, endpoint_a,
+                gaussian_rational_subtract(local_stack, output_stack, endpoint_b, endpoint_a)});
+    *out_real = polynomial_allocate(output_stack, a_at_edge->coefficient_count);
+    *out_imaginary = polynomial_allocate(output_stack, a_at_edge->coefficient_count);
+    for (size_t i = 0; i < a_at_edge->coefficient_count; ++i)
+    {
+        (*out_real)->coefficients[i] =
+            rational_copy(output_stack, a_at_edge->coefficients[i]->real);
+        (*out_imaginary)->coefficients[i] =
+            rational_copy(output_stack, a_at_edge->coefficients[i]->imaginary);
+    }
+    polynomial_trim_leading_zeroes(&rational_operations.ring_operations,
+        (struct Polynomial*)(*out_real));
+    polynomial_trim_leading_zeroes(&rational_operations.ring_operations,
+        (struct Polynomial*)(*out_imaginary));
+}
+
+size_t rational_polynomial_root_count_over_segment(struct Stack*stack_a, struct Stack*stack_b,
+    struct RationalPolynomial*a, struct GaussianRational*endpoint_a,
+    struct GaussianRational*endpoint_b)
+{
+    void*stack_a_savepoint = stack_a->cursor;
+    struct RationalPolynomial*parameterization_real_part;
+    struct RationalPolynomial*parameterization_imaginary_part;
+    rational_polynomial_parameterize_over_segment(stack_a, stack_b, &parameterization_real_part,
+        &parameterization_imaginary_part, a, endpoint_a, endpoint_b);
+    struct RationalPolynomial*sturm_chain_first_element = rational_polynomial_gcd(stack_a, stack_b,
+        parameterization_real_part, parameterization_imaginary_part);
+    size_t out = sturm_chain_sign_variation(stack_a, stack_b, sturm_chain_first_element,
+        rational_polynomial_derivative(stack_a, stack_b, sturm_chain_first_element));
+    if (gaussian_rational_equals(&gaussian_rational_zero,
+        rational_polynomial_evaluate_at_gaussian_rational(stack_a, stack_b, a, endpoint_a)))
+    {
+        ++out;
+    }
+    if (gaussian_rational_equals(&gaussian_rational_zero,
+        rational_polynomial_evaluate_at_gaussian_rational(stack_a, stack_b, a, endpoint_b)))
+    {
+        ++out;
+    }
+    stack_a->cursor = stack_a_savepoint;
+    return out / 2;
+}
+
+//Inconclusive if the rectangle is nondegerate and has a zero on a vertex; returns
+//a->coefficient_count in that case.
+size_t rational_polynomial_root_count_in_rectangle(struct Stack*stack_a, struct Stack*stack_b,
+    struct RationalPolynomial*a, struct RationalInterval*real, struct RationalInterval*imaginary)
+{
     struct GaussianRational corners[5] = { { real->min, imaginary->min },
         { real->max, imaginary->min }, { real->max, imaginary->max }, { real->min, imaginary->max },
         { real->min, imaginary->min } };
-    struct GaussianRationalPolynomial*edges[4];
-    struct Integer*sign_variation_total = &zero;
+    if (rational_equals(imaginary->min, imaginary->max))
+    {
+        if (rational_equals(real->min, real->max))
+        {
+            if (gaussian_rational_equals(&gaussian_rational_zero,
+                rational_polynomial_evaluate_at_gaussian_rational(stack_a, stack_b, a, corners)))
+            {
+                return 1;
+            }
+            return 0;
+        }
+        return rational_polynomial_root_count_over_segment(stack_a, stack_b, a, corners,
+            corners + 1);
+    }
+    if (rational_equals(real->min, real->max))
+    {
+        return rational_polynomial_root_count_over_segment(stack_a, stack_b, a, corners + 1,
+            corners + 2);
+    }
     for (size_t i = 0; i < 4; ++i)
     {
-        edges[i] = polynomial_allocate(local_stack, 2);
-        edges[i]->coefficients[0] = &corners[i];
-        edges[i]->coefficients[1] =
-            gaussian_rational_subtract(local_stack, output_stack, &corners[i + 1], &corners[i]);
-        struct GaussianRationalPolynomial*a_at_edge =
-            rational_polynomial_evaluate(&gaussian_rational_polynomial_operations,
-                gaussian_rational_polynomial_rational_multiply, local_stack, output_stack, a,
-                edges[i]);
-        struct RationalPolynomial*real_part =
-            polynomial_allocate(local_stack, a->coefficient_count);
-        struct RationalPolynomial*imaginary_part =
-            polynomial_allocate(local_stack, a->coefficient_count);
-        for (size_t i = 0; i < a->coefficient_count; ++i)
+        if (gaussian_rational_equals(&gaussian_rational_zero,
+            rational_polynomial_evaluate_at_gaussian_rational(stack_a, stack_b, a, corners + i)))
         {
-            real_part->coefficients[i] =
-                rational_copy(local_stack, a_at_edge->coefficients[i]->real);
-            imaginary_part->coefficients[i] =
-                rational_copy(local_stack, a_at_edge->coefficients[i]->imaginary);
-        }
-        polynomial_trim_leading_zeroes(&rational_operations.ring_operations,
-            (struct Polynomial*)real_part);
-        polynomial_trim_leading_zeroes(&rational_operations.ring_operations,
-            (struct Polynomial*)imaginary_part);
-        struct RationalPolynomial*sturm_chain_first_element =
-            rational_polynomial_gcd(local_stack, output_stack, real_part, imaginary_part);
-        if (sturm_chain_sign_variation(local_stack, output_stack, sturm_chain_first_element,
-            rational_polynomial_derivative(local_stack, output_stack,
-                sturm_chain_first_element))->sign)
-        {
-            local_stack->cursor = local_stack_savepoint;
             return a->coefficient_count;
         }
-        sign_variation_total = integer_add(local_stack, sign_variation_total,
-            sturm_chain_sign_variation(local_stack, output_stack, real_part, imaginary_part));
     }
-    sign_variation_total->sign = -sign_variation_total->sign;
-    size_t out = integer_to_size_t(integer_half(output_stack, sign_variation_total));
-    local_stack->cursor = local_stack_savepoint;
-    return out;
+    size_t out = 0;
+    for (size_t i = 0; i < 4; ++i)
+    {
+        void*stack_a_savepoint = stack_a->cursor;
+        struct RationalPolynomial*parameterization_real_part;
+        struct RationalPolynomial*parameterization_imaginary_part;
+        rational_polynomial_parameterize_over_segment(stack_a, stack_b, &parameterization_real_part,
+            &parameterization_imaginary_part, a, corners + i, corners + i + 1);
+        out += sturm_chain_sign_variation(stack_a, stack_b, parameterization_real_part,
+            parameterization_imaginary_part);
+        struct RationalPolynomial*sturm_chain_first_element = rational_polynomial_gcd(stack_a,
+            stack_b, parameterization_real_part, parameterization_imaginary_part);
+        out += sturm_chain_sign_variation(stack_a, stack_b, sturm_chain_first_element,
+            rational_polynomial_derivative(stack_a, stack_b, sturm_chain_first_element)) / 2;
+        stack_a->cursor = stack_a_savepoint;
+    }
+    return out / 2;
 }
 
+//In this case, interval_size is only passed through to internal calls to rational_float_estimate
+//rather than indicating that the intervals in out will be no larger than interval_size. It's still
+//the case that the sizes of the intervals in out converge to 0 as interval_size and the sizes of
+//the intervals in argument converge to 0. This is all that turns out to be necessary in this
+//program, so no more direct means of controlling the accuracy of out are provided.
 void rational_polynomial_evaluate_at_rectangular_estimate(struct Stack*output_stack,
     struct Stack*local_stack, struct RectangularEstimate*out, struct RationalPolynomial*a,
-    struct RectangularEstimate*argument)
+    struct RectangularEstimate*argument, struct Rational*interval_size)
 {
     out->imaginary_part_estimate = ALLOCATE(output_stack, struct FloatInterval);
     if (a->coefficient_count == 0)
@@ -307,17 +378,12 @@ void rational_polynomial_evaluate_at_rectangular_estimate(struct Stack*output_st
         return;
     }
     void*local_stack_savepoint = local_stack->cursor;
-    struct Rational*coefficient_interval_size = rational_integer_divide(local_stack, output_stack,
-        float_to_rational(local_stack, output_stack,
-            float_subtract(local_stack, output_stack, argument->real_part_estimate->max,
-                argument->real_part_estimate->min)),
-        integer_from_size_t(local_stack, a->coefficient_count));
     struct FloatInterval**coefficients =
         ARRAY_ALLOCATE(local_stack, a->coefficient_count, struct FloatInterval*);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
-        coefficients[i] = rational_float_estimate(local_stack, output_stack, a->coefficients[i],
-            coefficient_interval_size);
+        coefficients[i] =
+            rational_float_estimate(local_stack, output_stack, a->coefficients[i], interval_size);
     }
     out->real_part_estimate = ALLOCATE(output_stack, struct FloatInterval);
     out->real_part_estimate->min = coefficients[0]->min;

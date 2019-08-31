@@ -9,15 +9,23 @@ struct RationalPolynomial*product_minimal_polynomial(struct Stack*output_stack,
         polynomial_allocate(local_stack, left_minimal_polynomial->coefficient_count);
     for (size_t i = 0; i < left_minimal_polynomial->coefficient_count; ++i)
     {
-        t->coefficients[i] =
-            polynomial_allocate(local_stack, left_minimal_polynomial->coefficient_count - i);
-        size_t degree = t->coefficients[i]->coefficient_count - 1;
-        for (size_t j = 0; j < degree; ++j)
+        struct Rational*coefficient = left_minimal_polynomial->coefficients
+            [left_minimal_polynomial->coefficient_count - i - 1];
+        if (coefficient->numerator->value_count)
         {
-            t->coefficients[i]->coefficients[j] = &rational_zero;
+            t->coefficients[i] =
+                polynomial_allocate(local_stack, left_minimal_polynomial->coefficient_count - i);
+            size_t degree = t->coefficients[i]->coefficient_count - 1;
+            for (size_t j = 0; j < degree; ++j)
+            {
+                t->coefficients[i]->coefficients[j] = &rational_zero;
+            }
+            t->coefficients[i]->coefficients[degree] = coefficient;
         }
-        t->coefficients[i]->coefficients[degree] =
-            left_minimal_polynomial->coefficients[degree - i];
+        else
+        {
+            t->coefficients[i] = (struct RationalPolynomial*)&polynomial_zero;
+        }
     }
     struct RationalPolynomial*out =
         number_minimal_polynomial_from_annulling_polynomial(output_stack, local_stack,
@@ -277,14 +285,14 @@ struct Number*number_multiply(struct Stack*output_stack, struct Stack*local_stac
             struct Number*consolidated_factors = b;
             while (factor_index < a->element_count)
             {
-                if (a->elements[factor_index])
+                if (factors[factor_index])
                 {
-                    struct Number*consolidation_attempt =
-                        factor_consolidate(local_stack, output_stack, a->elements[factor_index], b);
+                    struct Number*consolidation_attempt = factor_consolidate(local_stack,
+                        output_stack, factors[factor_index], consolidated_factors);
                     if (consolidation_attempt)
                     {
                         consolidated_factors = consolidation_attempt;
-                        a->elements[factor_index] = 0;
+                        factors[factor_index] = 0;
                         --factor_count;
                         factor_index = 0;
                         continue;
@@ -335,7 +343,7 @@ struct Number*number_multiply(struct Stack*output_stack, struct Stack*local_stac
                 if (factor_index == a->element_count)
                 {
                     out->elements[out->element_count] =
-                        number_copy(output_stack, factors[factor_index]);
+                        number_copy(output_stack, consolidated_factors);
                     ++out->element_count;
                     break;
                 }

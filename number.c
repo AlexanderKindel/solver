@@ -171,13 +171,15 @@ struct RationalPolynomial*number_minimal_polynomial_from_annulling_polynomial(
     struct FloatInterval zero_estimate = { &float_zero, &float_zero };
     struct RectangularEstimate a_estimate;
     number_rectangular_estimate(local_stack, output_stack, &a_estimate, a, &rational_one);
+    struct Rational interval_size_for_evaluation =
+    { &one, integer_from_size_t(local_stack, annulling_polynomial->coefficient_count) };
     while (true)
     {
         for (int i = 0; i < candidate_count;)
         {
             struct RectangularEstimate evaluation_estimate;
             rational_polynomial_evaluate_at_rectangular_estimate(local_stack, output_stack,
-                &evaluation_estimate, candidates[i], &a_estimate);
+                &evaluation_estimate, candidates[i], &a_estimate, &interval_size_for_evaluation);
             if (rectangular_estimates_are_disjoint(output_stack, local_stack, &evaluation_estimate,
                 &(struct RectangularEstimate){ &zero_estimate, &zero_estimate }))
             {
@@ -197,6 +199,8 @@ struct RationalPolynomial*number_minimal_polynomial_from_annulling_polynomial(
             }
         }
         number_rectangular_estimate_halve_dimensions(local_stack, output_stack, &a_estimate, a);
+        interval_size_for_evaluation.denominator =
+            integer_doubled(local_stack, interval_size_for_evaluation.denominator);
     }
 }
 

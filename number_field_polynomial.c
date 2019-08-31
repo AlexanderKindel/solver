@@ -25,6 +25,16 @@ void number_field_polynomial_euclidean_divide(struct Stack*output_stack, struct 
         generator_minimal_polynomial);
 }
 
+struct NestedPolynomial*number_field_polynomial_euclidean_remainder(struct Stack*output_stack,
+    struct Stack*local_stack, struct NestedPolynomial*dividend,
+    struct NestedPolynomial*divisor, struct RationalPolynomial*generator_minimal_polynomial)
+{
+    struct PolynomialDivision division;
+    number_field_polynomial_euclidean_divide(output_stack, local_stack, &division, dividend,
+        divisor, generator_minimal_polynomial);
+    return (struct NestedPolynomial*)division.remainder;
+}
+
 struct NestedPolynomial*number_field_polynomial_gcd(struct Stack*output_stack,
     struct Stack*local_stack, struct NestedPolynomial*a, struct NestedPolynomial*b,
     struct RationalPolynomial*generator_minimal_polynomial)

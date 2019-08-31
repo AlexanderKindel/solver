@@ -109,65 +109,74 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
             a_minimal_polynomial_factors[i] = a_minimal_polynomial_factors[candidate_factor_count];
         }
     }
-    struct Number**conjugates = number_conjugates(output_stack, local_stack, a);
-    size_t conjugate_count = a->minimal_polynomial->coefficient_count - 2;
-    conjugates[0] = conjugates[conjugate_count];
-    struct RectangularEstimate*conjugate_estimates =
-        ARRAY_ALLOCATE(local_stack, conjugate_count, struct RectangularEstimate*);
-    for (size_t i = 0; i < conjugate_count; ++i)
-    {
-        number_rectangular_estimate(local_stack, output_stack, conjugate_estimates + i,
-            conjugates[i], &rational_one);
-    }
-    size_t*conjugate_indices = ARRAY_ALLOCATE(local_stack, conjugate_count, size_t);
     struct RectangularEstimate a_estimate;
     number_rectangular_estimate(local_stack, output_stack, &a_estimate, a, &rational_one);
+    while (rational_polynomial_root_count_in_rectangle(local_stack, output_stack,
+        a->minimal_polynomial,
+        float_interval_to_rational_interval(local_stack, output_stack,
+            a_estimate.real_part_estimate),
+        float_interval_to_rational_interval(local_stack, output_stack,
+            a_estimate.imaginary_part_estimate)) > 1)
+    {
+        number_rectangular_estimate_halve_dimensions(local_stack, output_stack, &a_estimate, a);
+    }
     struct RectangularEstimate b_estimate;
     number_rectangular_estimate(local_stack, output_stack, &b_estimate, b, &rational_one);
     for (size_t i = 0; i < candidate_factor_count; ++i)
     {
-        size_t conjugate_index_count = conjugate_count;
-        for (size_t j = 0; j < conjugate_count; ++j)
+        struct Rational interval_size_for_evaluation =
+        { &one, integer_from_size_t(local_stack, candidate_factors[i]->coefficient_count) };
+        struct RectangularEstimate factor_at_b;
+        while (true)
         {
-            conjugate_indices[j] = j;
+            rational_polynomial_evaluate_at_rectangular_estimate(local_stack, output_stack,
+                &factor_at_b, candidate_factors[i], &b_estimate, &interval_size_for_evaluation);
+            if (rectangular_estimates_are_disjoint(output_stack, local_stack, &a_estimate,
+                &factor_at_b))
+            {
+                goto candidate_rejected;
+            }
+            if (rational_polynomial_root_count_in_rectangle(local_stack, output_stack,
+                a->minimal_polynomial,
+                float_interval_to_rational_interval(local_stack, output_stack,
+                    factor_at_b.real_part_estimate),
+                float_interval_to_rational_interval(local_stack, output_stack,
+                    factor_at_b.imaginary_part_estimate)) == 1)
+            {
+                if (rectangular_estimate_a_contains_b(output_stack, local_stack, &a_estimate,
+                    &factor_at_b))
+                {
+                    struct RationalPolynomial*out =
+                        rational_polynomial_copy(output_stack, candidate_factors[i]);
+                    local_stack->cursor = local_stack_savepoint;
+                    return out;
+                }
+                break;
+            }
+            number_rectangular_estimate_halve_dimensions(local_stack, output_stack, &b_estimate, b);
+            interval_size_for_evaluation.denominator =
+                integer_doubled(local_stack, interval_size_for_evaluation.denominator);
         }
         while (true)
         {
-            struct RectangularEstimate factor_at_b_estimate;
-            rational_polynomial_evaluate_at_rectangular_estimate(local_stack, output_stack,
-                &factor_at_b_estimate, candidate_factors[i], &b_estimate);
-            if (rectangular_estimates_are_disjoint(output_stack, local_stack, &a_estimate,
-                &factor_at_b_estimate))
+            if (rectangular_estimate_a_contains_b(output_stack, local_stack, &factor_at_b,
+                &a_estimate))
             {
-                break;
-            }
-            for (size_t j = 0; j < conjugate_index_count;)
-            {
-                struct RectangularEstimate*conjugate_estimate = conjugate_estimates + j;
-                if (rectangular_estimates_are_disjoint(output_stack, local_stack,
-                    conjugate_estimate, &factor_at_b_estimate))
-                {
-                    --conjugate_index_count;
-                    if (conjugate_index_count == 0)
-                    {
-                        struct RationalPolynomial*out =
-                            rational_polynomial_copy(output_stack, candidate_factors[i]);
-                        local_stack->cursor = local_stack_savepoint;
-                        return out;
-                    }
-                    conjugate_indices[j] = conjugate_indices[conjugate_index_count];
-                }
-                else
-                {
-                    number_rectangular_estimate_halve_dimensions(local_stack, output_stack,
-                        conjugate_estimate, conjugates[conjugate_indices[j]]);
-                    ++j;
-                }
+                struct RationalPolynomial*out =
+                    rational_polynomial_copy(output_stack, candidate_factors[i]);
+                local_stack->cursor = local_stack_savepoint;
+                return out;
             }
             number_rectangular_estimate_halve_dimensions(local_stack, output_stack, &a_estimate, a);
-            number_rectangular_estimate_halve_dimensions(local_stack, output_stack, &b_estimate, b);
+            if (rectangular_estimates_are_disjoint(output_stack, local_stack, &a_estimate,
+                &factor_at_b))
+            {
+                goto candidate_rejected;
+            }
         }
+    candidate_rejected:;
     }
+    local_stack->cursor = local_stack_savepoint;
     return 0;
 }
 

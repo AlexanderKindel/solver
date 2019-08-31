@@ -177,9 +177,9 @@ void integer_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*loc
                 (struct Polynomial*)integer_polynomial_integer_multiply(output_stack, local_stack,
                     integer_polynomial_integer_divide(local_stack, output_stack, gcd_multiple,
                         gcd_content), d);
-            struct Rational*multiple = rational_reduced(local_stack, output_stack, d, gcd_content);
             out->a_coefficient = integer_polynomial_rational_multiply(output_stack, local_stack,
-                a_coefficient, multiple);
+                a_coefficient, rational_reduced(local_stack, output_stack, d,
+                    integer_multiply(local_stack, output_stack, gcd_content, a_content)));
             local_stack->cursor = local_stack_savepoint;
             return;
         }
@@ -322,19 +322,25 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
         coefficient_bound = integer_add(local_stack, coefficient_bound,
             integer_multiply(local_stack, output_stack, a->coefficients[i], a->coefficients[i]));
     }
-    struct Integer*a_degree_minus_one = integer_from_size_t(local_stack, a->coefficient_count - 2);
-    struct Integer*k =
-        integer_euclidean_quotient(local_stack, output_stack, a_degree_minus_one, &INT(2, +));
+    size_t factor_degree = (a->coefficient_count - 1) / 2;
+    struct Integer*binomial_coefficient_numerator = &one;
+    struct Integer*binomial_coefficient_denominator = &one;
+    for (size_t i = (factor_degree - 1) / 2; i > 0; --i)
+    {
+        binomial_coefficient_numerator = integer_multiply(local_stack, output_stack,
+            binomial_coefficient_numerator, integer_from_size_t(local_stack, factor_degree - i));
+        binomial_coefficient_denominator = integer_multiply(local_stack, output_stack,
+            binomial_coefficient_denominator, integer_from_size_t(local_stack, i));
+    }
     struct Integer*leading_coefficient_magnitude =
         integer_magnitude(local_stack, a->coefficients[a->coefficient_count - 1]);
-    coefficient_bound = integer_doubled(local_stack, integer_multiply(local_stack, output_stack,
-        leading_coefficient_magnitude, integer_add(local_stack,
+    coefficient_bound = integer_doubled(local_stack,
+        integer_multiply(local_stack, output_stack, leading_coefficient_magnitude,
             integer_multiply(local_stack, output_stack,
-                integer_square_root(local_stack, output_stack, coefficient_bound),
-                n_choose_k(local_stack, output_stack, a_degree_minus_one, k)),
-            integer_multiply(local_stack, output_stack, leading_coefficient_magnitude,
-                n_choose_k(local_stack, output_stack, a_degree_minus_one,
-                    integer_add(local_stack, k, &INT(1, -)))))));
+                integer_euclidean_quotient(local_stack, output_stack,
+                    binomial_coefficient_numerator, binomial_coefficient_denominator),
+                integer_add(local_stack, leading_coefficient_magnitude,
+                    integer_square_root(local_stack, output_stack, coefficient_bound)))));
     struct Integer*e = &one;
     struct Integer*prime_power = prime;
     while (integer_compare(output_stack, local_stack, prime_power, coefficient_bound) < 0)
@@ -459,6 +465,14 @@ size_t integer_polynomial_squarefree_factor(struct Stack*output_stack, struct St
         (struct Polynomial**)out, 0);
 }
 
+void integer_polynomial_reverse(struct IntegerPolynomial*a)
+{
+    for (size_t i = 0; i < a->coefficient_count / 2; ++i)
+    {
+        POINTER_SWAP(a->coefficients[a->coefficient_count - 1 - i], a->coefficients[i]);
+    }
+}
+
 size_t primitive_integer_polynomial_factor(struct Stack*output_stack, struct Stack*local_stack,
     struct IntegerPolynomial*a, struct IntegerPolynomial**out)
 {
@@ -491,14 +505,12 @@ size_t primitive_integer_polynomial_factor(struct Stack*output_stack, struct Sta
             integer_magnitude(local_stack, squarefree_factors[i]->coefficients
                 [squarefree_factors[i]->coefficient_count - 1])) < 0)
         {
-            array_reverse(squarefree_factors[i]->coefficients,
-                squarefree_factors[i]->coefficient_count);
+            integer_polynomial_reverse(squarefree_factors[i]);
             size_t reversed_factor_count = squarefree_integer_polynomial_factor(output_stack,
                 local_stack, squarefree_factors[i], out + factor_count);
             for (size_t j = 0; j < reversed_factor_count; ++j)
             {
-                array_reverse(out[factor_count]->coefficients,
-                    out[factor_count]->coefficient_count);
+                integer_polynomial_reverse(out[factor_count]);
                 ++factor_count;
             }
         }

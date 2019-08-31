@@ -186,26 +186,26 @@ struct RationalInterval*rational_interval_estimate_atan2(struct Stack*output_sta
     {
         if (y->min->numerator->sign >= 0)
         {
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->min, x->max,
                 bound_interval_size);
             out->min = rational_copy(output_stack, bound_estimate->min);
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->max, x->min,
                 bound_interval_size);
         }
         else if (y->max->numerator->sign >= 0)
         {
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->min, x->min,
                 bound_interval_size);
             out->min = rational_copy(output_stack, bound_estimate->min);
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->max, x->min,
                 bound_interval_size);
         }
         else
         {
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->min, x->min,
                 bound_interval_size);
             out->min = rational_copy(output_stack, bound_estimate->min);
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->max, x->max,
                 bound_interval_size);
         }
     }
@@ -215,18 +215,18 @@ struct RationalInterval*rational_interval_estimate_atan2(struct Stack*output_sta
             "rational_interval_estimate_atan2 x and y arguments both straddled an axis.");
         if (y->min->numerator->sign >= 0)
         {
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->min, x->max,
                 bound_interval_size);
             out->min = rational_copy(output_stack, bound_estimate->min);
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->min, x->min,
                 bound_interval_size);
         }
         else
         {
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->max, x->min,
                 bound_interval_size);
             out->min = rational_copy(output_stack, bound_estimate->min);
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->max, x->max,
                 bound_interval_size);
         }
     }
@@ -234,26 +234,26 @@ struct RationalInterval*rational_interval_estimate_atan2(struct Stack*output_sta
     {
         if (y->min->numerator->sign >= 0)
         {
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->max, x->max,
                 bound_interval_size);
             out->min = rational_copy(output_stack, bound_estimate->min);
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->min, x->min,
                 bound_interval_size);
         }
         else if (y->max->numerator->sign >= 0)
         {
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->max, x->max,
                 bound_interval_size);
             out->min = rational_copy(output_stack, bound_estimate->min);
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->min, x->max,
                 bound_interval_size);
         }
         else
         {
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->min, y->max,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->max, x->min,
                 bound_interval_size);
             out->min = rational_copy(output_stack, bound_estimate->min);
-            bound_estimate = rational_estimate_atan2(local_stack, output_stack, x->max, y->min,
+            bound_estimate = rational_estimate_atan2(local_stack, output_stack, y->min, x->max,
                 bound_interval_size);
         }
     }
@@ -295,6 +295,13 @@ bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
 {
     return float_compare(stack_a, stack_b, a->min, b->max) > 0 ||
         float_compare(stack_a, stack_b, b->min, a->max) > 0;
+}
+
+bool float_interval_a_contains_b(struct Stack*stack_a, struct Stack*stack_b, struct FloatInterval*a,
+    struct FloatInterval*b)
+{
+    return float_compare(stack_a, stack_b, a->min, b->min) <= 0 &&
+        float_compare(stack_a, stack_b, a->max, b->max) >= 0;
 }
 
 struct FloatInterval*float_interval_add(struct Stack*output_stack, struct Stack*local_stack,
@@ -343,5 +350,14 @@ bool rectangular_estimates_are_disjoint(struct Stack*stack_a, struct Stack*stack
     return float_intervals_are_disjoint(stack_a, stack_b, a->real_part_estimate,
         b->real_part_estimate) ||
         float_intervals_are_disjoint(stack_a, stack_b, a->imaginary_part_estimate,
+            b->imaginary_part_estimate);
+}
+
+bool rectangular_estimate_a_contains_b(struct Stack*stack_a, struct Stack*stack_b,
+    struct RectangularEstimate*a, struct RectangularEstimate*b)
+{
+    return float_interval_a_contains_b(stack_a, stack_b, a->real_part_estimate,
+        b->real_part_estimate) &&
+        float_interval_a_contains_b(stack_a, stack_b, a->imaginary_part_estimate,
             b->imaginary_part_estimate);
 }

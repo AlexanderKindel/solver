@@ -169,10 +169,8 @@ struct RationalInterval*number_rectangular_part_from_polar_form(
     magnitude_estimate =
         number_refine_rational_estimate_interval(number_rational_magnitude_estimate, local_stack,
             output_stack, a, magnitude_estimate, factor_interval_size);
-    struct RationalInterval*trig_value =
-        trig_function(local_stack, output_stack, a, factor_interval_size);
-    struct RationalInterval*out =
-        rational_interval_multiply(output_stack, local_stack, trig_value, magnitude_estimate);
+    struct RationalInterval*out = rational_interval_multiply(output_stack, local_stack,
+        trig_function(local_stack, output_stack, a, factor_interval_size), magnitude_estimate);
     local_stack->cursor = local_stack_savepoint;
     return out;
 }

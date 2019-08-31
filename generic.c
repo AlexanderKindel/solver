@@ -6,14 +6,6 @@ __declspec(noreturn) void crash(char*message)
     abort();
 }
 
-void array_reverse(void**a, size_t element_count)
-{
-    for (size_t i = 0; i < element_count / 2; ++i)
-    {
-        a[i] = a[element_count - 1 - i];
-    }
-}
-
 void*generic_exponentiate(struct RingOperations*operations, struct Stack*output_stack,
     struct Stack*local_stack, void*base, struct Integer*exponent, void*misc)
 {
@@ -400,8 +392,11 @@ size_t polynomial_squarefree_factor(struct EuclideanDomainOperations*polynomial_
             polynomial_operations->ring_operations.negative(local_stack, output_stack,
                 derivative(local_stack, output_stack, b), misc), misc);
         a = polynomial_operations->gcd(output_stack, local_stack, b, c, misc);
-        out[factor_count] = a;
-        ++factor_count;
+        if (a->coefficient_count > 1)
+        {
+            out[factor_count] = a;
+            ++factor_count;
+        }
         polynomial_operations->euclidean_divide(local_stack, output_stack, &division, b, a, misc);
         b = division.quotient;
     } while (b->coefficient_count > 1);
@@ -580,6 +575,12 @@ void*rational_polynomial_generic_gcd(struct Stack*output_stack, struct Stack*loc
     void*b, void*unused)
 {
     return rational_polynomial_gcd(output_stack, local_stack, a, b);
+}
+
+void*gaussian_rational_polynomial_generic_add(struct Stack*output_stack, struct Stack*local_stack,
+    void*a, void*b, void*unused)
+{
+    return gaussian_rational_polynomial_add(output_stack, local_stack, a, b);
 }
 
 void*gaussian_rational_polynomial_generic_multiply(struct Stack*output_stack,

@@ -8,6 +8,11 @@ struct GaussianRational*gaussian_rational_copy(struct Stack*output_stack, struct
     return out;
 }
 
+bool gaussian_rational_equals(struct GaussianRational*a, struct GaussianRational*b)
+{
+    return rational_equals(a->real, b->real) && rational_equals(a->imaginary, b->imaginary);
+}
+
 struct GaussianRational*gaussian_rational_add(struct Stack*output_stack, struct Stack*local_stack,
     struct GaussianRational*a, struct GaussianRational*b)
 {
@@ -51,10 +56,24 @@ struct GaussianRational*gaussian_rational_multiply(struct Stack*output_stack,
     return out;
 }
 
+struct GaussianRational*gaussian_rational_rational_multiply(struct Stack*output_stack,
+    struct Stack*local_stack, struct GaussianRational*a, struct Rational*b)
+{
+    return gaussian_rational_multiply(output_stack, local_stack, a,
+        &(struct GaussianRational){b, &rational_zero});
+}
+
 struct GaussianRationalPolynomial*gaussian_rational_polynomial_copy(struct Stack*output_stack,
     struct GaussianRationalPolynomial*a)
 {
     return polynomial_copy(gaussian_rational_copy, output_stack, (struct Polynomial*)a);
+}
+
+bool gaussian_rational_polynomial_equals(struct GaussianRationalPolynomial*a,
+    struct GaussianRationalPolynomial*b)
+{
+    return polynomial_equals(&gaussian_rational_operations, (struct Polynomial*)a,
+        (struct Polynomial*)b);
 }
 
 struct GaussianRationalPolynomial*gaussian_rational_polynomial_add(struct Stack*output_stack,

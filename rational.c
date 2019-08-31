@@ -247,7 +247,7 @@ struct RationalInterval*rational_argument(struct Stack*output_stack, struct Rati
     return out;
 }
 
-void rational_estimate_size_or_cosine(struct Stack*output_stack, struct Stack*local_stack,
+void rational_estimate_sine_or_cosine(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct Rational*a_squared, struct Integer*factorial_component,
     struct Rational*delta, struct Rational*interval_size)
 {
@@ -287,7 +287,7 @@ void rational_estimate_cosine(struct Stack*output_stack, struct Stack*local_stac
     struct Integer*factorial_component = &INT(2, +);
     struct Rational*delta =
         rational_integer_divide(local_stack, output_stack, a_squared, &INT(2, -));
-    rational_estimate_size_or_cosine(output_stack, local_stack, out, a_squared, factorial_component,
+    rational_estimate_sine_or_cosine(output_stack, local_stack, out, a_squared, factorial_component,
         delta, interval_size);
     local_stack->cursor = local_stack_savepoint;
 }
@@ -301,7 +301,7 @@ void rational_estimate_sine(struct Stack*output_stack, struct Stack*local_stack,
     struct Integer*factorial_component = &INT(3, +);
     struct Rational*delta = rational_integer_divide(local_stack, output_stack,
         rational_multiply(local_stack, output_stack, a_squared, a), &INT(6, -));
-    rational_estimate_size_or_cosine(output_stack, local_stack, out, a_squared, factorial_component,
+    rational_estimate_sine_or_cosine(output_stack, local_stack, out, a_squared, factorial_component,
         delta, interval_size);
     local_stack->cursor = local_stack_savepoint;
 }
@@ -494,7 +494,7 @@ struct FloatInterval*positive_rational_float_estimate(struct Stack*output_stack,
     out->min =
         float_reduced(output_stack, local_stack, out_min.significand, out_min.exponent);
     out->max = float_reduced(output_stack, local_stack,
-        integer_add(local_stack, out->min->significand, &one), out->min->exponent);
+        integer_add(local_stack, out_min.significand, &one), out_min.exponent);
     local_stack->cursor = local_stack_savepoint;
     return out;
 }

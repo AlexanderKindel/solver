@@ -195,13 +195,6 @@ struct Matrix
     size_t height;
 };
 
-struct AlgebraicNumber
-{
-    struct AlgebraicNumber*next_term;
-    struct Rational*term_coefficient;
-    size_t generator_degrees[2];
-};
-
 struct RectangularEstimate
 {
     struct FloatInterval*real_part_estimate;
@@ -278,7 +271,6 @@ void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t ali
     stack_slot_allocate(stack, (element_count) * sizeof(type), _Alignof(type))
 
 __declspec(noreturn) void crash(char*message);
-void array_reverse(void**a, size_t element_count);
 void*generic_exponentiate(struct RingOperations*operations, struct Stack*output_stack,
     struct Stack*local_stack, void*base, struct Integer*exponent, void*misc);
 void*generic_gcd(struct EuclideanDomainOperations*operations, struct Stack*output_stack,
@@ -315,6 +307,9 @@ void*polynomial_divide_by_coefficient(void*(coefficient_quotient)(struct Stack*,
     void*divisor);
 void*polynomial_content(struct EuclideanDomainOperations*coefficient_operations,
     struct Stack*output_stack, struct Stack*local_stack, struct Polynomial*a, void*misc);
+/*void*polynomial_factor_coefficient_magnitude_bound(struct RingOperations*coefficient_operations,
+    void*(coefficient_magnitude)(struct Stack*, void*),
+    struct Stack*output_stack, struct Stack*local_stack, struct Polynomial*a, size_t factor_degree);*/
 size_t polynomial_squarefree_factor(struct EuclideanDomainOperations*polynomial_operations,
     void*(derivative)(struct Stack*, struct Stack*, void*), struct Stack*output_stack,
     struct Stack*local_stack, struct Polynomial*a, struct Polynomial**out, void*misc);
@@ -370,6 +365,8 @@ void rational_polynomial_generic_euclidean_divide(struct Stack*output_stack,
     struct Stack*local_stack, struct Division*out, void*dividend, void*divisor, void*unused);
 void*rational_polynomial_generic_gcd(struct Stack*output_stack, struct Stack*local_stack, void*a,
     void*b, void*unused);
+void*gaussian_rational_polynomial_generic_add(struct Stack*output_stack, struct Stack*local_stack,
+    void*a, void*b, void*unused);
 void*gaussian_rational_polynomial_generic_multiply(struct Stack*output_stack,
     struct Stack*local_stack, void*a, void*b, void*unused);
 void*nested_polynomial_generic_add(struct Stack*output_stack, struct Stack*local_stack,
@@ -407,8 +404,6 @@ void integer_halve(struct Integer*a);
 struct Integer*integer_half(struct Stack*output_stack, struct Integer*a);
 int8_t integer_compare(struct Stack*stack_a, struct Stack*stack_b, struct Integer*a,
     struct Integer*b);
-struct Integer*n_choose_k(struct Stack*output_stack, struct Stack*local_stack, struct Integer*n,
-    struct Integer*k);
 struct Integer*integer_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
     struct Integer*base, struct Integer*exponent);
 struct Integer*integer_gcd(struct Stack*output_stack, struct Stack*local_stack, struct Integer*a,
@@ -538,6 +533,8 @@ struct RationalInterval*float_interval_to_rational_interval(struct Stack*output_
     struct Stack*local_stack, struct FloatInterval*a);
 bool rectangular_estimates_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
     struct RectangularEstimate*a, struct RectangularEstimate*b);
+bool rectangular_estimate_a_contains_b(struct Stack*stack_a, struct Stack*stack_b,
+    struct RectangularEstimate*a, struct RectangularEstimate*b);
 
 void pi_estimate(struct Rational*interval_size);
 void pi_shrink_interval_to_one_side_of_value(struct Rational*value);
@@ -657,12 +654,11 @@ struct RationalPolynomial*rational_polynomial_derivative(struct Stack*output_sta
     struct Stack*local_stack, struct RationalPolynomial*a);
 struct Rational*rational_polynomial_evaluate_at_integer(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a, struct Integer*argument);
-size_t rational_polynomial_root_count_in_rectangle(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*a, struct RationalInterval*real,
-    struct RationalInterval*imaginary);
+size_t rational_polynomial_root_count_in_rectangle(struct Stack*stack_a, struct Stack*stack_b,
+    struct RationalPolynomial*a, struct RationalInterval*real, struct RationalInterval*imaginary);
 void rational_polynomial_evaluate_at_rectangular_estimate(struct Stack*output_stack,
     struct Stack*local_stack, struct RectangularEstimate*out, struct RationalPolynomial*a,
-    struct RectangularEstimate*argument);
+    struct RectangularEstimate*argument, struct Rational*interval_size);
 struct IntegerPolynomial*rational_polynomial_primitive_part(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a);
 struct NestedPolynomial*rational_polynomial_to_nested_polynomial(struct Stack*output_stack,
@@ -683,6 +679,7 @@ struct RationalPolynomial*number_field_element_exponentiate(struct Stack*output_
 
 struct GaussianRational*gaussian_rational_copy(struct Stack*output_stack,
     struct GaussianRational*a);
+bool gaussian_rational_equals(struct GaussianRational*a, struct GaussianRational*b);
 struct GaussianRational*gaussian_rational_add(struct Stack*output_stack, struct Stack*local_stack,
     struct GaussianRational*a, struct GaussianRational*b);
 struct GaussianRational*gaussian_rational_negative(struct Stack*output_stack,
@@ -691,8 +688,12 @@ struct GaussianRational*gaussian_rational_subtract(struct Stack*output_stack,
     struct Stack*local_stack, struct GaussianRational*a, struct GaussianRational*b);
 struct GaussianRational*gaussian_rational_multiply(struct Stack*output_stack,
     struct Stack*local_stack, struct GaussianRational*a, struct GaussianRational*b);
+struct GaussianRational*gaussian_rational_rational_multiply(struct Stack*output_stack,
+    struct Stack*local_stack, struct GaussianRational*a, struct Rational*b);
 struct GaussianRationalPolynomial*gaussian_rational_polynomial_copy(struct Stack*output_stack,
     struct GaussianRationalPolynomial*a);
+bool gaussian_rational_polynomial_equals(struct GaussianRationalPolynomial*a,
+    struct GaussianRationalPolynomial*b);
 struct GaussianRationalPolynomial*gaussian_rational_polynomial_add(struct Stack*output_stack,
     struct Stack*local_stack, struct GaussianRationalPolynomial*a,
     struct GaussianRationalPolynomial*b);
@@ -738,6 +739,9 @@ struct NestedPolynomial*number_field_polynomial_element_multiply(struct Stack*ou
     struct RationalPolynomial*generator_minimal_polynomial);
 void number_field_polynomial_euclidean_divide(struct Stack*output_stack, struct Stack*local_stack,
     struct PolynomialDivision*out, struct NestedPolynomial*dividend,
+    struct NestedPolynomial*divisor, struct RationalPolynomial*generator_minimal_polynomial);
+struct NestedPolynomial*number_field_polynomial_euclidean_remainder(struct Stack*output_stack,
+    struct Stack*local_stack, struct NestedPolynomial*dividend,
     struct NestedPolynomial*divisor, struct RationalPolynomial*generator_minimal_polynomial);
 struct NestedPolynomial*number_field_polynomial_gcd(struct Stack*output_stack,
     struct Stack*local_stack, struct NestedPolynomial*a, struct NestedPolynomial*b,
@@ -878,12 +882,13 @@ struct EuclideanDomainOperations rational_polynomial_operations = { { rational_p
 
 struct GaussianRational gaussian_rational_zero = { &rational_zero, &rational_zero };
 struct GaussianRational gaussian_rational_one = { &rational_one, &rational_zero };
-struct RingOperations gaussian_rational_operations = { gaussian_rational_copy, 0,
-    &gaussian_rational_zero, &gaussian_rational_one, gaussian_rational_generic_add, 0,
-    gaussian_rational_generic_multiply };
+struct RingOperations gaussian_rational_operations = { gaussian_rational_copy,
+    gaussian_rational_equals, &gaussian_rational_zero, &gaussian_rational_one,
+    gaussian_rational_generic_add, 0, gaussian_rational_generic_multiply };
 struct GaussianRationalPolynomial gaussian_rational_polynomial_one = { 1, &gaussian_rational_one };
 struct RingOperations gaussian_rational_polynomial_operations = { gaussian_rational_polynomial_copy,
-    0, 0, &gaussian_rational_polynomial_one, 0, 0, gaussian_rational_polynomial_generic_multiply };
+    gaussian_rational_polynomial_equals, &polynomial_zero, &gaussian_rational_polynomial_one,
+    gaussian_rational_polynomial_generic_add, 0, gaussian_rational_polynomial_generic_multiply };
 
 struct FieldOperations number_field_element_operations = { { rational_polynomial_copy,
     rational_polynomial_equals, &polynomial_zero, &rational_polynomial_one,

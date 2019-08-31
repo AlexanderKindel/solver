@@ -444,30 +444,6 @@ int8_t integer_compare(struct Stack*stack_a, struct Stack*stack_b, struct Intege
     return out;
 }
 
-struct Integer*n_choose_k(struct Stack*output_stack, struct Stack*local_stack, struct Integer*n,
-    struct Integer*k)
-{
-    void*local_stack_savepoint = local_stack->cursor;
-    struct Integer*numerator = &one;
-    for (struct Integer*i =
-        integer_add(local_stack, &one, integer_subtract(local_stack, output_stack, n, k));
-        integer_compare(output_stack, local_stack, i, n) <= 0;
-        i = integer_add(local_stack, i, &one))
-    {
-        numerator = integer_multiply(local_stack, output_stack, numerator, i);
-    }
-    struct Integer*denominator = &one;
-    for (struct Integer*i = &INT(2, +); integer_compare(output_stack, local_stack, i, k) <= 0;
-        i = integer_add(local_stack, i, &one))
-    {
-        denominator = integer_multiply(local_stack, output_stack, denominator, i);
-    }
-    struct Integer*out =
-        integer_euclidean_quotient(output_stack, local_stack, numerator, denominator);
-    local_stack->cursor = local_stack_savepoint;
-    return out;
-}
-
 struct Integer*integer_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
     struct Integer*base, struct Integer*exponent)
 {
