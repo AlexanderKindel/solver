@@ -15,14 +15,14 @@ struct NestedPolynomial*double_generator_number_multiply(struct Stack*output_sta
 }
 
 void quick_sort(struct Stack*stack_a, struct Stack*stack_b, struct Number**roots,
-    struct FloatInterval**argument_estimates, size_t start, size_t end)
+    struct RationalInterval**argument_estimates, size_t start, size_t end)
 {
     if (start < end)
     {
         size_t pivot_index = start;
         for (size_t i = start + 1; i < end; ++i)
         {
-            if (float_compare(stack_a, stack_b, argument_estimates[pivot_index]->min,
+            if (rational_compare(stack_a, stack_b, argument_estimates[pivot_index]->min,
                 argument_estimates[i]->max) > 0)
             {
                 POINTER_SWAP(argument_estimates[i], argument_estimates[pivot_index]);
@@ -44,11 +44,11 @@ void roots_of_unity_sort(struct Stack*stack_a, struct Stack*stack_b, struct Numb
     void*stack_a_savepoint = stack_a->cursor;
     size_t degree_size_t = integer_to_size_t(degree);
     struct Rational*interval_size = rational_integer_divide(stack_a, stack_b, pi.min, degree);
-    struct FloatInterval**argument_estimates =
+    struct RationalInterval**argument_estimates =
         ARRAY_ALLOCATE(stack_a, degree_size_t - 1, struct FloatInterval*);
     for (size_t i = 1; i < degree_size_t; ++i)
     {
-        argument_estimates[i - 1] = number_float_argument_estimate(stack_a, stack_b, roots[i],
+        argument_estimates[i - 1] = number_rational_argument_estimate(stack_a, stack_b, roots[i],
             interval_size);
     }
     quick_sort(stack_a, stack_b, &roots[1], argument_estimates, 0, degree_size_t - 1);

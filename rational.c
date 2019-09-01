@@ -229,22 +229,17 @@ struct Rational*rational_exponentiate(struct Stack*output_stack, struct Stack*lo
         rational_unreduced_multiply }, output_stack, local_stack, base, exponent, 0);
 }
 
-struct RationalInterval*rational_argument(struct Stack*output_stack, struct Rational*a,
-    struct Rational*interval_size)
+//In revolutions.
+struct Rational*rational_argument(struct Stack*output_stack, struct Rational*a)
 {
-    struct RationalInterval*out = ALLOCATE(output_stack, struct RationalInterval);
     if (a->numerator->sign < 0)
     {
-        pi_estimate(interval_size);
-        out->min = pi.min;
-        out->max = pi.max;
+        struct Rational*out = ALLOCATE(output_stack, struct Rational);
+        out->numerator = &one;
+        out->denominator = integer_initialize(output_stack, 2, 1);
+        return out;
     }
-    else
-    {
-        out->min = &rational_zero;
-        out->max = &rational_zero;
-    }
-    return out;
+    return &rational_zero;
 }
 
 void rational_estimate_sine_or_cosine(struct Stack*output_stack, struct Stack*local_stack,

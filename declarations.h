@@ -307,9 +307,6 @@ void*polynomial_divide_by_coefficient(void*(coefficient_quotient)(struct Stack*,
     void*divisor);
 void*polynomial_content(struct EuclideanDomainOperations*coefficient_operations,
     struct Stack*output_stack, struct Stack*local_stack, struct Polynomial*a, void*misc);
-/*void*polynomial_factor_coefficient_magnitude_bound(struct RingOperations*coefficient_operations,
-    void*(coefficient_magnitude)(struct Stack*, void*),
-    struct Stack*output_stack, struct Stack*local_stack, struct Polynomial*a, size_t factor_degree);*/
 size_t polynomial_squarefree_factor(struct EuclideanDomainOperations*polynomial_operations,
     void*(derivative)(struct Stack*, struct Stack*, void*), struct Stack*output_stack,
     struct Stack*local_stack, struct Polynomial*a, struct Polynomial**out, void*misc);
@@ -458,8 +455,7 @@ struct Rational*rational_max(struct Stack*output_stack, struct Stack*local_stack
     struct Rational*b);
 struct Rational*rational_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
     struct Rational*base, struct Integer*exponent);
-struct RationalInterval*rational_argument(struct Stack*output_stack, struct Rational*a,
-    struct Rational*interval_size);
+struct Rational*rational_argument(struct Stack*output_stack, struct Rational*a);
 void rational_estimate_cosine(struct Stack*output_stack, struct Stack*local_stack,
     struct RationalInterval*out, struct Rational*a, struct Rational*interval_size);
 void rational_estimate_sine(struct Stack*output_stack, struct Stack*local_stack,
@@ -813,7 +809,7 @@ struct FloatInterval*number_float_magnitude_estimate(struct Stack*output_stack,
     struct Stack*local_stack, struct Number*a, struct Rational*interval_size);
 struct RationalInterval*number_rational_magnitude_estimate(struct Stack*output_stack,
     struct Stack*local_stack, struct Number*a, struct Rational*interval_size);
-struct FloatInterval*number_float_argument_estimate(struct Stack*output_stack,
+struct RationalInterval*number_argument_estimate(struct Stack*output_stack,
     struct Stack*local_stack, struct Number*a, struct Rational*interval_size);
 struct RationalInterval*number_rational_argument_estimate(struct Stack*output_stack,
     struct Stack*local_stack, struct Number*a, struct Rational*interval_size);
