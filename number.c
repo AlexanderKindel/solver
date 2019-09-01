@@ -4,7 +4,14 @@ struct Number*number_copy(struct Stack*output_stack, struct Number*a)
 {
     struct Number*out = ALLOCATE(output_stack, struct Number);
     out->operation = a->operation;
-    out->minimal_polynomial = rational_polynomial_copy(output_stack, a->minimal_polynomial);
+    if (a->minimal_polynomial)
+    {
+        out->minimal_polynomial = rational_polynomial_copy(output_stack, a->minimal_polynomial);
+    }
+    else
+    {
+        out->minimal_polynomial = 0;
+    }
     switch (a->operation)
     {
     case 'r':
@@ -239,6 +246,7 @@ struct Number*number_reciprocal(struct Stack*output_stack, struct Stack*local_st
     }
     case '+':
     {
+        a = number_eliminate_linear_dependencies(local_stack, output_stack, a);
         struct Number**conjugates = number_conjugates(local_stack, output_stack, a);
         out = &number_one;
         for (size_t i = 1; i < a->minimal_polynomial->coefficient_count - 1; ++i)
@@ -278,13 +286,13 @@ struct Rational*number_rational_factor(struct Stack*output_stack, struct Stack*l
     switch (a->operation)
     {
     case 'r':
-        return rational_copy(output_stack, a->value);
+        return rational_magnitude(output_stack, a->value);
     case '^':
         return &rational_one;
     case '*':
         if (a->elements[0]->operation == 'r')
         {
-            return rational_copy(output_stack, a->elements[0]->value);
+            return rational_magnitude(output_stack, a->elements[0]->value);
         }
         return &rational_one;
     case '+':
@@ -394,11 +402,12 @@ struct Number*number_root(struct Stack*output_stack, struct Stack*local_stack, s
     {
         return number_copy(output_stack, base);
     }
+    void*local_stack_savepoint = local_stack->cursor;
+    base = number_eliminate_linear_dependencies(local_stack, output_stack, base);
     switch (base->operation)
     {
     case 'r':
     {
-        void*local_stack_savepoint = local_stack->cursor;
         if (!integer_equals(base->value->denominator, &one))
         {
             struct Number*out = number_rational_multiply(output_stack, local_stack,
@@ -468,7 +477,6 @@ struct Number*number_root(struct Stack*output_stack, struct Stack*local_stack, s
     }
     case '^':
     {
-        void*local_stack_savepoint = local_stack->cursor;
         struct Number*out = number_root(output_stack, local_stack, base->radicand,
             integer_multiply(local_stack, output_stack, index, base->index));
         local_stack->cursor = local_stack_savepoint;
@@ -476,7 +484,6 @@ struct Number*number_root(struct Stack*output_stack, struct Stack*local_stack, s
     }
     case '*':
     {
-        void*local_stack_savepoint = local_stack->cursor;
         struct Number*out = &number_one;
         for (size_t i = base->element_count; i-- > 1;)
         {
@@ -490,7 +497,6 @@ struct Number*number_root(struct Stack*output_stack, struct Stack*local_stack, s
     }
     case '+':
     {
-        void*local_stack_savepoint = local_stack->cursor;
         struct Rational*base_rational_factor =
             number_rational_factor(local_stack, output_stack, base);
         struct Factor*factors;
@@ -540,8 +546,8 @@ struct Number**binary_sum_or_product_conjugates(struct Number*(operation)(struct
         for (size_t j = 0; j < b_conjugate_count; ++j)
         {
             void*output_stack_savepoint = output_stack->cursor;
-            out[conjugate_count] =
-                operation(output_stack, local_stack, a_conjugates[i], b_conjugates[j]);
+            out[conjugate_count] = number_eliminate_linear_dependencies(output_stack, local_stack,
+                operation(local_stack, output_stack, a_conjugates[i], b_conjugates[j]));
             if (rational_polynomial_equals(minimal_polynomial,
                 out[conjugate_count]->minimal_polynomial))
             {
@@ -699,8 +705,8 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
             if (integer_equals(a->elements[0]->value->numerator, &INT(1, -)))
             {
                 *(char*)ALLOCATE(output_stack, char) = '-';
-                char_count =
-                    1 + product_string(output_stack, local_stack, a->elements, a->element_count);
+                char_count = 1 + product_string(output_stack, local_stack, a->elements + 1,
+                    a->element_count - 1);
             }
             else if (integer_equals(a->elements[0]->value->numerator, &one))
             {

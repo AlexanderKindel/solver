@@ -61,7 +61,7 @@ struct Number*number_rational_multiply(struct Stack*output_stack,
     {
         return number_rational_initialize(output_stack, &rational_zero);
     }
-    if (integer_equals(b->numerator, &one) && integer_equals(b->denominator, &one))
+    if (rational_equals(b, &rational_one))
     {
         return number_copy(output_stack, a);
     }
@@ -128,10 +128,10 @@ struct Number*number_rational_multiply(struct Stack*output_stack,
                 number_copy(output_stack, a->elements[a->element_count - i]);
         }
         break;
-    default:
+    case '+':
         out = ALLOCATE(output_stack, struct Number);
         out->operation = a->operation;
-        if (a->operation == '+')
+        if (a->generator)
         {
             out->generator = number_copy(output_stack, a->generator);
             out->terms_in_terms_of_generator =
@@ -143,12 +143,21 @@ struct Number*number_rational_multiply(struct Stack*output_stack,
                         a->terms_in_terms_of_generator[i], b);
             }
         }
+        else
+        {
+            out->generator = 0;
+        }
         out->element_count = a->element_count;
         out->elements = ARRAY_ALLOCATE(output_stack, a->element_count, struct Number*);
         for (size_t i = 0; i < a->element_count; ++i)
         {
             out->elements[i] =
                 number_rational_multiply(output_stack, local_stack, a->elements[i], b);
+        }
+        if (!a->minimal_polynomial)
+        {
+            out->minimal_polynomial = 0;
+            return out;
         }
     }
     void*local_stack_savepoint = local_stack->cursor;
@@ -329,10 +338,10 @@ struct Number*number_multiply(struct Stack*output_stack, struct Stack*local_stac
                         ++out->element_count;
                         for (size_t i = factor_index; i < a->element_count; ++i)
                         {
-                            if (factors[factor_index])
+                            if (factors[i])
                             {
                                 out->elements[out->element_count] =
-                                    number_copy(output_stack, factors[factor_index]);
+                                    number_copy(output_stack, factors[i]);
                                 ++out->element_count;
                             }
                         }

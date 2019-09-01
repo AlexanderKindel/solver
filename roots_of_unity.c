@@ -263,7 +263,7 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
             degree_minus_first_root_exponent =
                 (degree_minus_first_root_exponent + i) % degree_minus_one_size_t;
         }
-        out[i] = number_copy(&permanent_stack,
+        out[i] = number_eliminate_linear_dependencies(&permanent_stack, stack_b,
             number_rational_multiply(stack_a, stack_b, out[i], degree_minus_one_reciprocal));
     }
     roots_of_unity_sort(stack_a, stack_b, out, degree);

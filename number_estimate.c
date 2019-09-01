@@ -536,14 +536,14 @@ struct FloatInterval*number_float_magnitude_estimate(struct Stack*output_stack,
                 a->radicand, rational_integer_divide(local_stack, output_stack,
                     rational_exponentiate(local_stack, output_stack, interval_size, a->index),
                     &INT(3, +)));
-        struct Rational*bound_interval_size =
+        interval_size =
             rational_integer_divide(local_stack, output_stack, interval_size, &INT(3, +));
         struct Float*unused_estimate_bound;
         struct FloatInterval*out = ALLOCATE(output_stack, struct FloatInterval);
         float_estimate_root(local_stack, output_stack, &out->min, &unused_estimate_bound,
-            radicand_magnitude_estimate->min, bound_interval_size, a->index);
+            radicand_magnitude_estimate->min, interval_size, a->index);
         float_estimate_root(local_stack, output_stack, &unused_estimate_bound, &out->max,
-            radicand_magnitude_estimate->max, bound_interval_size, a->index);
+            radicand_magnitude_estimate->max, interval_size, a->index);
         out->min = float_copy(output_stack, out->min);
         out->max = float_copy(output_stack, out->max);
         local_stack->cursor = local_stack_savepoint;

@@ -247,6 +247,12 @@ struct Number
     struct RationalPolynomial**terms_in_terms_of_generator;
 };
 
+struct TermSplit
+{
+    struct Rational*rational_part;
+    struct Number*irrational_part;
+};
+
 typedef struct RationalInterval*(*rational_estimate_getter)(struct Stack*, struct Stack*,
     struct Number*, struct Rational*);
 
@@ -784,6 +790,8 @@ struct RationalPolynomial*sum_minimal_polynomial(struct Stack*output_stack,
     struct RationalPolynomial*right_minimal_polynomial);
 struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
     struct Number*b);
+struct Number*number_eliminate_linear_dependencies(struct Stack*output_stack,
+    struct Stack*local_stack, struct Number*a);
 
 struct RationalPolynomial*product_minimal_polynomial(struct Stack*output_stack,
     struct Stack*local_stack, struct Number*a, struct RationalPolynomial*left_minimal_polynomial,
