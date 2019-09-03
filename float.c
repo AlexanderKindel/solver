@@ -150,16 +150,15 @@ void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, st
 {
     ASSERT(a->significand->sign >= 0, "float_estimate_root was called on a negative a value.\n");
     void*local_stack_savepoint = local_stack->cursor;
-    if (a->exponent < 0)
+    struct Rational*rational_radicand = float_to_rational(local_stack, output_stack, a);
+    if (rational_compare(output_stack, local_stack, rational_radicand, &rational_one) < 0)
     {
-        (*out_max)->significand = &one;
-        (*out_max)->exponent = &zero;
+        *out_max = &float_one;
     }
     else
     {
         *out_max = float_copy(local_stack, a);
     }
-    struct Rational*rational_radicand = float_to_rational(local_stack, output_stack, a);
     struct Integer*index_minus_one = integer_add(local_stack, index, &INT(1, -));
     while (true)
     {

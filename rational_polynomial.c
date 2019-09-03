@@ -218,38 +218,33 @@ size_t sign_variation(int8_t previous_sign, int8_t sign)
     return out;
 }
 
-size_t sturm_chain_sign_variation(struct Stack*stack_a, struct Stack*stack_b,
-    struct RationalPolynomial*first_element, struct RationalPolynomial*second_element)
+size_t twice_cauchy_index(struct Stack*stack_a, struct Stack*stack_b,
+    struct RationalPolynomial*numerator, struct RationalPolynomial*denominator)
 {
     void*stack_a_savepoint = stack_a->cursor;
-    int8_t start_sign = rational_polynomial_evaluate_at_rational(stack_a, stack_b, first_element,
+    int8_t start_sign = rational_polynomial_evaluate_at_rational(stack_a, stack_b, denominator,
         &rational_zero)->numerator->sign;
-    size_t start_sign_change_count = 0;
-    int8_t end_sign = rational_polynomial_evaluate_at_rational(stack_a, stack_b, first_element,
+    size_t start_sign_variation = 0;
+    int8_t end_sign = rational_polynomial_evaluate_at_rational(stack_a, stack_b, denominator,
         &rational_one)->numerator->sign;
-    size_t end_sign_change_count = 0;
-    while (second_element->coefficient_count > 1)
+    size_t end_sign_variation = 0;
+    while (numerator->coefficient_count)
     {
         int8_t next_start_sign = rational_polynomial_evaluate_at_rational(stack_a, stack_b,
-            second_element, &rational_zero)->numerator->sign;
-        start_sign_change_count += sign_variation(start_sign, next_start_sign);
+            numerator, &rational_zero)->numerator->sign;
+        start_sign_variation += sign_variation(start_sign, next_start_sign);
         start_sign = next_start_sign;
         int8_t next_end_sign = rational_polynomial_evaluate_at_rational(stack_a, stack_b,
-            second_element, &rational_one)->numerator->sign;
-        end_sign_change_count += sign_variation(end_sign, next_end_sign);
+            numerator, &rational_one)->numerator->sign;
+        end_sign_variation += sign_variation(end_sign, next_end_sign);
         end_sign = next_end_sign;
         struct RationalPolynomial*remainder = rational_polynomial_negative(stack_a, 
-            rational_polynomial_euclidean_remainder(stack_a, stack_b, first_element,
-                second_element));
-        first_element = second_element;
-        second_element = remainder;
+            rational_polynomial_euclidean_remainder(stack_a, stack_b, denominator, numerator));
+        denominator = numerator;
+        numerator = remainder;
     }
-    start_sign_change_count +=
-        sign_variation(start_sign, second_element->coefficients[0]->numerator->sign);
-    end_sign_change_count +=
-        sign_variation(end_sign, second_element->coefficients[0]->numerator->sign);
     stack_a->cursor = stack_a_savepoint;
-    return start_sign_change_count - end_sign_change_count;
+    return start_sign_variation - end_sign_variation;
 }
 
 void rational_polynomial_parameterize_over_segment(struct Stack*output_stack,
@@ -288,8 +283,9 @@ size_t rational_polynomial_root_count_over_segment(struct Stack*stack_a, struct 
         &parameterization_imaginary_part, a, endpoint_a, endpoint_b);
     struct RationalPolynomial*sturm_chain_first_element = rational_polynomial_gcd(stack_a, stack_b,
         parameterization_real_part, parameterization_imaginary_part);
-    size_t out = sturm_chain_sign_variation(stack_a, stack_b, sturm_chain_first_element,
-        rational_polynomial_derivative(stack_a, stack_b, sturm_chain_first_element));
+    size_t out = twice_cauchy_index(stack_a, stack_b,
+        rational_polynomial_derivative(stack_a, stack_b, sturm_chain_first_element),
+        sturm_chain_first_element);
     if (gaussian_rational_equals(&gaussian_rational_zero,
         rational_polynomial_evaluate_at_gaussian_rational(stack_a, stack_b, a, endpoint_a)))
     {
@@ -301,6 +297,8 @@ size_t rational_polynomial_root_count_over_segment(struct Stack*stack_a, struct 
         ++out;
     }
     stack_a->cursor = stack_a_savepoint;
+    ASSERT(out % 2 == 0,
+        "rational_polynomial_root_count_over_segment found fractional number of roots.");
     return out / 2;
 }
 
@@ -347,15 +345,18 @@ size_t rational_polynomial_root_count_in_rectangle(struct Stack*stack_a, struct 
         struct RationalPolynomial*parameterization_imaginary_part;
         rational_polynomial_parameterize_over_segment(stack_a, stack_b, &parameterization_real_part,
             &parameterization_imaginary_part, a, corners + i, corners + i + 1);
-        out += sturm_chain_sign_variation(stack_a, stack_b, parameterization_real_part,
+        out += twice_cauchy_index(stack_a, stack_b, parameterization_real_part,
             parameterization_imaginary_part);
         struct RationalPolynomial*sturm_chain_first_element = rational_polynomial_gcd(stack_a,
             stack_b, parameterization_real_part, parameterization_imaginary_part);
-        out += sturm_chain_sign_variation(stack_a, stack_b, sturm_chain_first_element,
-            rational_polynomial_derivative(stack_a, stack_b, sturm_chain_first_element)) / 2;
+        out += twice_cauchy_index(stack_a, stack_b,
+            rational_polynomial_derivative(stack_a, stack_b, sturm_chain_first_element),
+            sturm_chain_first_element);
         stack_a->cursor = stack_a_savepoint;
     }
-    return out / 2;
+    ASSERT(out % 4 == 0,
+        "rational_polynomial_root_count_in_rectangle found fractional number of roots.");
+    return out / 4;
 }
 
 //In this case, interval_size is only passed through to internal calls to rational_float_estimate

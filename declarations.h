@@ -654,8 +654,8 @@ size_t rational_polynomial_factor(struct Stack*output_stack, struct Stack*local_
     struct RationalPolynomial*a, struct RationalPolynomial**out);
 struct RationalPolynomial*rational_polynomial_derivative(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a);
-struct Rational*rational_polynomial_evaluate_at_integer(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*a, struct Integer*argument);
+struct Rational*rational_polynomial_evaluate_at_rational(struct Stack*output_stack,
+    struct Stack*local_stack, struct RationalPolynomial*a, struct Rational*argument);
 size_t rational_polynomial_root_count_in_rectangle(struct Stack*stack_a, struct Stack*stack_b,
     struct RationalPolynomial*a, struct RationalInterval*real, struct RationalInterval*imaginary);
 void rational_polynomial_evaluate_at_rectangular_estimate(struct Stack*output_stack,
