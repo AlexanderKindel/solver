@@ -418,7 +418,7 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
     size_t combination_size = 1;
     while (2 * combination_size < lifted_factor_count)
     {
-        for (size_t i = 0; i <= lifted_factor_count - combination_size; ++i)
+        for (size_t i = 0; i <= lifted_factor_count - combination_size;)
         {
             if (factor_found(output_stack, local_stack, lifted_factors[i], combination_size - 1,
                 lifted_factors + i + 1, lifted_factor_count - i - 1, &a, characteristic_power, out,
@@ -426,6 +426,10 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
             {
                 lifted_factors[i] = lifted_factors[lifted_factor_count - 1];
                 lifted_factor_count -= combination_size;
+            }
+            else
+            {
+                ++i;
             }
         }
         ++combination_size;
