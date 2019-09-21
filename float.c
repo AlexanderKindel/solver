@@ -148,7 +148,7 @@ struct Float*float_exponentiate(struct Stack*output_stack, struct Stack*local_st
 void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, struct Float**out_min,
     struct Float**out_max, struct Float*a, struct Rational*interval_size, struct Integer*index)
 {
-    ASSERT(a->significand->sign >= 0, "float_estimate_root was called on a negative a value.\n");
+    ASSERT(a->significand->sign >= 0, "float_estimate_root was called on a negative a value.");
     void*local_stack_savepoint = local_stack->cursor;
     struct Rational*rational_radicand = float_to_rational(local_stack, output_stack, a);
     if (rational_compare(output_stack, local_stack, rational_radicand, &rational_one) < 0)
