@@ -1,9 +1,9 @@
 #include "declarations.h"
 
-void stack_initialize(struct Stack*out, size_t start, size_t end)
+void stack_initialize(struct Stack*out, size_t start, size_t size)
 {
     out->start = start;
-    out->end = end;
+    out->end = start + size;
     out->cursor = (void*)start;
     out->cursor_max = out->start;
 }

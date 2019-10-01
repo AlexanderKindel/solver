@@ -265,7 +265,7 @@ struct EstimateGetters
     float_estimate_getter fl;
 };
 
-void stack_initialize(struct Stack*out, size_t start, size_t end);
+void stack_initialize(struct Stack*out, size_t start, size_t size);
 void stack_free(struct Stack*out);
 void*array_start(struct Stack*output_stack, size_t alignment);
 void extend_array(struct Stack*output_stack, size_t element_size);
