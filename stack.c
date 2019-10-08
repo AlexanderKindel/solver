@@ -30,14 +30,17 @@ void extend_array(struct Stack*output_stack, size_t element_size)
     output_stack->cursor = (void*)((size_t)output_stack->cursor + element_size);
     if ((size_t)output_stack->cursor > output_stack->end)
     {
-        crash("Stack ran out of virtual address space.");
+        puts("Insufficient memory allocated for calculation.");
+        longjmp(memory_error_buffer, 0);
+        return;
     }
     while ((size_t)output_stack->cursor > output_stack->cursor_max)
     {
         if (!VirtualAlloc((void*)output_stack->cursor_max, page_size, MEM_RESERVE | MEM_COMMIT,
             PAGE_READWRITE))
         {
-            crash("Ran out of physical memory.");
+            puts("Insufficient physical memory for calculation.");
+            longjmp(memory_error_buffer, 0);
         }
         output_stack->cursor_max = output_stack->cursor_max + page_size;
     }

@@ -1,6 +1,7 @@
 #ifndef DECLARATIONS_H
 #define DECLARATIONS_H
 
+#include <setjmp.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -831,6 +832,7 @@ size_t page_size;
 struct Stack permanent_stack;
 struct Stack pi_stack_a;
 struct Stack pi_stack_b;
+jmp_buf memory_error_buffer;
 
 struct Integer zero = { 0, 0, 0 };
 struct Integer one = { 1, 1, 1 };
