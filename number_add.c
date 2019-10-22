@@ -8,7 +8,7 @@ struct RationalPolynomial*sum_minimal_polynomial(struct Stack*output_stack,
     struct NestedPolynomial*power = &nested_polynomial_one;
     struct NestedPolynomial d = { 2, &(struct RationalPolynomial){2, &rational_zero, &rational_one},
         &(struct RationalPolynomial){1, &(struct Rational){&INT(1, -), &one}} };
-    struct NestedPolynomial*t = (struct NestedPolynomial*)&polynomial_zero;
+    struct NestedPolynomial*t = polynomial_zero;
     for (size_t i = 0; i < left_minimal_polynomial->coefficient_count; ++i)
     {
         t = nested_polynomial_add(local_stack, output_stack, t,
@@ -234,7 +234,7 @@ struct RationalPolynomial**sum_convert_terms_to_new_generator(struct Stack*outpu
     }
     for (size_t i = 0; i < term_count; ++i)
     {
-        out[i] = (struct RationalPolynomial*)&polynomial_zero;
+        out[i] = polynomial_zero;
         for (size_t j = 0; j < terms_in_terms_of_old_generator[i]->coefficient_count; ++j)
         {
             out[i] = rational_polynomial_add(local_stack, output_stack,

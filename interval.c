@@ -1,129 +1,11 @@
 #include "declarations.h"
 
-void*interval_max_magnitude(struct IntervalBoundOperations*operations, struct Stack*output_stack,
-    struct Stack*local_stack, struct Interval*a)
-{
-    void*local_stack_savepoint = local_stack->cursor;
-    void*out = operations->bmax(output_stack, local_stack,
-        operations->magnitude(local_stack, a->min), operations->magnitude(local_stack, a->max));
-    local_stack->cursor = local_stack_savepoint;
-    return out;
-}
-
-void*interval_add(struct IntervalBoundOperations*operations, struct Stack*output_stack,
-    struct Stack*local_stack, struct Interval*a, struct Interval*b)
-{
-    struct Interval*out = ALLOCATE(output_stack, struct Interval);
-    out->min = operations->add(output_stack, local_stack, a->min, b->min);
-    out->max = operations->add(output_stack, local_stack, a->max, b->max);
-    return out;
-}
-
-void*interval_negative(struct IntervalBoundOperations*operations, struct Stack*output_stack,
-    struct Stack*local_stack, struct Interval*a)
-{
-    struct Interval*out = ALLOCATE(output_stack, struct Interval);
-    if (operations->sign(a->min) != -operations->sign(a->max))
-    {
-        out->min = operations->negative(output_stack, a->max);
-        out->max = operations->negative(output_stack, a->min);
-    }
-    else
-    {
-        void*local_stack_savepoint = local_stack->cursor;
-        out->min = operations->copy(output_stack, operations->bmin(output_stack, local_stack,
-            operations->negative(local_stack, a->max), a->min));
-        out->max = operations->copy(output_stack, operations->bmax(output_stack, local_stack,
-            operations->negative(local_stack, a->min), a->max));
-        local_stack->cursor = local_stack_savepoint;
-    }
-    return out;
-}
-
-void*interval_multiply(struct IntervalBoundOperations*operations, struct Stack*output_stack,
-    struct Stack*local_stack, struct Interval*a, struct Interval*b)
-{
-    struct Interval*out = ALLOCATE(output_stack, struct Interval);
-    if (operations->sign(a->min) >= 0)
-    {
-        if (operations->sign(b->min) >= 0)
-        {
-            out->min = operations->multiply(output_stack, local_stack, a->min, b->min);
-            out->max = operations->multiply(output_stack, local_stack, a->max, b->max);
-        }
-        else
-        {
-            out->min = operations->multiply(output_stack, local_stack, a->max, b->min);
-            if (operations->sign(b->max) <= 0)
-            {
-                out->max = operations->multiply(output_stack, local_stack, a->min, b->max);
-            }
-            else
-            {
-                out->max = operations->multiply(output_stack, local_stack, a->max, b->max);
-            }
-        }
-    }
-    else if (operations->sign(a->max) <= 0)
-    {
-        if (operations->sign(b->min) >= 0)
-        {
-            out->min = operations->multiply(output_stack, local_stack, a->min, b->max);
-            out->max = operations->multiply(output_stack, local_stack, a->max, b->min);
-        }
-        else
-        {
-            if (operations->sign(b->max) <= 0)
-            {
-                out->min = operations->multiply(output_stack, local_stack, a->max, b->max);
-            }
-            else
-            {
-                out->min = operations->multiply(output_stack, local_stack, a->min, b->max);
-            }
-            out->max = operations->multiply(output_stack, local_stack, a->min, b->min);
-        }
-    }
-    else
-    {
-        if (operations->sign(b->min) >= 0)
-        {
-            out->min = operations->multiply(output_stack, local_stack, a->min, b->max);
-            out->max = operations->multiply(output_stack, local_stack, a->max, b->max);
-        }
-        else if (operations->sign(b->max) <= 0)
-        {
-            out->min = operations->multiply(output_stack, local_stack, a->max, b->min);
-            out->max = operations->multiply(output_stack, local_stack, a->min, b->min);
-        }
-        else
-        {
-            void*local_stack_savepoint = local_stack->cursor;
-            out->min = operations->copy(output_stack, operations->bmin(output_stack, local_stack,
-                operations->multiply(local_stack, output_stack, a->min, b->max),
-                operations->multiply(local_stack, output_stack, a->max, b->min)));
-            out->max = operations->copy(output_stack, operations->bmax(output_stack, local_stack,
-                operations->multiply(local_stack, output_stack, a->min, b->min),
-                operations->multiply(local_stack, output_stack, a->max, b->max)));
-            local_stack->cursor = local_stack_savepoint;
-        }
-    }
-    return out;
-}
-
 struct RationalInterval*rational_interval_copy(struct Stack*output_stack, struct RationalInterval*a)
 {
     struct RationalInterval*out = ALLOCATE(output_stack, struct RationalInterval);
     out->min = rational_copy(output_stack, a->min);
     out->max = rational_copy(output_stack, a->max);
     return out;
-}
-
-struct Rational*rational_interval_max_magnitude(struct Stack*output_stack, struct Stack*local_stack,
-    struct RationalInterval*a)
-{
-    return interval_max_magnitude(&rational_interval_bound_operations, output_stack, local_stack,
-        (struct Interval*)a);
 }
 
 void rational_interval_expand_bounds(struct Stack*stack_a, struct Stack*stack_b,
@@ -151,27 +33,6 @@ struct Rational*rational_interval_factor_interval_size(struct Stack*output_stack
                 rational_interval_max_magnitude(local_stack, output_stack, factor_b), &one)));
     local_stack->cursor = local_stack_savepoint;
     return out;
-}
-
-struct RationalInterval*rational_interval_add(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalInterval*a, struct RationalInterval*b)
-{
-    return interval_add(&rational_interval_bound_operations, output_stack, local_stack,
-        (struct Interval*)a, (struct Interval*)b);
-}
-
-struct RationalInterval*rational_interval_negative(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalInterval*a)
-{
-    return interval_negative(&rational_interval_bound_operations, output_stack, local_stack,
-        (struct Interval*)a);
-}
-
-struct RationalInterval*rational_interval_multiply(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalInterval*a, struct RationalInterval*b)
-{
-    return interval_multiply(&rational_interval_bound_operations, output_stack, local_stack,
-        (struct Interval*)a, (struct Interval*)b);
 }
 
 //Requires that if x straddles an axis, y does not and vice versa.
@@ -283,39 +144,11 @@ struct FloatInterval*float_interval_copy(struct Stack*output_stack, struct Float
     return out;
 }
 
-struct Float*float_interval_max_magnitude(struct Stack*output_stack, struct Stack*local_stack,
-    struct FloatInterval*a)
-{
-    return interval_max_magnitude(&float_interval_bound_operations, output_stack, local_stack,
-        (struct Interval*)a);
-}
-
 bool float_intervals_are_disjoint(struct Stack*stack_a, struct Stack*stack_b,
     struct FloatInterval*a, struct FloatInterval*b)
 {
     return float_compare(stack_a, stack_b, a->min, b->max) > 0 ||
         float_compare(stack_a, stack_b, b->min, a->max) > 0;
-}
-
-bool float_interval_a_contains_b(struct Stack*stack_a, struct Stack*stack_b, struct FloatInterval*a,
-    struct FloatInterval*b)
-{
-    return float_compare(stack_a, stack_b, a->min, b->min) <= 0 &&
-        float_compare(stack_a, stack_b, a->max, b->max) >= 0;
-}
-
-struct FloatInterval*float_interval_add(struct Stack*output_stack, struct Stack*local_stack,
-    struct FloatInterval*a, struct FloatInterval*b)
-{
-    return interval_add(&float_interval_bound_operations, output_stack, local_stack,
-        (struct Interval*)a, (struct Interval*)b);
-}
-
-struct FloatInterval*float_interval_negative(struct Stack*output_stack, struct Stack*local_stack,
-    struct FloatInterval*a)
-{
-    return interval_negative(&float_interval_bound_operations, output_stack, local_stack,
-        (struct Interval*)a);
 }
 
 struct FloatInterval*float_interval_subtract(struct Stack*output_stack, struct Stack*local_stack,
@@ -328,11 +161,11 @@ struct FloatInterval*float_interval_subtract(struct Stack*output_stack, struct S
     return out;
 }
 
-struct FloatInterval*float_interval_multiply(struct Stack*output_stack, struct Stack*local_stack,
-    struct FloatInterval*a, struct FloatInterval*b)
+bool float_interval_a_contains_b(struct Stack*stack_a, struct Stack*stack_b, struct FloatInterval*a,
+    struct FloatInterval*b)
 {
-    return interval_multiply(&float_interval_bound_operations, output_stack, local_stack,
-        (struct Interval*)a, (struct Interval*)b);
+    return float_compare(stack_a, stack_b, a->min, b->min) <= 0 &&
+        float_compare(stack_a, stack_b, a->max, b->max) >= 0;
 }
 
 struct RationalInterval*float_interval_to_rational_interval(struct Stack*output_stack,

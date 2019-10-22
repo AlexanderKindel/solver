@@ -24,7 +24,7 @@ struct RationalPolynomial*product_minimal_polynomial(struct Stack*output_stack,
         }
         else
         {
-            t->coefficients[i] = (struct RationalPolynomial*)&polynomial_zero;
+            t->coefficients[i] = polynomial_zero;
         }
     }
     struct RationalPolynomial*out =
@@ -168,7 +168,7 @@ struct Number*number_rational_multiply(struct Stack*output_stack,
     {
         out->minimal_polynomial->coefficients[i] = rational_divide(local_stack, output_stack,
             a->minimal_polynomial->coefficients[i], power);
-        power = rational_unreduced_multiply(local_stack, output_stack, power, b, 0);
+        power = rational_unreduced_multiply(local_stack, output_stack, power, b);
     }
     out->minimal_polynomial = rational_polynomial_rational_multiply(output_stack, local_stack,
         out->minimal_polynomial, rational_reciprocal(local_stack,

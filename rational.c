@@ -110,7 +110,7 @@ struct Rational*rational_multiply(struct Stack*output_stack, struct Stack*local_
 }
 
 struct Rational*rational_unreduced_multiply(struct Stack*output_stack, struct Stack*local_stack,
-    struct Rational*a, struct Rational*b, void*unused)
+    struct Rational*a, struct Rational*b)
 {
     struct Rational*out = ALLOCATE(output_stack, struct Rational);
     out->numerator = integer_multiply(output_stack, local_stack, a->numerator, b->numerator);
@@ -219,14 +219,6 @@ struct Rational*rational_max(struct Stack*output_stack, struct Stack*local_stack
     {
         return rational_copy(output_stack, b);
     }
-}
-
-struct Rational*rational_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
-    struct Rational*base, struct Integer*exponent)
-{
-    return generic_exponentiate(&(struct RingOperations) { rational_copy, rational_equals,
-        &rational_zero, &rational_one, rational_generic_add, rational_generic_negative,
-        rational_unreduced_multiply }, output_stack, local_stack, base, exponent, 0);
 }
 
 //In revolutions.

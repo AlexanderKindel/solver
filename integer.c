@@ -12,9 +12,10 @@ struct Integer*integer_allocate(struct Stack*output_stack, size_t value_count)
 
 struct Integer*integer_copy(struct Stack*output_stack, struct Integer*a)
 {
-    struct Integer*copy = integer_allocate(output_stack, a->value_count);
-    memcpy(copy, a, integer_size(a->value_count));
-    return copy;
+    size_t size = integer_size(a->value_count);
+    struct Integer*out = stack_slot_allocate(output_stack, size, _Alignof(struct Integer));
+    memcpy(out, a, size);
+    return out;
 }
 
 struct Integer*integer_initialize(struct Stack*stack, uint32_t value, int8_t sign)
@@ -140,14 +141,14 @@ void calculate_sum_values(struct Integer*short_integer, struct Integer*sum)
 
 void twos_complement(struct Integer*a)
 {
-    for (int i = 0; i < a->value_count; ++i)
+    for (size_t i = 0; i < a->value_count; ++i)
     {
         a->value[i] = ~a->value[i];
     }
-    for (int i = 0; i < a->value_count; ++i)
+    for (size_t i = 0; i < a->value_count; ++i)
     {
         uint32_t power = 1;
-        for (int j = 0; j < 32; ++j)
+        for (size_t j = 0; j < 32; ++j)
         {
             a->value[i] ^= power;
             if ((a->value[i] & power) != 0)
@@ -232,7 +233,8 @@ struct Integer*integer_multiply(struct Stack*output_stack, struct Stack*local_st
     struct Integer*a, struct Integer*b)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct Integer*out = integer_allocate(output_stack, a->value_count + b->value_count);
+    struct Integer*out = stack_slot_allocate(output_stack,
+        integer_size(a->value_count + b->value_count), _Alignof(struct Integer));
     out->value_count = 0;
     out->sign = 0;
     for (int i = 0; i < a->value_count; ++i)
@@ -314,7 +316,9 @@ void integer_euclidean_divide(struct Stack*output_stack, struct Stack*local_stac
             dividend_leading_digit_place >= divisor_leading_digit_place))
     {
         void*local_stack_savepoint = local_stack->cursor;
-        struct Integer*divisor_magnitude = integer_magnitude(local_stack, dividend);
+        struct Integer*divisor_magnitude = integer_allocate(local_stack, dividend->value_count);
+        divisor_magnitude->value_count = dividend->value_count;
+        divisor_magnitude->sign = 1;
         size_t quotient_value_index = dividend->value_count - divisor->value_count;
         memset(&divisor_magnitude->value, 0, quotient_value_index * sizeof(uint32_t));
         memcpy(&divisor_magnitude->value[quotient_value_index], &divisor->value,
@@ -442,25 +446,6 @@ int8_t integer_compare(struct Stack*stack_a, struct Stack*stack_b, struct Intege
     int8_t out = integer_subtract(stack_a, stack_b, a, b)->sign;
     stack_a->cursor = stack_a_savepoint;
     return out;
-}
-
-struct Integer*integer_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
-    struct Integer*base, struct Integer*exponent)
-{
-    return generic_exponentiate(&integer_operations.ring_operations, output_stack, local_stack,
-        base, exponent, 0);
-}
-
-struct Integer*integer_gcd(struct Stack*output_stack, struct Stack*local_stack, struct Integer*a,
-    struct Integer*b)
-{
-    return generic_gcd(&integer_operations, output_stack, local_stack, a, b, 0);
-}
-
-void integer_extended_gcd(struct Stack*output_stack, struct Stack*local_stack,
-    struct ExtendedGCDInfo*out, struct Integer*a, struct Integer*b)
-{
-    generic_extended_gcd(&integer_operations, output_stack, local_stack, out, a, b, 0);
 }
 
 struct Integer*integer_lcm(struct Stack*output_stack, struct Stack*local_stack, struct Integer*a,

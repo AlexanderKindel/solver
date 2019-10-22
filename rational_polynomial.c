@@ -1,45 +1,5 @@
 #include "declarations.h"
 
-struct RationalPolynomial*rational_polynomial_copy(struct Stack*output_stack,
-    struct RationalPolynomial*a)
-{
-    return polynomial_copy(rational_copy, output_stack, (struct Polynomial*)a);
-}
-
-bool rational_polynomial_equals(struct RationalPolynomial*a, struct RationalPolynomial*b)
-{
-    return polynomial_equals(&rational_operations.ring_operations, (struct Polynomial*)a,
-        (struct Polynomial*)b);
-}
-
-struct RationalPolynomial*rational_polynomial_add(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*a, struct RationalPolynomial*b)
-{
-    return polynomial_add(&rational_operations.ring_operations, output_stack, local_stack,
-        (struct Polynomial*)a, (struct Polynomial*)b);
-}
-
-struct RationalPolynomial*rational_polynomial_negative(struct Stack*output_stack,
-    struct RationalPolynomial*a)
-{
-    return polynomial_negative(&rational_operations.ring_operations, output_stack,
-        (struct Polynomial*)a);
-}
-
-struct RationalPolynomial*rational_polynomial_subtract(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*a, struct RationalPolynomial*b)
-{
-    return polynomial_subtract(&rational_operations.ring_operations, output_stack, local_stack,
-        (struct Polynomial*)a, (struct Polynomial*)b);
-}
-
-struct RationalPolynomial*rational_polynomial_multiply(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*a, struct RationalPolynomial*b)
-{
-    return polynomial_multiply(&rational_operations.ring_operations, output_stack, local_stack,
-        (struct Polynomial*)a, (struct Polynomial*)b, 0);
-}
-
 struct RationalPolynomial*rational_polynomial_integer_multiply(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a, struct Integer*b)
 {
@@ -47,35 +7,20 @@ struct RationalPolynomial*rational_polynomial_integer_multiply(struct Stack*outp
         &(struct Rational){ b, &one });
 }
 
-struct RationalPolynomial*rational_polynomial_rational_multiply(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*a, struct Rational*b)
-{
-    return polynomial_multiply_by_coefficient(&rational_operations.ring_operations, output_stack,
-        local_stack, (struct Polynomial*)a, b, 0);
-}
-
-void rational_polynomial_euclidean_divide(struct Stack*output_stack, struct Stack*local_stack,
-    struct PolynomialDivision*out, struct RationalPolynomial*dividend,
-    struct RationalPolynomial*divisor)
-{
-    field_polynomial_euclidean_divide(&rational_operations, output_stack, local_stack, out,
-        (struct Polynomial*)dividend, (struct Polynomial*)divisor, 0);
-}
-
 struct RationalPolynomial*rational_polynomial_euclidean_quotient(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*dividend, struct RationalPolynomial*divisor)
 {
-    struct PolynomialDivision division;
+    struct RationalPolynomialDivision division;
     rational_polynomial_euclidean_divide(output_stack, local_stack, &division, dividend, divisor);
-    return (struct RationalPolynomial*)division.quotient;
+    return division.quotient;
 }
 
 struct RationalPolynomial*rational_polynomial_euclidean_remainder(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*dividend, struct RationalPolynomial*divisor)
 {
-    struct PolynomialDivision division;
+    struct RationalPolynomialDivision division;
     rational_polynomial_euclidean_divide(output_stack, local_stack, &division, dividend, divisor);
-    return (struct RationalPolynomial*)division.remainder;
+    return division.remainder;
 }
 
 struct Integer*denominator_lcm(struct Stack*output_stack, struct Stack*local_stack,
@@ -105,13 +50,6 @@ struct IntegerPolynomial*rational_polynomial_to_integer_polynomial(struct Stack*
     }
     local_stack->cursor = local_stack_savepoint;
     return out;
-}
-
-struct RationalPolynomial*rational_polynomial_exponentiate(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*base, struct Integer*exponent)
-{
-    return generic_exponentiate(&rational_polynomial_operations.ring_operations, output_stack,
-        local_stack, base, exponent, 0);
 }
 
 void rational_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*local_stack,
@@ -168,46 +106,6 @@ size_t rational_polynomial_factor(struct Stack*output_stack, struct Stack*local_
     return factor_count;
 }
 
-struct RationalPolynomial*rational_polynomial_derivative(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*a)
-{
-    return polynomial_derivative(rational_integer_multiply, output_stack, local_stack,
-        (struct Polynomial*)a);
-}
-
-void*rational_polynomial_evaluate(struct RingOperations*argument_operations,
-    void*(argument_rational_multiply)(struct Stack*, struct Stack*, void*, struct Rational*),
-    struct Stack*output_stack, struct Stack*local_stack, struct RationalPolynomial*a, void*argument)
-{
-    void*local_stack_savepoint = local_stack->cursor;
-    void*out = argument_operations->additive_identity;
-    void*argument_power = argument_operations->multiplicative_identity;
-    for (size_t i = 0; i < a->coefficient_count; ++i)
-    {
-        out = argument_operations->add(local_stack, output_stack, out,
-            argument_rational_multiply(local_stack, output_stack, argument_power,
-                a->coefficients[i]), 0);
-        argument_power =
-            argument_operations->multiply(local_stack, output_stack, argument_power, argument, 0);
-    }
-    local_stack->cursor = local_stack_savepoint;
-    return out;
-}
-
-struct Rational*rational_polynomial_evaluate_at_rational(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*a, struct Rational*argument)
-{
-    return rational_polynomial_evaluate(&rational_operations.ring_operations, rational_multiply,
-        output_stack, local_stack, a, argument);
-}
-
-struct GaussianRational*rational_polynomial_evaluate_at_gaussian_rational(struct Stack*output_stack,
-    struct Stack*local_stack, struct RationalPolynomial*a, struct GaussianRational*argument)
-{
-    return rational_polynomial_evaluate(&gaussian_rational_operations,
-        gaussian_rational_rational_multiply, output_stack, local_stack, a, argument);
-}
-
 size_t sign_variation(int8_t previous_sign, int8_t sign)
 {
     int8_t out = sign - previous_sign;
@@ -253,8 +151,7 @@ void rational_polynomial_parameterize_over_segment(struct Stack*output_stack,
     struct GaussianRational*endpoint_a, struct GaussianRational*endpoint_b)
 {
     struct GaussianRationalPolynomial*a_at_edge =
-        rational_polynomial_evaluate(&gaussian_rational_polynomial_operations,
-            gaussian_rational_polynomial_rational_multiply, local_stack, output_stack, a,
+        rational_polynomial_evaluate_at_gaussian_rational_polynomial(local_stack, output_stack, a,
             &(struct GaussianRationalPolynomial){2, endpoint_a,
                 gaussian_rational_subtract(local_stack, output_stack, endpoint_b, endpoint_a)});
     *out_real = polynomial_allocate(output_stack, a_at_edge->coefficient_count);
@@ -266,10 +163,8 @@ void rational_polynomial_parameterize_over_segment(struct Stack*output_stack,
         (*out_imaginary)->coefficients[i] =
             rational_copy(output_stack, a_at_edge->coefficients[i]->imaginary);
     }
-    polynomial_trim_leading_zeroes(&rational_operations.ring_operations,
-        (struct Polynomial*)(*out_real));
-    polynomial_trim_leading_zeroes(&rational_operations.ring_operations,
-        (struct Polynomial*)(*out_imaginary));
+    rational_polynomial_trim_leading_zeroes(*out_real);
+    rational_polynomial_trim_leading_zeroes(*out_imaginary);
 }
 
 size_t rational_polynomial_root_count_over_segment(struct Stack*stack_a, struct Stack*stack_b,
@@ -446,7 +341,7 @@ struct NestedPolynomial*rational_polynomial_to_nested_polynomial(struct Stack*ou
         }
         else
         {
-            out->coefficients[i] = (struct RationalPolynomial*)&polynomial_zero;
+            out->coefficients[i] = polynomial_zero;
         }
     }
     return out;

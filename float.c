@@ -139,12 +139,6 @@ struct Float*float_max(struct Stack*output_stack, struct Stack*local_stack, stru
     }
 }
 
-struct Float*float_exponentiate(struct Stack*output_stack, struct Stack*local_stack,
-    struct Float*base, struct Integer*exponent)
-{
-    return generic_exponentiate(&float_operations, output_stack, local_stack, base, exponent, 0);
-}
-
 void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, struct Float**out_min,
     struct Float**out_max, struct Float*a, struct Rational*interval_size, struct Integer*index)
 {

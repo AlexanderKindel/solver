@@ -1,5 +1,11 @@
 #include "declarations.h"
 
+__declspec(noreturn) void crash(char*message)
+{
+    puts(message);
+    abort();
+}
+
 void stack_initialize(struct Stack*out, size_t start, size_t size)
 {
     out->start = start;

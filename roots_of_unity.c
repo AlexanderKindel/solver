@@ -130,12 +130,10 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
     for (size_t i = 1; i < degree_minus_one_size_t; ++i)
     {
         n_minus_first_root_annulling_polynomial->coefficients[i] = &rational_zero;
-        nth_root_annulling_polynomial->coefficients[i] =
-            (struct RationalPolynomial*)&polynomial_zero;
+        nth_root_annulling_polynomial->coefficients[i] = polynomial_zero;
     }
     n_minus_first_root_annulling_polynomial->coefficients[degree_minus_one_size_t] = &rational_one;
-    nth_root_annulling_polynomial->coefficients[degree_minus_one_size_t] =
-        (struct RationalPolynomial*)&polynomial_zero;
+    nth_root_annulling_polynomial->coefficients[degree_minus_one_size_t] = polynomial_zero;
     nth_root_annulling_polynomial->coefficients[degree_size_t] = &rational_polynomial_one;
 
     //The resolvents array, as well as resolvent_multiples_in_terms_of_degree_minus_first_roots and
@@ -149,7 +147,7 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
     struct NestedPolynomial**resolvents =
         ARRAY_ALLOCATE(stack_a, resolvent_count, struct NestedPolynomial*);
     resolvents[0] = polynomial_allocate(stack_a, 2);
-    resolvents[0]->coefficients[0] = (struct RationalPolynomial*)&polynomial_zero;
+    resolvents[0]->coefficients[0] = polynomial_zero;
     resolvents[0]->coefficients[1] = &rational_polynomial_one;
     for (size_t i = 1; i < resolvent_count; ++i)
     {
@@ -173,7 +171,7 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
                 polynomial_allocate(stack_a, generator_power_size_t + 1);
             for (size_t k = 0; k < generator_power_size_t; ++k)
             {
-                resolvent_term->coefficients[k] = (struct RationalPolynomial*)&polynomial_zero;
+                resolvent_term->coefficients[k] = polynomial_zero;
             }
             resolvent_term->coefficients[generator_power_size_t] =
                 polynomial_allocate(stack_a, degree_minus_first_root_exponent + 1);

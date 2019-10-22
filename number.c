@@ -366,8 +366,7 @@ struct Number*number_integer_exponentiate(struct Stack*output_stack, struct Stac
         return out;
     }
     case '+':
-        return generic_exponentiate(&(struct RingOperations){number_copy, 0, 0, &number_one, 0,
-            0, number_generic_multiply}, output_stack, local_stack, base, exponent, 0);
+        return number_exponentiate(output_stack, local_stack, base, exponent);
     default:
         crash("Number operation not recognized.");
     }
