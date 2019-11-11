@@ -7,7 +7,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <windows.h>
+
+#include "os.h"
 
 #ifdef _DEBUG
 #define ASSERT(condition, message) if (!(condition)) { puts(message); abort(); }
@@ -231,6 +232,8 @@ void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t ali
     stack_slot_allocate(stack, (element_count) * sizeof(type), _Alignof(type))
 
 #define POINTER_SWAP(a, b) { void*temp = a; a = b; b = temp; }
+
+void set_page_size();
 
 struct Integer*integer_allocate(struct Stack*output_stack, size_t value_count);
 struct Integer*integer_copy(struct Stack*output_stack, struct Integer*a);
@@ -547,9 +550,6 @@ struct RationalInterval*number_rational_argument_estimate(struct Stack*output_st
 struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b,
     struct Integer*degree);
 
-//Not equal to the OS page size, but instead to whichever of the OS page size and OS allocation
-//granularity is larger so VirtualAlloc never rounds addresses that are multiples of page_size.
-size_t page_size;
 struct Stack permanent_stack;
 struct Stack pi_stack_a;
 struct Stack pi_stack_b;

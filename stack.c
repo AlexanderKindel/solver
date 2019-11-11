@@ -16,12 +16,9 @@ void stack_initialize(struct Stack*out, size_t start, size_t size)
 
 void stack_free(struct Stack*out)
 {
-    while (out->cursor_max > out->start)
-    {
-        out->cursor_max -= page_size;
-        VirtualFree((void*)out->cursor_max, 0, MEM_RELEASE);
-    }
+    DECOMMIT_STACK(out);
     out->cursor = (void*)out->start;
+    out->cursor_max = out->start;
 }
 
 void*array_start(struct Stack*output_stack, size_t alignment)
@@ -38,18 +35,8 @@ void extend_array(struct Stack*output_stack, size_t element_size)
     {
         puts("Insufficient memory allocated for calculation.");
         longjmp(memory_error_buffer, 0);
-        return;
     }
-    while ((size_t)output_stack->cursor > output_stack->cursor_max)
-    {
-        if (!VirtualAlloc((void*)output_stack->cursor_max, page_size, MEM_RESERVE | MEM_COMMIT,
-            PAGE_READWRITE))
-        {
-            puts("Insufficient physical memory for calculation.");
-            longjmp(memory_error_buffer, 0);
-        }
-        output_stack->cursor_max = output_stack->cursor_max + page_size;
-    }
+    COMMIT_MEMORY(output_stack);
 }
 
 void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t alignment)
