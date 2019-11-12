@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct NestedPolynomial*nested_polynomial_euclidean_remainder(struct Stack*output_stack,
     struct Stack*local_stack, struct NestedPolynomial*dividend, struct NestedPolynomial*divisor)

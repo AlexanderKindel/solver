@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 size_t polynomial_size(size_t coefficient_count)
 {

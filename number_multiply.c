@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct RationalPolynomial*product_minimal_polynomial(struct Stack*output_stack,
     struct Stack*local_stack, struct Number*a, struct RationalPolynomial*left_minimal_polynomial,

@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct Rational*rational_copy(struct Stack*output_stack, struct Rational*a)
 {

@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct Number*number_copy(struct Stack*output_stack, struct Number*a)
 {

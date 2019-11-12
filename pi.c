@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct Rational*pi_refine_interval(struct Stack*output_stack, struct Stack*local_stack,
     struct Rational*pi_interval_size)

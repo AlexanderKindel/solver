@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct RationalInterval*number_refine_rational_estimate_interval(
     rational_estimate_getter get_rational_estimate, struct Stack*output_stack,

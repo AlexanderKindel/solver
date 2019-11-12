@@ -1,4 +1,4 @@
-struct IntervalStrings
+﻿struct IntervalStrings
 {
     char*bound_type;//0
     char*bound_type_name;//1

@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct Float*float_copy(struct Stack*output_stack, struct Float*a)
 {

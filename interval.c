@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct RationalInterval*rational_interval_copy(struct Stack*output_stack, struct RationalInterval*a)
 {

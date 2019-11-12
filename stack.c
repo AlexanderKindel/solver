@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 __declspec(noreturn) void crash(char*message)
 {

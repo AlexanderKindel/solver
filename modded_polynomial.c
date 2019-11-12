@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct Integer*integer_residue(struct Stack*output_stack, struct Stack*local_stack,
     struct Integer*a, struct Integer*characteristic)

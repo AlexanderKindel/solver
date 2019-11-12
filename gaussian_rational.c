@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct GaussianRational*gaussian_rational_copy(struct Stack*output_stack, struct GaussianRational*a)
 {

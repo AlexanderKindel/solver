@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct RationalPolynomial*rational_polynomial_integer_multiply(struct Stack*output_stack,
     struct Stack*local_stack, struct RationalPolynomial*a, struct Integer*b)

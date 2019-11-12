@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 //Leaves garbage allocations on local stack along with the new matrix and augmentation values.
 void leaking_matrix_row_echelon_form(struct Stack*output_stack, struct Stack*local_stack,

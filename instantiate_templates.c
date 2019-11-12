@@ -1,4 +1,4 @@
-#include "ring_templates.c"
+﻿#include "ring_templates.c"
 #include "interval_templates.c"
 
 void instantiate_function_template(FILE*file, char*function_template,

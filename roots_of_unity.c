@@ -1,4 +1,4 @@
-#include "declarations.h"
+﻿#include "declarations.h"
 
 struct NestedPolynomial*double_generator_number_multiply(struct Stack*output_stack,
     struct Stack*local_stack, struct NestedPolynomial*a, struct NestedPolynomial*b,
