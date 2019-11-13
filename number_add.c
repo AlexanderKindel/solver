@@ -6,15 +6,15 @@ struct RationalPolynomial*sum_minimal_polynomial(struct Stack*output_stack,
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct NestedPolynomial*power = &nested_polynomial_one;
-    struct NestedPolynomial d = { 2, &(struct RationalPolynomial){2, &rational_zero, &rational_one},
-        &(struct RationalPolynomial){1, &(struct Rational){&INT(1, -), &one}} };
+	struct NestedPolynomial*d = POLY(Nested, 2, POLY(Rational, 2, &rational_zero, &rational_one),
+		POLY(Rational, 1, &(struct Rational) { INT(1, -1), &one }));
     struct NestedPolynomial*t = polynomial_zero;
     for (size_t i = 0; i < left_minimal_polynomial->coefficient_count; ++i)
     {
         t = nested_polynomial_add(local_stack, output_stack, t,
             nested_polynomial_rational_polynomial_multiply(local_stack, output_stack, power,
-                &(struct RationalPolynomial){ 1, left_minimal_polynomial->coefficients[i] }));
-        power = nested_polynomial_multiply(local_stack, output_stack, power, &d);
+				POLY(Rational, 1, left_minimal_polynomial->coefficients[i])));
+        power = nested_polynomial_multiply(local_stack, output_stack, power, d);
     }
     struct RationalPolynomial*out =
         number_minimal_polynomial_from_annulling_polynomial(output_stack, local_stack,
@@ -503,7 +503,7 @@ struct Number*sum_incorporate_term(struct Stack*output_stack, struct Stack*local
     {
         return sum_append_term(output_stack, local_stack, a_terms, a_term_count,
             a_terms_in_terms_of_generator, new_term, a_generator,
-            &(struct RationalPolynomial){1, new_term->value});
+			POLY(Rational, 1, new_term->value));
     }
     void*local_stack_savepoint = local_stack->cursor;
     struct RationalPolynomial*new_term_in_terms_of_a_generator =
@@ -610,8 +610,7 @@ struct Number*number_eliminate_linear_dependencies(struct Stack*output_stack,
         return number_copy(output_stack, a);
     }
     void*local_stack_savepoint = local_stack->cursor;
-    struct RationalPolynomial*x =
-        &(struct RationalPolynomial) { 2, &rational_zero, &rational_one };
+    struct RationalPolynomial*x = POLY(Rational, 2, &rational_zero, &rational_one);
     struct Number*out = a->elements[0];
     for (size_t i = 1; i < a->element_count; ++i)
     {

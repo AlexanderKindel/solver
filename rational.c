@@ -271,9 +271,9 @@ void rational_estimate_cosine(struct Stack*output_stack, struct Stack*local_stac
     void*local_stack_savepoint = local_stack->cursor;
     out->min = &rational_one;
     struct Rational*a_squared = rational_multiply(local_stack, output_stack, a, a);
-    struct Integer*factorial_component = &INT(2, +);
+    struct Integer*factorial_component = INT(2, 1);
     struct Rational*delta =
-        rational_integer_divide(local_stack, output_stack, a_squared, &INT(2, -));
+		rational_integer_divide(local_stack, output_stack, a_squared, INT(2, -1));
     rational_estimate_sine_or_cosine(output_stack, local_stack, out, a_squared, factorial_component,
         delta, interval_size);
     local_stack->cursor = local_stack_savepoint;
@@ -285,9 +285,9 @@ void rational_estimate_sine(struct Stack*output_stack, struct Stack*local_stack,
     void*local_stack_savepoint = local_stack->cursor;
     out->min = a;
     struct Rational*a_squared = rational_multiply(local_stack, output_stack, a, a);
-    struct Integer*factorial_component = &INT(3, +);
+    struct Integer*factorial_component = INT(3, 1);
     struct Rational*delta = rational_integer_divide(local_stack, output_stack,
-        rational_multiply(local_stack, output_stack, a_squared, a), &INT(6, -));
+        rational_multiply(local_stack, output_stack, a_squared, a), INT(6, -1));
     rational_estimate_sine_or_cosine(output_stack, local_stack, out, a_squared, factorial_component,
         delta, interval_size);
     local_stack->cursor = local_stack_savepoint;
@@ -307,7 +307,7 @@ struct RationalInterval*rational_estimate_arctangent(struct Stack*output_stack,
     negative_a_squared->numerator->sign *= -1;
     struct Rational*delta_numerator =
         rational_multiply(local_stack, output_stack, negative_a_squared, a);
-    struct Integer*delta_denominator = &INT(3, +);
+    struct Integer*delta_denominator = INT(3, 1);
     while (true)
     {
         struct Rational*delta =
@@ -331,7 +331,7 @@ struct RationalInterval*rational_estimate_arctangent(struct Stack*output_stack,
         out->min = rational_add(local_stack, output_stack, out->min, delta);
         delta_numerator =
             rational_multiply(local_stack, output_stack, delta_numerator, negative_a_squared);
-        delta_denominator = integer_add(local_stack, delta_denominator, &INT(2, +));
+        delta_denominator = integer_add(local_stack, delta_denominator, INT(2, 1));
     }
 }
 
@@ -341,16 +341,16 @@ struct RationalInterval*rational_estimate_atan2(struct Stack*output_stack, struc
     void*local_stack_savepoint = local_stack->cursor;
     if (x->numerator->sign == 0)
     {
-        struct Integer pi_multiple_numerator;
-        if (y->numerator->sign > 0)
-        {
-            pi_multiple_numerator = one;
-        }
-        else
-        {
-            pi_multiple_numerator = INT(3, +);
-        }
-        struct Rational pi_multiple = { &pi_multiple_numerator, &INT(2, +) };
+		struct Rational pi_multiple;
+		if (y->numerator->sign > 0)
+		{
+			pi_multiple.numerator = &one;
+		}
+		else
+		{
+			pi_multiple.numerator = INT(3, 1);
+		}
+		pi_multiple.denominator = INT(2, 1);
         interval_size = rational_divide(local_stack, output_stack, interval_size, &pi_multiple);
         pi_estimate(interval_size);
         struct RationalInterval*out = ALLOCATE(output_stack, struct RationalInterval);
@@ -364,30 +364,30 @@ struct RationalInterval*rational_estimate_atan2(struct Stack*output_stack, struc
         rational_magnitude(local_stack, ratio), &rational_one);
     if (ratio_magnitude_comparison == 0)
     {
-        struct Integer pi_multiple_numerator;
-        if (x->numerator->sign > 0)
-        {
-            if (y->numerator->sign > 0)
-            {
-                pi_multiple_numerator = one;
-            }
-            else
-            {
-                pi_multiple_numerator = INT(7, +);
-            }
-        }
-        else
-        {
-            if (y->numerator->sign > 0)
-            {
-                pi_multiple_numerator = INT(3, +);
-            }
-            else
-            {
-                pi_multiple_numerator = INT(5, +);
-            }
-        }
-        struct Rational pi_multiple = { &pi_multiple_numerator, &INT(4, +) };
+		struct Rational pi_multiple;
+		if (x->numerator->sign > 0)
+		{
+			if (y->numerator->sign > 0)
+			{
+				pi_multiple.numerator = &one;
+			}
+			else
+			{
+				pi_multiple.numerator = INT(7, 1);
+			}
+		}
+		else
+		{
+			if (y->numerator->sign > 0)
+			{
+				pi_multiple.numerator = INT(3, 1);
+			}
+			else
+			{
+				pi_multiple.numerator = INT(5, 1);
+			}
+		}
+		pi_multiple.denominator = INT(4, 1);
         interval_size = rational_divide(local_stack, output_stack, interval_size, &pi_multiple);
         pi_estimate(interval_size);
         struct RationalInterval*out = ALLOCATE(output_stack, struct RationalInterval);
@@ -396,7 +396,7 @@ struct RationalInterval*rational_estimate_atan2(struct Stack*output_stack, struc
         local_stack->cursor = local_stack_savepoint;
         return out;
     }
-    struct Rational*multiple_of_pi_to_add = &(struct Rational) { &INT(2, +), &one };
+    struct Rational*multiple_of_pi_to_add = &(struct Rational) { INT(2, 1), &one };
     if (x->numerator->sign < 0)
     {
         multiple_of_pi_to_add = &rational_one;
@@ -416,12 +416,12 @@ struct RationalInterval*rational_estimate_atan2(struct Stack*output_stack, struc
         if (ratio->numerator->sign > 0)
         {
             multiple_of_pi_to_add = rational_add(local_stack, output_stack, multiple_of_pi_to_add,
-                &(struct Rational){&one, &INT(2, +)});
+                &(struct Rational) { &one, INT(2, 1) });
         }
         else
         {
             multiple_of_pi_to_add = rational_add(local_stack, output_stack, multiple_of_pi_to_add,
-                &(struct Rational){&INT(1, -), &INT(2, +)});
+                &(struct Rational) { INT(1, -1), INT(2, 1) });
         }
         out = rational_interval_negative(local_stack, output_stack,
             rational_estimate_arctangent(local_stack, output_stack,
@@ -476,7 +476,7 @@ struct FloatInterval*positive_rational_float_estimate(struct Stack*output_stack,
         estimate_denominator = integer_doubled(local_stack, estimate_denominator);
         out_min.significand = integer_add(local_stack, division.quotient,
             integer_doubled(local_stack, out_min.significand));
-        out_min.exponent = integer_add(local_stack, out_min.exponent, &INT(1, -));
+        out_min.exponent = integer_add(local_stack, out_min.exponent, INT(1, -1));
     }
     out->min =
         float_reduced(output_stack, local_stack, out_min.significand, out_min.exponent);

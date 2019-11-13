@@ -5,22 +5,21 @@ struct Rational*pi_refine_interval(struct Stack*output_stack, struct Stack*local
 {
     pi.min = rational_add(output_stack, local_stack, pi.min,
         rational_integer_divide(local_stack, output_stack,
-            rational_subtract(local_stack, output_stack, &(struct Rational){ &INT(4, +),
+            rational_subtract(local_stack, output_stack, &(struct Rational){ INT(4, 1),
                 integer_add(local_stack, pi_eight_k, &one) },
                 rational_add(local_stack, output_stack,
-                    rational_reduced(local_stack, output_stack, &INT(2, +),
-                        integer_add(local_stack, pi_eight_k, &INT(4, +))),
+                    rational_reduced(local_stack, output_stack, INT(2, 1),
+                        integer_add(local_stack, pi_eight_k, INT(4, 1))),
                     rational_add(local_stack, output_stack,
+                        &(struct Rational){ &one, integer_add(local_stack, pi_eight_k, INT(5, 1)) },
                         &(struct Rational){ &one, integer_add(local_stack, pi_eight_k,
-                            &INT(5, +)) },
-                        &(struct Rational){ &one, integer_add(local_stack, pi_eight_k,
-                            &INT(6, +)) }))),
+                            INT(6, 1)) }))),
             pi_sixteen_to_the_k));
     pi_interval_size = rational_multiply(output_stack, local_stack, pi_interval_size,
-        &(struct Rational){ &one, &INT(16, +) });
-    pi_eight_k = integer_add(output_stack, pi_eight_k, &INT(8, +));
+        &(struct Rational){ &one, INT(16, 1) });
+    pi_eight_k = integer_add(output_stack, pi_eight_k, INT(8, 1));
     pi_sixteen_to_the_k =
-        integer_multiply(output_stack, local_stack, pi_sixteen_to_the_k, &INT(16, +));
+		integer_multiply(output_stack, local_stack, pi_sixteen_to_the_k, INT(16, 1));
     local_stack->cursor = (void*)local_stack->start;
     return pi_interval_size;
 }

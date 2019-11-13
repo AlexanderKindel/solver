@@ -65,7 +65,7 @@ void rational_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*lo
         rational_polynomial_to_integer_polynomial(local_stack, output_stack, b, lcm);
     struct PolynomialExtendedGCDInfo info;
     integer_polynomial_extended_gcd(local_stack, output_stack, &info, integer_a, integer_b);
-    struct Rational lcm_reciprocal = { &(struct Integer) { 1, lcm->sign, 1 }, lcm };
+    struct Rational lcm_reciprocal = { INT(1, lcm->sign), lcm };
     lcm_reciprocal.denominator->sign = 1;
     out->gcd = (struct Polynomial*)rational_polynomial_rational_multiply(output_stack, local_stack,
         integer_polynomial_to_rational_polynomial(local_stack, (struct IntegerPolynomial*)info.gcd),
@@ -152,8 +152,8 @@ void rational_polynomial_parameterize_over_segment(struct Stack*output_stack,
 {
     struct GaussianRationalPolynomial*a_at_edge =
         rational_polynomial_evaluate_at_gaussian_rational_polynomial(local_stack, output_stack, a,
-            &(struct GaussianRationalPolynomial){2, endpoint_a,
-                gaussian_rational_subtract(local_stack, output_stack, endpoint_b, endpoint_a)});
+			POLY(GaussianRational, 2, endpoint_a,
+				gaussian_rational_subtract(local_stack, output_stack, endpoint_b, endpoint_a)));
     *out_real = polynomial_allocate(output_stack, a_at_edge->coefficient_count);
     *out_imaginary = polynomial_allocate(output_stack, a_at_edge->coefficient_count);
     for (size_t i = 0; i < a_at_edge->coefficient_count; ++i)

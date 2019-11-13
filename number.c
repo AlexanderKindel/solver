@@ -230,7 +230,7 @@ struct Number*number_reciprocal(struct Stack*output_stack, struct Stack*local_st
         out = number_divide(output_stack, local_stack,
             number_root(local_stack, output_stack,
                 number_integer_exponentiate(local_stack, output_stack, a->radicand,
-                    integer_add(local_stack, a->index, &INT(1, -))), a->index), a->radicand);
+                    integer_add(local_stack, a->index, INT(1, -1))), a->index), a->radicand);
         break;
     case '*':
     {
@@ -416,8 +416,8 @@ struct Number*number_root(struct Stack*output_stack, struct Stack*local_stack, s
                             base->value->numerator,
                             integer_exponentiate(local_stack, output_stack,
                                 base->value->denominator,
-                                integer_add(local_stack, index, &INT(1, -)))), &one}), index),
-                &(struct Rational){&one, base->value->denominator});
+                                integer_add(local_stack, index, INT(1, -1)))), &one}), index),
+                &(struct Rational) { &one, base->value->denominator });
             local_stack->cursor = local_stack_savepoint;
             return out;
         }
@@ -701,7 +701,7 @@ size_t number_string(struct Stack*output_stack, struct Stack*local_stack, struct
         size_t char_count;
         if (a->elements[0]->operation == 'r')
         {
-            if (integer_equals(a->elements[0]->value->numerator, &INT(1, -)))
+            if (integer_equals(a->elements[0]->value->numerator, INT(1, -1)))
             {
                 *(char*)ALLOCATE(output_stack, char) = '-';
                 char_count = 1 + product_string(output_stack, local_stack, a->elements + 1,

@@ -46,7 +46,8 @@ struct Token*get_input(struct Stack*output_number_stack, struct Stack*output_tok
             {
                 token->value->value = integer_add(output_token_stack,
                     integer_multiply(output_token_stack, output_number_stack, token->value->value,
-                        &INT(10, +)), integer_from_char(output_token_stack, next_char));
+						INT(10, 1)),
+					integer_from_char(output_token_stack, next_char));
                 next_char = getchar();
             }
             token->value->value = integer_copy(output_number_stack, token->value->value);

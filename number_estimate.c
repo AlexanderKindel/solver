@@ -57,7 +57,7 @@ struct FloatInterval*number_float_estimate_from_rational(
     struct Stack*local_stack, struct Number*a, struct Rational*interval_size)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    interval_size = rational_integer_divide(local_stack, output_stack, interval_size, &INT(3, +));
+    interval_size = rational_integer_divide(local_stack, output_stack, interval_size, INT(3, 1));
     struct FloatInterval*out = rational_interval_to_float_interval(output_stack, local_stack,
         get_rational_estimate(local_stack, output_stack, a, interval_size), interval_size);
     local_stack->cursor = local_stack_savepoint;
@@ -88,7 +88,7 @@ struct RationalInterval*number_argument_cosine_estimate(struct Stack*output_stac
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct Rational*argument_interval_size =
-        rational_integer_divide(local_stack, output_stack, interval_size, &INT(3, +));
+        rational_integer_divide(local_stack, output_stack, interval_size, INT(3, 1));
     struct RationalInterval*argument_estimate =
         number_argument_estimate(local_stack, output_stack, a, argument_interval_size);
     struct RationalInterval*out = ALLOCATE(output_stack, struct RationalInterval);
@@ -103,7 +103,7 @@ struct RationalInterval*number_argument_cosine_estimate(struct Stack*output_stac
         }
         if (integer_equals(argument_estimate->min->numerator, &one))
         {
-            if (integer_equals(argument_estimate->min->denominator, &INT(2, +)))
+            if (integer_equals(argument_estimate->min->denominator, INT(2, 1)))
             {
                 local_stack->cursor = local_stack_savepoint;
                 out->min = ALLOCATE(output_stack, struct Rational);
@@ -112,7 +112,7 @@ struct RationalInterval*number_argument_cosine_estimate(struct Stack*output_stac
                 out->max = out->min;
                 return out;
             }
-            if (integer_equals(argument_estimate->min->denominator, &INT(4, +)))
+            if (integer_equals(argument_estimate->min->denominator, INT(4, 1)))
             {
                 local_stack->cursor = local_stack_savepoint;
                 out->min = &rational_zero;
@@ -120,8 +120,8 @@ struct RationalInterval*number_argument_cosine_estimate(struct Stack*output_stac
                 return out;
             }
         }
-        else if (integer_equals(argument_estimate->min->numerator, &INT(3, +)) &&
-            integer_equals(argument_estimate->min->denominator, &INT(4, +)))
+        else if (integer_equals(argument_estimate->min->numerator, INT(3, 1)) &&
+            integer_equals(argument_estimate->min->denominator, INT(4, 1)))
         {
             local_stack->cursor = local_stack_savepoint;
             out->min = &rational_zero;
@@ -162,7 +162,7 @@ struct RationalInterval*number_argument_sine_estimate(struct Stack*output_stack,
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct Rational*argument_interval_size =
-        rational_integer_divide(local_stack, output_stack, interval_size, &INT(3, +));
+        rational_integer_divide(local_stack, output_stack, interval_size, INT(3, 1));
     struct RationalInterval*argument_estimate =
         number_argument_estimate(local_stack, output_stack, a, argument_interval_size);
     struct RationalInterval*out = ALLOCATE(output_stack, struct RationalInterval);
@@ -177,14 +177,14 @@ struct RationalInterval*number_argument_sine_estimate(struct Stack*output_stack,
         }
         if (integer_equals(argument_estimate->min->numerator, &one))
         {
-            if (integer_equals(argument_estimate->min->denominator, &INT(2, +)))
+            if (integer_equals(argument_estimate->min->denominator, INT(2, 1)))
             {
                 local_stack->cursor = local_stack_savepoint;
                 out->min = &rational_zero;
                 out->max = &rational_zero;
                 return out;
             }
-            if (integer_equals(argument_estimate->min->denominator, &INT(4, +)))
+            if (integer_equals(argument_estimate->min->denominator, INT(4, 1)))
             {
                 local_stack->cursor = local_stack_savepoint;
                 out->min = &rational_one;
@@ -192,8 +192,8 @@ struct RationalInterval*number_argument_sine_estimate(struct Stack*output_stack,
                 return out;
             }
         }
-        else if (integer_equals(argument_estimate->min->numerator, &INT(3, +)) &&
-            integer_equals(argument_estimate->min->denominator, &INT(4, +)))
+        else if (integer_equals(argument_estimate->min->numerator, INT(3, 1)) &&
+            integer_equals(argument_estimate->min->denominator, INT(4, 1)))
         {
             local_stack->cursor = local_stack_savepoint;
             out->min = ALLOCATE(output_stack, struct Rational);
@@ -226,9 +226,9 @@ struct RationalInterval*number_argument_sine_estimate(struct Stack*output_stack,
     else
     {
         argument_estimate_multiple.min = rational_integer_divide(local_stack, output_stack,
-            argument_estimate_multiple.min, &INT(3, +));
+            argument_estimate_multiple.min, INT(3, 1));
         argument_estimate_multiple.max = rational_integer_divide(local_stack, output_stack,
-            argument_estimate_multiple.max, &INT(3, +));
+            argument_estimate_multiple.max, INT(3, 1));
         pi_shrink_interval_to_one_side_of_value(argument_estimate_multiple.min);
         pi_shrink_interval_to_one_side_of_value(argument_estimate_multiple.max);
         if (rational_compare(output_stack, local_stack, argument_estimate_multiple.min,
@@ -262,7 +262,7 @@ struct RationalInterval*number_rectangular_part_from_polar_form(
     struct RationalInterval*magnitude_estimate =
         number_rational_magnitude_estimate(local_stack, output_stack, a, &rational_one);
     struct Rational*factor_interval_size = rational_divide(local_stack, output_stack, interval_size,
-        rational_integer_add(local_stack, output_stack, magnitude_estimate->max, &INT(2, +)));
+        rational_integer_add(local_stack, output_stack, magnitude_estimate->max, INT(2, 1)));
     magnitude_estimate =
         number_refine_rational_estimate_interval(number_rational_magnitude_estimate, local_stack,
             output_stack, a, magnitude_estimate, factor_interval_size);
@@ -500,7 +500,7 @@ struct FloatInterval*number_rectangular_part_estimate_for_magnitude_estimate(
                 rational_integer_multiply(local_stack, output_stack,
                     rational_interval_max_magnitude(local_stack, output_stack, 
                         part_estimate_getters->rational(local_stack, output_stack, a,
-                            &rational_one)), &INT(4, +)), &INT(2, +))));
+                            &rational_one)), INT(4, 1)), INT(2, 1))));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
@@ -513,7 +513,7 @@ void number_magnitude_estimate_bound_interval(struct Stack*output_stack, struct 
         float_add(local_stack, output_stack,
             float_multiply(local_stack, output_stack, real_part_bound, real_part_bound),
             float_multiply(local_stack, output_stack, imaginary_part_bound, imaginary_part_bound)),
-        interval_size, &INT(2, +));
+        interval_size, INT(2, 1));
 }
 
 struct FloatInterval*number_float_magnitude_estimate(struct Stack*output_stack,
@@ -535,9 +535,9 @@ struct FloatInterval*number_float_magnitude_estimate(struct Stack*output_stack,
             number_float_magnitude_estimate(local_stack, output_stack,
                 a->radicand, rational_integer_divide(local_stack, output_stack,
                     rational_exponentiate(local_stack, output_stack, interval_size, a->index),
-                    &INT(3, +)));
+                    INT(3, 1)));
         interval_size =
-            rational_integer_divide(local_stack, output_stack, interval_size, &INT(3, +));
+			rational_integer_divide(local_stack, output_stack, interval_size, INT(3, 1));
         struct Float*unused_estimate_bound;
         struct FloatInterval*out = ALLOCATE(output_stack, struct FloatInterval);
         float_estimate_root(local_stack, output_stack, &out->min, &unused_estimate_bound,
@@ -581,7 +581,7 @@ struct FloatInterval*number_float_magnitude_estimate(struct Stack*output_stack,
     case '+':
     {
         interval_size =
-            rational_integer_divide(local_stack, output_stack, interval_size, &INT(3, +));
+			rational_integer_divide(local_stack, output_stack, interval_size, INT(3, 1));
         struct FloatInterval*real_part_estimate =
             number_rectangular_part_estimate_for_magnitude_estimate(&real_estimate_getters,
                 local_stack, output_stack, a, interval_size);
@@ -755,7 +755,7 @@ struct RationalInterval*number_argument_estimate(struct Stack*output_stack,
             return out;
         }
         interval_size =
-            rational_integer_divide(local_stack, output_stack, interval_size, &INT(3, +));
+			rational_integer_divide(local_stack, output_stack, interval_size, INT(3, +1));
         struct Rational*imaginary_part_interval_size =
             rational_interval_factor_interval_size(local_stack, output_stack,
                 imaginary_part_estimate, &(struct RationalInterval){

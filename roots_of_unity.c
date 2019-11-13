@@ -101,7 +101,7 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
     size_t*degree_minus_one_factors;
     size_t factor_count =
         size_t_factor(stack_a, stack_b, &degree_minus_one_factors, degree_minus_one_size_t);
-    struct Integer*generator = &INT(2, +);
+    struct Integer*generator = INT(2, 1);
     while (true)
     {
     generator_not_found:
@@ -121,7 +121,7 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
     struct RationalPolynomial*n_minus_first_root_annulling_polynomial =
         polynomial_allocate(stack_a, degree_size_t);
     n_minus_first_root_annulling_polynomial->coefficients[0] =
-        &(struct Rational) { &INT(1, -), &one };
+        &(struct Rational) { INT(1, -1), &one };
     struct NestedPolynomial*nth_root_annulling_polynomial =
         polynomial_allocate(stack_a, degree_size_t + 1);
     nth_root_annulling_polynomial->coefficients[0] = polynomial_allocate(stack_a, 1);
@@ -237,7 +237,7 @@ struct Number**get_roots_of_unity(struct Stack*stack_a, struct Stack*stack_b, st
     struct Number**resolvent_values =
         ARRAY_ALLOCATE(stack_a, degree_minus_one_size_t, struct Number*);
     resolvent_values[0] =
-        number_rational_initialize(stack_a, &(struct Rational){&INT(1, -), &one});
+        number_rational_initialize(stack_a, &(struct Rational) { INT(1, -1), &one });
     resolvent_values[1] =
         number_root(stack_a, stack_b, resolvent_product_values[0], degree_minus_one);
     for (size_t i = 1; i < resolvent_count; ++i)

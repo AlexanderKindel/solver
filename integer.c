@@ -467,7 +467,7 @@ struct Integer*integer_square_root(struct Stack*output_stack, struct Stack*local
     struct Float*float_square_root_min;
     struct Float*float_square_root_max;
     float_estimate_root(local_stack, output_stack, &float_square_root_min, &float_square_root_max,
-        &(struct Float){ a, &zero }, &rational_one, &INT(2, +));
+        &(struct Float){ a, &zero }, &rational_one, INT(2, 1));
     struct Rational*rational_square_root =
         float_to_rational(local_stack, output_stack, float_square_root_max);
     struct Integer*out;

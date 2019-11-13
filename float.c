@@ -54,7 +54,7 @@ struct Float*float_add(struct Stack*output_stack, struct Stack*local_stack, stru
         out = ALLOCATE(output_stack, struct Float);
         out->significand = integer_add(output_stack, b->significand,
             integer_multiply(local_stack, output_stack, a->significand,
-                integer_exponentiate(local_stack, output_stack, &INT(2, +),
+                integer_exponentiate(local_stack, output_stack, INT(2, 1),
                     exponent_difference)));
         out->exponent = integer_copy(output_stack, b->exponent);
     }
@@ -153,7 +153,7 @@ void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, st
     {
         *out_max = float_copy(local_stack, a);
     }
-    struct Integer*index_minus_one = integer_add(local_stack, index, &INT(1, -));
+    struct Integer*index_minus_one = integer_add(local_stack, index, INT(1, -1));
     while (true)
     {
         struct Rational*delta = rational_integer_divide(local_stack, output_stack,
@@ -164,7 +164,7 @@ void float_estimate_root(struct Stack*output_stack, struct Stack*local_stack, st
                 float_to_rational(local_stack, output_stack, *out_max)), index);
         struct FloatInterval*delta_float_estimate =
             rational_float_estimate(local_stack, output_stack, delta,
-                rational_integer_divide(local_stack, output_stack, delta, &INT(2, -)));
+                rational_integer_divide(local_stack, output_stack, delta, INT(2, -1)));
         *out_max = float_add(local_stack, output_stack, *out_max, delta_float_estimate->max);
         if (rational_compare(output_stack, local_stack,
             rational_subtract(local_stack, output_stack,
@@ -187,13 +187,13 @@ struct Rational*float_to_rational(struct Stack*output_stack, struct Stack*local_
     if (a->exponent->sign < 0)
     {
         out->numerator = integer_copy(output_stack, a->significand);
-        out->denominator = integer_exponentiate(output_stack, local_stack, &INT(2, +),
+        out->denominator = integer_exponentiate(output_stack, local_stack, INT(2, 1),
             integer_magnitude(local_stack, a->exponent));
     }
     else
     {
         out->numerator = integer_multiply(output_stack, local_stack,
-            integer_exponentiate(local_stack, output_stack, &INT(2, +), a->exponent),
+            integer_exponentiate(local_stack, output_stack, INT(2, 1), a->exponent),
             a->significand);
         out->denominator = &one;
     }

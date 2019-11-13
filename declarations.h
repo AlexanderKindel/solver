@@ -233,6 +233,31 @@ void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t ali
 
 #define POINTER_SWAP(a, b) { void*temp = a; a = b; b = temp; }
 
+struct SmallInteger
+{
+	size_t value_count;
+	int8_t sign;
+	uint32_t value;
+};
+
+#define INT(value, sign) (struct Integer*)&(struct SmallInteger){ 1, sign, value }
+
+struct Poly1
+{
+	size_t coefficient_count;
+	void*coefficients[1];
+};
+
+struct Poly2
+{
+	size_t coefficient_count;
+	void*coefficients[2];
+};
+
+#define POLY(coefficient_type, coefficient_count, ...)\
+(struct coefficient_type ## Polynomial*)&(struct Poly ## coefficient_count)\
+{ coefficient_count, { __VA_ARGS__ }}
+
 void set_page_size();
 
 struct Integer*integer_allocate(struct Stack*output_stack, size_t value_count);
@@ -270,8 +295,6 @@ size_t size_t_factor(struct Stack*output_stack, struct Stack*local_stack, size_t
 size_t integer_factor(struct Stack*output_stack, struct Stack*local_stack, struct Factor**out,
     struct Integer*a);
 size_t integer_string(struct Stack*output_stack, struct Stack*local_stack, struct Integer*a);
-
-#define INT(value, sign) (struct Integer){ 1, sign 1, value }
 
 struct Rational*rational_copy(struct Stack*output_stack, struct Rational*a);
 struct Rational*rational_reduced(struct Stack*output_stack, struct Stack*local_stack,

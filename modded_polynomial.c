@@ -146,7 +146,7 @@ size_t cantor_zassenhaus_split(struct Stack*output_stack, struct Stack*local_sta
         return 1;
     }
     struct IntegerPolynomial*b;
-    if (integer_equals(characteristic, &INT(2, +)))
+    if (integer_equals(characteristic, INT(2, 1)))
     {
         struct IntegerPolynomial*x_squared = polynomial_allocate(local_stack, 3);
         x_squared->coefficients[0] = &zero;
@@ -174,7 +174,7 @@ size_t cantor_zassenhaus_split(struct Stack*output_stack, struct Stack*local_sta
     }
     else
     {
-        struct Integer*p_minus_one = integer_add(local_stack, characteristic, &INT(1, -));
+        struct Integer*p_minus_one = integer_add(local_stack, characteristic, INT(1, -1));
         struct IntegerPolynomial*t = polynomial_allocate(local_stack, 2 * degree);
         for (size_t i = 0; i < t->coefficient_count - 1; ++i)
         {
@@ -184,7 +184,7 @@ size_t cantor_zassenhaus_split(struct Stack*output_stack, struct Stack*local_sta
         struct Integer*power = integer_add(local_stack,
             integer_exponentiate(local_stack, output_stack, characteristic,
                 integer_from_size_t(local_stack, degree)),
-            &INT(1, -));
+			INT(1, -1));
         integer_halve(power);
         while (true)
         {
@@ -201,7 +201,7 @@ size_t cantor_zassenhaus_split(struct Stack*output_stack, struct Stack*local_sta
             {
                 if (t->coefficients[i]->value_count)
                 {
-                    t->coefficients[i] = integer_add(local_stack, t->coefficients[i], &INT(1, -));
+                    t->coefficients[i] = integer_add(local_stack, t->coefficients[i], INT(1, -1));
                     break;
                 }
                 if (i == 0)

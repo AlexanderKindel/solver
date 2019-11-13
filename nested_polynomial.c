@@ -192,8 +192,9 @@ size_t number_field_polynomial_factor(struct Stack*output_stack, struct Stack*lo
                     {
                         e = nested_polynomial_add(local_stack, output_stack, e,
                             nested_polynomial_rational_polynomial_multiply(local_stack,
-                                output_stack, power, &(struct RationalPolynomial){1,
-                                &(struct Rational){resultant_factors[j]->coefficients[k], &one}}));
+                                output_stack, power,
+                                POLY(Rational, 1,
+                                    &(struct Rational) {resultant_factors[j]->coefficients[k], &one })));
                         power = number_field_polynomial_multiply(local_stack, output_stack, power,
                             d, generator_minimal_polynomial);
                     }
