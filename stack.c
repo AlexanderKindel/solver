@@ -1,4 +1,4 @@
-﻿#include "declarations.h"
+#include "declarations.h"
 
 __declspec(noreturn) void crash(char*message)
 {
@@ -14,7 +14,7 @@ void stack_initialize(struct Stack*out, size_t start, size_t size)
     out->cursor_max = out->start;
 }
 
-void stack_free(struct Stack*out)
+void stack_reset(struct Stack*out)
 {
     DECOMMIT_STACK(out);
     out->cursor = (void*)out->start;
@@ -36,7 +36,11 @@ void extend_array(struct Stack*output_stack, size_t element_size)
         puts("Insufficient memory allocated for calculation.");
         longjmp(memory_error_buffer, 0);
     }
-    COMMIT_MEMORY(output_stack);
+    while ((size_t)output_stack->cursor > output_stack->cursor_max)
+    {
+        COMMIT_PAGE((void*)output_stack->cursor_max);
+        output_stack->cursor_max = output_stack->cursor_max + page_size;
+    }
 }
 
 void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t alignment)

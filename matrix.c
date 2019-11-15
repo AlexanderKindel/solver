@@ -1,10 +1,18 @@
-﻿#include "declarations.h"
+#include "declarations.h"
 
 //Leaves garbage allocations on local stack along with the new matrix and augmentation values.
 void leaking_matrix_row_echelon_form(struct Stack*output_stack, struct Stack*local_stack,
     struct Matrix*a, struct Rational**augmentation)
 {
-    size_t small_dimension = min(a->width, a->height);
+    size_t small_dimension;
+    if (a->width < a->height)
+    {
+        small_dimension = a->width;
+    }
+    else
+    {
+        small_dimension = a->height;
+    }
     for (size_t i = 0; i < small_dimension; ++i)
     {
         for (size_t j = i + 1; j < a->height; ++j)

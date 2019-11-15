@@ -1,4 +1,4 @@
-﻿#include "declarations.h"
+#include "declarations.h"
 
 struct RationalPolynomial*product_minimal_polynomial(struct Stack*output_stack,
     struct Stack*local_stack, struct Number*a, struct RationalPolynomial*left_minimal_polynomial,
@@ -85,6 +85,7 @@ struct Number*number_rational_multiply(struct Stack*output_stack,
         out->elements[1] = number_copy(output_stack, a);
         break;
     case '*':
+    {
         size_t factors_to_copy_count;
         if (a->elements[0]->operation == 'r')
         {
@@ -128,6 +129,7 @@ struct Number*number_rational_multiply(struct Stack*output_stack,
                 number_copy(output_stack, a->elements[a->element_count - i]);
         }
         break;
+    }
     case '+':
         out = ALLOCATE(output_stack, struct Number);
         out->operation = a->operation;

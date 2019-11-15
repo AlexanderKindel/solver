@@ -1,6 +1,7 @@
-﻿#ifndef DECLARATIONS_H
+#ifndef DECLARATIONS_H
 #define DECLARATIONS_H
 
+#include <ctype.h>
 #include <setjmp.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -221,7 +222,7 @@ struct EstimateGetters
 
 __declspec(noreturn) void crash(char*message);
 void stack_initialize(struct Stack*out, size_t start, size_t size);
-void stack_free(struct Stack*out);
+void stack_reset(struct Stack*out);
 void*array_start(struct Stack*output_stack, size_t alignment);
 void extend_array(struct Stack*output_stack, size_t element_size);
 void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t alignment);

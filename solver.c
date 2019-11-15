@@ -1,4 +1,4 @@
-﻿#include "declarations.h"
+#include "declarations.h"
 #include "template_instantiations.c"
 #include "stack.c"
 #include "integer.c"
@@ -32,6 +32,8 @@ struct Token*get_input(struct Stack*output_number_stack, struct Stack*output_tok
     }
     struct Token*out = ALLOCATE(output_token_stack, struct Token);
     struct Token*token = out;
+    token->previous = 0;
+    token->next = 0;
     while (true)
     {
         if (isdigit(next_char))
@@ -66,14 +68,15 @@ struct Token*get_input(struct Stack*output_number_stack, struct Stack*output_tok
             case ')':
                 break;
             default:
-                putc(next_char, stdout);
-                puts(" is an invalid character.");
+                printf("'%c' is an invalid character.\n", next_char);
                 while (getchar() != '\n')
                 {}
                 return 0;
             }
             token->is_parsed = false;
             token->value = ALLOCATE(output_number_stack, struct UnevaluatedNumber);
+            token->value->left = 0;
+            token->value->right = 0;
             token->value->operation = next_char;
             next_char = getchar();
         }
@@ -102,8 +105,7 @@ bool parse_binary_operation(struct Token*a, char operation)
     }
     if (!a->previous || !a->previous->is_parsed)
     {
-        putc(operation, stdout);
-        puts(" missing left operand.");
+        printf("%c missing left operand.\n", operation);
         return false;
     }
     if (a->next && a->next->is_parsed)
@@ -124,8 +126,7 @@ bool parse_binary_operation(struct Token*a, char operation)
     }
     else
     {
-        putc(operation, stdout);
-        puts(" missing right operand.");
+        printf("%c missing right operand.\n", operation);
         return false;
     }
     return true;
@@ -410,7 +411,7 @@ void init_permanent_memory()
     roots_of_unity[0] = &number_one;
     roots_of_unity[1] = &number_one;
     roots_of_unity[2] = number_rational_initialize(&permanent_stack,
-        &(struct Rational){integer_initialize(&permanent_stack, 1, -1), &one});
+        &(struct Rational){ integer_initialize(&permanent_stack, 1, -1), &one });
     primes[0] = integer_initialize(&permanent_stack, 2, 1);
     primes[1] = integer_initialize(&permanent_stack, 3, 1);
     pi.min = ALLOCATE(&pi_stack_a, struct Rational);
@@ -429,9 +430,10 @@ void init(struct Stack*stack_a, struct Stack*stack_b)
     void*base_address = RESERVE_MEMORY(UINT32_MAX);
     stack_initialize(&pi_stack_a, (size_t)base_address, page_size);
     stack_initialize(&pi_stack_b, pi_stack_a.end, page_size);
-    primes = VirtualAlloc((void*)pi_stack_b.end, page_size, MEM_COMMIT, PAGE_READWRITE);
-    roots_of_unity =
-        VirtualAlloc((void*)(pi_stack_b.end + page_size), page_size, MEM_COMMIT, PAGE_READWRITE);
+    primes = (struct Integer**)pi_stack_b.end;
+    COMMIT_PAGE(primes);
+    roots_of_unity = (struct Number**)(pi_stack_b.end + page_size);
+    COMMIT_PAGE(roots_of_unity);
     size_t arena_size = page_size * ((UINT32_MAX - 4 * page_size) / (3 * page_size));
     size_t permanent_stack_start = pi_stack_b.end + 2 * page_size;
     stack_initialize(&permanent_stack, permanent_stack_start, arena_size);
@@ -442,9 +444,9 @@ void init(struct Stack*stack_a, struct Stack*stack_b)
 
 void reset_permanent_memory()
 {
-    stack_free(&pi_stack_a);
-    stack_free(&pi_stack_b);
-    stack_free(&permanent_stack);
+    stack_reset(&pi_stack_a);
+    stack_reset(&pi_stack_b);
+    stack_reset(&permanent_stack);
     memset(primes, 0, page_size);
     memset(roots_of_unity, 0, page_size);
     init_permanent_memory();
@@ -489,6 +491,7 @@ int main()
                         times->value->operation = '*';
                         times->previous = token;
                         times->next = token->next;
+                        times->is_parsed = false;
                         token->next->previous = times;
                         token->next = times;
                     }
@@ -516,7 +519,7 @@ int main()
             }
         }
         puts("");
-        stack_free(&stack_a);
-        stack_free(&stack_b);
+        stack_reset(&stack_a);
+        stack_reset(&stack_b);
     }
 }

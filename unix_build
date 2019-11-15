@@ -1,0 +1,4 @@
+#!/bin/bash
+clang -o instantiate_templates instantiate_templates.c
+./instantiate_templates
+clang -fdeclspec -o solver -O3 solver.c

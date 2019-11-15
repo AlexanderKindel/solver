@@ -1,4 +1,4 @@
-﻿#include "declarations.h"
+#include "declarations.h"
 
 struct Integer*integer_residue(struct Stack*output_stack, struct Stack*local_stack,
     struct Integer*a, struct Integer*characteristic)
@@ -233,9 +233,9 @@ size_t squarefree_modded_polynomial_factor(struct Stack*output_stack, struct Sta
 {
     void*local_stack_savepoint = local_stack->cursor;
     size_t factor_count = 0;
-    struct IntegerPolynomial x = { 2, &zero, &one };
+    struct IntegerPolynomial*x = POLY(Integer, 2, &zero, &one);
     struct IntegerPolynomial*v = a;
-    struct IntegerPolynomial*w = &x;
+    struct IntegerPolynomial*w = x;
     size_t d = 0;
     while (2 * d + 2 < a->coefficient_count)
     {
@@ -246,7 +246,7 @@ size_t squarefree_modded_polynomial_factor(struct Stack*output_stack, struct Sta
             a, characteristic);
         struct IntegerPolynomial*degree_d_factor_product =
             modded_polynomial_gcd(local_stack, output_stack,
-                modded_polynomial_subtract(local_stack, output_stack, w, &x, characteristic),
+                modded_polynomial_subtract(local_stack, output_stack, w, x, characteristic),
                 v, characteristic);
         if (degree_d_factor_product->coefficient_count > 1)
         {

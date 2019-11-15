@@ -1,4 +1,4 @@
-﻿#include "declarations.h"
+#include "declarations.h"
 
 size_t integer_size(size_t value_count)
 {
@@ -608,11 +608,11 @@ size_t integer_string(struct Stack*output_stack, struct Stack*local_stack, struc
     char*buffer_start = stack_slot_allocate(output_stack, 10 * a->value_count + 1, 1);
     char*next_char = output_stack->cursor;
     struct Integer*quotient = a;
-    struct Integer power = { 1, 1, 10 };
+    struct Integer*ten = INT(10, 1);
     while (quotient->sign != 0)
     {
         struct IntegerDivision division;
-        integer_euclidean_divide(local_stack, output_stack, &division, quotient, &power);
+        integer_euclidean_divide(local_stack, output_stack, &division, quotient, ten);
         quotient = division.quotient;
         next_char -= 1;
         if (division.remainder->sign != 0)
