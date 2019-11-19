@@ -111,9 +111,9 @@ bool integer_equals_zero(struct Integer*a)
     return a->value_count == 0;
 }
 
-struct Integer*integer_magnitude(void*output_arena, struct Integer*a)
+struct Integer*integer_magnitude(struct Stack*output_stack, struct Integer*a)
 {
-    struct Integer*out = integer_copy(output_arena, a);
+    struct Integer*out = integer_copy(output_stack, a);
     if (out->sign < 0)
     {
         out->sign = 1;

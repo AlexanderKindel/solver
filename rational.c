@@ -11,11 +11,7 @@ struct Rational*rational_copy(struct Stack*output_stack, struct Rational*a)
 struct Rational*rational_reduced(struct Stack*output_stack, struct Stack*local_stack,
     struct Integer*numerator, struct Integer*denominator)
 {
-    if (denominator->sign == 0)
-    {
-        puts("Tried to divide by 0.");
-        return 0;
-    }
+	ASSERT(denominator->value_count, "rational_reduced denominator was 0.");
     struct Rational*out = ALLOCATE(output_stack, struct Rational);
     if (numerator->sign == 0)
     {
@@ -25,13 +21,11 @@ struct Rational*rational_reduced(struct Stack*output_stack, struct Stack*local_s
     }
     void*local_stack_savepoint = local_stack->cursor;
     struct ExtendedGCDInfo gcd_info;
-    integer_extended_gcd(local_stack, output_stack, &gcd_info, numerator, denominator);
-    out->numerator = gcd_info.a_over_gcd;
-    out->denominator = gcd_info.b_over_gcd;
+    leaking_integer_extended_gcd(output_stack, local_stack, &gcd_info, numerator, denominator);
+    out->numerator = integer_copy(output_stack, gcd_info.a_over_gcd);
+    out->denominator = integer_copy(output_stack, gcd_info.b_over_gcd);
     out->numerator->sign *= out->denominator->sign;
     out->denominator->sign *= out->denominator->sign;
-    out->numerator = integer_copy(output_stack, out->numerator);
-    out->denominator = integer_copy(output_stack, out->denominator);
     local_stack->cursor = local_stack_savepoint;
     return out;
 }

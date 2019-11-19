@@ -312,13 +312,14 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
         while (integer_compare(output_stack, local_stack, lift_characteristic,
             characteristic_power) < 0)
         {
+			void*output_stack_savepoint = output_stack->cursor;
             struct IntegerPolynomial*b_mod_prime =
                 modded_polynomial_reduced(local_stack, output_stack, b, characteristic);
             struct IntegerPolynomial*c_mod_prime =
                 modded_polynomial_reduced(local_stack, output_stack, c, characteristic);
             struct ExtendedGCDInfo gcd_info;
-            modded_polynomial_extended_gcd(local_stack, output_stack, &gcd_info, b_mod_prime,
-                c_mod_prime, characteristic);
+			leaking_modded_polynomial_extended_gcd(local_stack, output_stack, &gcd_info,
+				b_mod_prime, c_mod_prime, characteristic);
             struct Integer*reciprocal = modded_integer_reciprocal(local_stack, output_stack,
                 ((struct IntegerPolynomial*)gcd_info.gcd)->coefficients[0], characteristic);
             gcd_info.a_coefficient = modded_polynomial_modded_integer_multiply(local_stack,
@@ -351,6 +352,7 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
                     lift_characteristic));
             lift_characteristic =
                 integer_multiply(local_stack, output_stack, lift_characteristic, characteristic);
+			output_stack->cursor = output_stack_savepoint;
         }
         lifted_factors[lifted_factor_count] = b;
         ++lifted_factor_count;

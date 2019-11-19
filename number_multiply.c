@@ -199,14 +199,16 @@ struct Number*factor_consolidate(struct Stack*output_stack, struct Stack*local_s
         return 0;
     }
     void*local_stack_savepoint = local_stack->cursor;
+	void*output_stack_savepoint = output_stack->cursor;
     struct ExtendedGCDInfo info;
-    integer_extended_gcd(local_stack, output_stack, &info, a->index, b->index);
+    leaking_integer_extended_gcd(local_stack, output_stack, &info, a->index, b->index);
     struct Integer*product_index = integer_euclidean_quotient(local_stack, output_stack,
         integer_multiply(local_stack, output_stack, a->index, b->index), info.gcd);
     struct Number*radicand_factor_a = number_integer_exponentiate(local_stack, output_stack,
         a->radicand, integer_magnitude(local_stack, info.b_over_gcd));
     struct Number*radicand_factor_b = number_integer_exponentiate(local_stack, output_stack,
         b->radicand, integer_magnitude(local_stack, info.a_over_gcd));
+	output_stack->cursor = output_stack_savepoint;
     struct RationalInterval*radicand_factor_a_argument_estimate =
         number_rational_argument_estimate(local_stack, output_stack, radicand_factor_a,
             &rational_one);

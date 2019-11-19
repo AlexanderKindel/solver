@@ -61,8 +61,11 @@ struct Integer*modded_integer_reciprocal(struct Stack*output_stack, struct Stack
     struct Integer*a, struct Integer*characteristic)
 {
     void*local_stack_savepoint = local_stack->cursor;
+	void*output_stack_savepoint = output_stack->cursor;
     struct ExtendedGCDInfo info;
-    integer_extended_gcd(local_stack, output_stack, &info, a, characteristic);
+    leaking_integer_extended_gcd(local_stack, output_stack, &info, a, characteristic);
+	info.a_coefficient = integer_copy(local_stack, info.a_coefficient);
+	output_stack->cursor = output_stack_savepoint;
     struct Integer*out;
     if (((struct Integer*)info.a_coefficient)->sign < 0)
     {

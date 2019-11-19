@@ -602,9 +602,9 @@ char*gcd_template =
 "}\n";
 
 char*extended_gcd_template =
-"void %01_extended_gcd(struct Stack*output_stack, struct Stack*local_stack, struct ExtendedGCDInfo*out, struct %02*a, struct %02*b#00, struct %22*%00#)\n"
+"void leaking_%01_extended_gcd(struct Stack*output_stack, struct Stack*local_stack, struct ExtendedGCDInfo*out, struct %02*a, struct %02*b#00, struct %22*%00#)\n"
 "{\n"
-"    void*local_stack_savepoint = local_stack->cursor;\n"
+"    out->gcd = b;\n"
 "    out->a_coefficient = %04;\n"
 "    out->b_coefficient = %05;\n"
 "    out->a_over_gcd = %04;\n"
@@ -612,24 +612,19 @@ char*extended_gcd_template =
 "    while (!%03_equals(a, %04))\n"
 "    {\n"
 "        struct %02Division division;\n"
-"        %0;(local_stack, output_stack, &division, b, a#00, %00#);\n"
+"        %0;(local_stack, output_stack, &division, out->gcd, a#00, %00#);\n"
 "        struct %02*m = %08(local_stack, output_stack, out->a_coefficient,\n"
 "            %09(local_stack, output_stack, out->b_over_gcd, division.quotient#00, %00#)#01, %00#);\n"
 "        struct %02*n = %08(local_stack, output_stack, out->b_coefficient,\n"
 "            %09(local_stack, output_stack, out->a_over_gcd, division.quotient#00, %00#)#01, %00#);\n"
-"        b = a;\n"
+"        out->gcd = a;\n"
 "        a = division.remainder;\n"
 "        out->a_coefficient = out->b_over_gcd;\n"
 "        out->b_coefficient = out->a_over_gcd;\n"
 "        out->b_over_gcd = m;\n"
 "        out->a_over_gcd = n;\n"
 "    }\n"
-"    out->a_coefficient = %03_copy(output_stack, out->a_coefficient);\n"
-"    out->a_over_gcd = %03_copy(output_stack, out->a_over_gcd);\n"
-"    out->b_coefficient = %03_copy(output_stack, out->b_coefficient);\n"
-"    out->b_over_gcd = %07(output_stack#01, local_stack#, out->b_over_gcd#01, %00#);\n"
-"    out->gcd = %03_copy(output_stack, b);\n"
-"    local_stack->cursor = local_stack_savepoint;\n"
+"    out->b_over_gcd = %07(local_stack#01, output_stack#, out->b_over_gcd#01, %00#);\n"
 "}\n";
 
 char*polynomial_content_template =
