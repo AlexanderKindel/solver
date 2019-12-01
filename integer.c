@@ -1,33 +1,34 @@
 #include "declarations.h"
 
-size_t integer_size(size_t value_count)
+size_t integer_get_size(size_t value_count)
 {
     return sizeof(struct Integer) + value_count * sizeof(uint32_t);
 }
 
 struct Integer*integer_allocate(struct Stack*output_stack, size_t value_count)
 {
-    return stack_slot_allocate(output_stack, integer_size(value_count), _Alignof(struct Integer));
+    return stack_slot_allocate(output_stack, integer_get_size(value_count),
+        _Alignof(struct Integer));
 }
 
 struct Integer*integer_copy(struct Stack*output_stack, struct Integer*a)
 {
-    size_t size = integer_size(a->value_count);
+    size_t size = integer_get_size(a->value_count);
     struct Integer*out = stack_slot_allocate(output_stack, size, _Alignof(struct Integer));
     memcpy(out, a, size);
     return out;
 }
 
-struct Integer*integer_initialize(struct Stack*stack, uint32_t value, int8_t sign)
+struct Integer*integer_initialize(struct Stack*output_stack, uint32_t value, int8_t sign)
 {
-    struct Integer*out = integer_allocate(stack, 1);
+    struct Integer*out = integer_allocate(output_stack, 1);
     out->value_count = 1;
     out->sign = sign;
     out->value[0] = value;
     return out;
 }
 
-struct Integer*integer_from_char(struct Stack*output_stack, char value)
+struct Integer*char_to_integer(struct Stack*output_stack, char value)
 {
     uint32_t uint_value = value - '0';
     if (uint_value)
@@ -58,7 +59,7 @@ void integer_trim_leading_zeroes(struct Integer*a)
     a->sign = 0;
 }
 
-struct Integer*integer_from_size_t(struct Stack*output_stack, size_t value)
+struct Integer*size_t_to_integer(struct Stack*output_stack, size_t value)
 {
     size_t value_count = sizeof(size_t) / sizeof(uint32_t);
     struct Integer*out = integer_allocate(output_stack, value_count);
@@ -106,12 +107,7 @@ bool integer_equals(struct Integer*a, struct Integer*b)
     return true;
 }
 
-bool integer_equals_zero(struct Integer*a)
-{
-    return a->value_count == 0;
-}
-
-struct Integer*integer_magnitude(struct Stack*output_stack, struct Integer*a)
+struct Integer*integer_get_magnitude(struct Stack*output_stack, struct Integer*a)
 {
     struct Integer*out = integer_copy(output_stack, a);
     if (out->sign < 0)
@@ -139,7 +135,7 @@ void calculate_sum_values(struct Integer*short_integer, struct Integer*sum)
     }
 }
 
-void twos_complement(struct Integer*a)
+void integer_get_twos_complement(struct Integer*a)
 {
     for (size_t i = 0; i < a->value_count; ++i)
     {
@@ -162,7 +158,7 @@ void twos_complement(struct Integer*a)
 
 //Assumes that, at a->values, there is enough allocated but unused memory for a->value_count to
 //increase to max(a->value_count, b->value_count) + 1.
-void integer_add_to_a_in_place(struct Integer*a, struct Integer*b)
+void integer_add_to_a_in_place(struct Integer*restrict a, struct Integer*restrict b)
 {
     if (b->sign == 0)
     {
@@ -170,7 +166,7 @@ void integer_add_to_a_in_place(struct Integer*a, struct Integer*b)
     }
     if (a->sign == 0)
     {
-        memcpy(a, b, integer_size(b->value_count));
+        memcpy(a, b, integer_get_size(b->value_count));
         return;
     }
     if (a->value_count < b->value_count)
@@ -191,11 +187,11 @@ void integer_add_to_a_in_place(struct Integer*a, struct Integer*b)
     else
     {
         a->sign = b->sign;
-        twos_complement(a);
+        integer_get_twos_complement(a);
         calculate_sum_values(b, a);
         if (a->value[a->value_count - 1] != 0)
         {
-            twos_complement(a);
+            integer_get_twos_complement(a);
             a->sign *= -1;
         }
     }
@@ -212,29 +208,29 @@ struct Integer*integer_add(struct Stack*output_stack, struct Integer*a, struct I
     return out;
 }
 
-struct Integer*integer_negative(struct Stack*output_stack, struct Integer*a)
+struct Integer*integer_negate(struct Stack*output_stack, struct Integer*a)
 {
     struct Integer*out = integer_copy(output_stack, a);
     out->sign = -out->sign;
     return out;
 }
 
-struct Integer*integer_subtract(struct Stack*output_stack, struct Stack*local_stack,
-    struct Integer*minuend, struct Integer*subtrahend)
+struct Integer*integer_subtract(struct Stack*restrict output_stack,
+	struct Stack*restrict local_stack, struct Integer*minuend, struct Integer*subtrahend)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct Integer*out =
-        integer_add(output_stack, minuend, integer_negative(local_stack, subtrahend));
+        integer_add(output_stack, minuend, integer_negate(local_stack, subtrahend));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
 
-struct Integer*integer_multiply(struct Stack*output_stack, struct Stack*local_stack,
-    struct Integer*a, struct Integer*b)
+struct Integer*integer_multiply(struct Stack*restrict output_stack,
+	struct Stack*restrict local_stack, struct Integer*a, struct Integer*b)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct Integer*out = stack_slot_allocate(output_stack,
-        integer_size(a->value_count + b->value_count), _Alignof(struct Integer));
+        integer_get_size(a->value_count + b->value_count), _Alignof(struct Integer));
     out->value_count = 0;
     out->sign = 0;
     for (int i = 0; i < a->value_count; ++i)
@@ -286,7 +282,7 @@ void integer_downshift(struct Integer*a, uint8_t shift)
     a->value[a->value_count - 1] = a->value[a->value_count - 1] >> shift;
 }
 
-size_t leading_digit_place(struct Integer*a)
+size_t get_leading_digit_place(struct Integer*a)
 {
     if (!a->value_count)
     {
@@ -306,11 +302,11 @@ size_t leading_digit_place(struct Integer*a)
     }
 }
 
-void integer_euclidean_divide(struct Stack*output_stack, struct Stack*local_stack,
+void integer_euclidean_divide(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
     struct IntegerDivision*out, struct Integer*dividend, struct Integer*divisor)
 {
-    size_t dividend_leading_digit_place = leading_digit_place(dividend);
-    size_t divisor_leading_digit_place = leading_digit_place(divisor);
+    size_t dividend_leading_digit_place = get_leading_digit_place(dividend);
+    size_t divisor_leading_digit_place = get_leading_digit_place(divisor);
     if (dividend->value_count > divisor->value_count ||
         (dividend->value_count == divisor->value_count &&
             dividend_leading_digit_place >= divisor_leading_digit_place))
@@ -345,7 +341,7 @@ void integer_euclidean_divide(struct Stack*output_stack, struct Stack*local_stac
         out->quotient->value_count = dividend->value_count;
         out->quotient->sign = dividend->sign * divisor->sign;
         memset(&out->quotient->value, 0, out->quotient->value_count * sizeof(uint32_t));
-        out->remainder = integer_magnitude(local_stack, dividend);
+        out->remainder = integer_get_magnitude(local_stack, dividend);
         while (true)
         {
             for (int i = 32; i > 0; --i)
@@ -370,7 +366,7 @@ void integer_euclidean_divide(struct Stack*output_stack, struct Stack*local_stac
                 {
                     quotient_digit = quotient_digit >> 1;
                 }
-                integer_halve(divisor_magnitude);
+                integer_halve_in_place(divisor_magnitude);
             }
         }
         break_both_loops:
@@ -390,23 +386,23 @@ void integer_euclidean_divide(struct Stack*output_stack, struct Stack*local_stac
     }
 }
 
-struct Integer*integer_euclidean_quotient(struct Stack*output_stack, struct Stack*local_stack,
-    struct Integer*dividend, struct Integer*divisor)
+struct Integer*integer_get_quotient(struct Stack*restrict output_stack,
+	struct Stack*restrict local_stack, struct Integer*dividend, struct Integer*divisor)
 {
     struct IntegerDivision division;
     integer_euclidean_divide(output_stack, local_stack, &division, dividend, divisor);
     return division.quotient;
 }
 
-struct Integer*integer_euclidean_remainder(struct Stack*output_stack, struct Stack*local_stack,
-    struct Integer*dividend, struct Integer*divisor)
+struct Integer*integer_get_remainder(struct Stack*restrict output_stack,
+	struct Stack*restrict local_stack, struct Integer*dividend, struct Integer*divisor)
 {
     struct IntegerDivision division;
     integer_euclidean_divide(output_stack, local_stack, &division, dividend, divisor);
     return division.remainder;
 }
 
-struct Integer*integer_doubled(struct Stack*output_stack, struct Integer*a)
+struct Integer*integer_double(struct Stack*output_stack, struct Integer*a)
 {
     struct Integer*out;
     if (a->value[a->value_count - 1] & 0x80000000)
@@ -426,42 +422,42 @@ struct Integer*integer_doubled(struct Stack*output_stack, struct Integer*a)
     return out;
 }
 
-void integer_halve(struct Integer*a)
+void integer_halve_in_place(struct Integer*a)
 {
     integer_downshift(a, 1);
     integer_trim_leading_zeroes(a);
 }
 
-struct Integer*integer_half(struct Stack*output_stack, struct Integer*a)
+struct Integer*integer_halve(struct Stack*output_stack, struct Integer*a)
 {
     struct Integer*out = integer_copy(output_stack, a);
-    integer_halve(out);
+    integer_halve_in_place(out);
     return out;
 }
 
-int8_t integer_compare(struct Stack*stack_a, struct Stack*stack_b, struct Integer*a,
-    struct Integer*b)
+int8_t integer_compare(struct Stack*restrict local_stack_a, struct Stack*restrict local_stack_b,
+    struct Integer*a, struct Integer*b)
 {
-    void*stack_a_savepoint = stack_a->cursor;
-    int8_t out = integer_subtract(stack_a, stack_b, a, b)->sign;
-    stack_a->cursor = stack_a_savepoint;
+    void*local_stack_a_savepoint = local_stack_a->cursor;
+    int8_t out = integer_subtract(local_stack_a, local_stack_b, a, b)->sign;
+    local_stack_a->cursor = local_stack_a_savepoint;
     return out;
 }
 
-struct Integer*integer_lcm(struct Stack*output_stack, struct Stack*local_stack, struct Integer*a,
-    struct Integer*b)
+struct Integer*integer_get_lcm(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Integer*a, struct Integer*b)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct Integer*out = integer_multiply(output_stack, local_stack,
-        integer_euclidean_quotient(local_stack, output_stack, a,
-            integer_gcd(local_stack, output_stack, a, b)), b);
+        integer_get_quotient(local_stack, output_stack, a,
+            integer_get_gcd(local_stack, output_stack, a, b)), b);
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
 
 //Rounded up to the nearest integer.
-struct Integer*integer_square_root(struct Stack*output_stack, struct Stack*local_stack,
-    struct Integer*a)
+struct Integer*integer_take_square_root(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Integer*a)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct Float*float_square_root_min;
@@ -478,27 +474,28 @@ struct Integer*integer_square_root(struct Stack*output_stack, struct Stack*local
     else
     {
         out = integer_add(output_stack, &one,
-            integer_euclidean_quotient(local_stack, output_stack, rational_square_root->numerator,
+            integer_get_quotient(local_stack, output_stack, rational_square_root->numerator,
                 rational_square_root->denominator));
     }
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
 
-struct Integer*get_prime(struct Stack*stack_a, struct Stack*stack_b, size_t index)
+struct Integer*get_prime(struct Stack*restrict local_stack_a, struct Stack*restrict local_stack_b,
+    size_t index)
 {
     if (primes[index])
     {
         return primes[index];
     }
-    void*stack_a_savepoint = stack_a->cursor;
-    primes[index] = integer_add(stack_a, primes[index - 1], primes[0]);
+    void*local_stack_a_savepoint = local_stack_a->cursor;
+    primes[index] = integer_add(local_stack_a, primes[index - 1], primes[0]);
     while (true)
     {
         size_t potential_factor_index = 1;
         while (true)
         {
-            if ((integer_euclidean_remainder(stack_a, stack_b, primes[index],
+            if ((integer_get_remainder(local_stack_a, local_stack_b, primes[index],
                 primes[potential_factor_index]))->value_count == 0)
             {
                 break;
@@ -506,24 +503,25 @@ struct Integer*get_prime(struct Stack*stack_a, struct Stack*stack_b, size_t inde
             ++potential_factor_index;
             if (potential_factor_index == index)
             {
-                stack_a->cursor = stack_a_savepoint;
+                local_stack_a->cursor = local_stack_a_savepoint;
                 primes[index] = integer_copy(&permanent_stack, primes[index]);
                 return primes[index];
             }
         }
-        primes[index] = integer_add(stack_a, primes[index], primes[0]);
+        primes[index] = integer_add(local_stack_a, primes[index], primes[0]);
     }
 }
 
-size_t size_t_factor(struct Stack*output_stack, struct Stack*local_stack, size_t**out, size_t a)
+size_t size_t_factor(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
+    size_t**out, size_t a)
 {
     void*local_stack_savepoint = local_stack->cursor;
     *out = ALLOCATE(output_stack, size_t);
     size_t factor_count = 0;
     size_t prime_index = 0;
     size_t prime = 2;
-    size_t square_root = integer_to_size_t(integer_square_root(local_stack, output_stack,
-        integer_from_size_t(local_stack, a)));
+    size_t square_root = integer_to_size_t(integer_take_square_root(local_stack, output_stack,
+        size_t_to_integer(local_stack, a)));
     while (prime <= square_root)
     {
         if (a % prime == 0)
@@ -551,22 +549,22 @@ size_t size_t_factor(struct Stack*output_stack, struct Stack*local_stack, size_t
     return factor_count;
 }
 
-size_t integer_factor(struct Stack*output_stack, struct Stack*local_stack, struct Factor**out,
-    struct Integer*a)
+size_t integer_factor(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
+    struct Factor**out, struct Integer*a)
 {
     void*local_stack_savepoint = local_stack->cursor;
     *out = array_start(output_stack, _Alignof(struct Factor));
     size_t factor_count = 0;
     size_t prime_index = 0;
     struct Integer*prime = primes[0];
-    struct Integer*square_root = integer_square_root(local_stack, output_stack, a);
+    struct Integer*square_root = integer_take_square_root(local_stack, output_stack, a);
     while (integer_compare(output_stack, local_stack, prime, square_root) <= 0)
     {
         struct IntegerDivision division;
         integer_euclidean_divide(local_stack, output_stack, &division, a, prime);
         if (division.remainder->value_count == 0)
         {
-            extend_array(output_stack, sizeof(struct Factor));
+            array_extend(output_stack, sizeof(struct Factor));
             struct Factor*factor = *out + factor_count;
             factor->value = prime;
             factor->multiplicity = &zero;
@@ -583,7 +581,7 @@ size_t integer_factor(struct Stack*output_stack, struct Stack*local_stack, struc
     }
     if (!integer_equals(a, &one))
     {
-        extend_array(output_stack, sizeof(struct Factor));
+        array_extend(output_stack, sizeof(struct Factor));
         (*out)[factor_count].value = a;
         (*out)[factor_count].multiplicity = &one;
         factor_count += 1;
@@ -597,7 +595,8 @@ size_t integer_factor(struct Stack*output_stack, struct Stack*local_stack, struc
     return factor_count;
 }
 
-size_t integer_string(struct Stack*output_stack, struct Stack*local_stack, struct Integer*a)
+size_t integer_to_string(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
+    struct Integer*a)
 {
     if (a->sign == 0)
     {

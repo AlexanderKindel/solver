@@ -1,24 +1,25 @@
 #include "declarations.h"
 
-struct RationalPolynomial*sum_minimal_polynomial(struct Stack*output_stack,
-    struct Stack*local_stack, struct Number*a, struct RationalPolynomial*left_minimal_polynomial,
+struct RationalPolynomial*sum_get_minimal_polynomial(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number*a,
+    struct RationalPolynomial*left_minimal_polynomial,
     struct RationalPolynomial*right_minimal_polynomial)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct NestedPolynomial*power = &nested_polynomial_one;
-	struct NestedPolynomial*d = POLY(Nested, 2, POLY(Rational, 2, &rational_zero, &rational_one),
-		POLY(Rational, 1, &(struct Rational) { INT(1, -1), &one }));
+    struct NestedPolynomial*d = POLY(Nested, 2, POLY(Rational, 2, &rational_zero, &rational_one),
+        POLY(Rational, 1, &(struct Rational) { INT(1, -1), &one }));
     struct NestedPolynomial*t = polynomial_zero;
     for (size_t i = 0; i < left_minimal_polynomial->coefficient_count; ++i)
     {
         t = nested_polynomial_add(local_stack, output_stack, t,
             nested_polynomial_rational_polynomial_multiply(local_stack, output_stack, power,
-				POLY(Rational, 1, left_minimal_polynomial->coefficients[i])));
+                POLY(Rational, 1, left_minimal_polynomial->coefficients[i])));
         power = nested_polynomial_multiply(local_stack, output_stack, power, d);
     }
     struct RationalPolynomial*out =
-        number_minimal_polynomial_from_annulling_polynomial(output_stack, local_stack,
-            nested_polynomial_resultant(local_stack, output_stack, t,
+        number_annulling_polynomial_to_minimal_polynomial(output_stack, local_stack,
+            nested_polynomial_get_resultant(local_stack, output_stack, t,
                 rational_polynomial_to_nested_polynomial(local_stack, right_minimal_polynomial)),
             a);
     local_stack->cursor = local_stack_savepoint;
@@ -59,8 +60,8 @@ void term_split(struct Stack*output_stack, struct TermSplit*out, struct Number*a
     }
 }
 
-struct Number*term_consolidate(struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
-    struct Number*b)
+struct Number*term_consolidate(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number*a, struct Number*b)
 {
     if (a->operation == 'r' && !a->value->numerator->value_count)
     {
@@ -89,8 +90,8 @@ struct Number*term_consolidate(struct Stack*output_stack, struct Stack*local_sta
     return 0;
 }
 
-struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
-    struct Number*b)
+struct Number*number_add(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
+    struct Number*a, struct Number*b)
 {
     if (a->operation == '+')
     {
@@ -208,8 +209,8 @@ struct Number*number_add(struct Stack*output_stack, struct Stack*local_stack, st
     return number_add(output_stack, local_stack, b, a);
 }
 
-struct RationalPolynomial**sum_convert_terms_to_new_generator(struct Stack*output_stack,
-    struct Stack*local_stack, size_t term_count,
+struct RationalPolynomial**sum_convert_terms_to_new_generator(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, size_t term_count,
     struct RationalPolynomial**terms_in_terms_of_old_generator,
     struct RationalPolynomial*old_generator_in_terms_of_new,
     struct RationalPolynomial*new_generator_minimal_polynomial)
@@ -250,8 +251,8 @@ struct RationalPolynomial**sum_convert_terms_to_new_generator(struct Stack*outpu
     return out;
 }
 
-struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
-    struct Stack*local_stack, struct Number*a, struct Number*b)
+struct RationalPolynomial*number_get_a_in_terms_of_b(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number*a, struct Number*b)
 {
     if ((b->minimal_polynomial->coefficient_count - 1) %
         (a->minimal_polynomial->coefficient_count - 1) != 0)
@@ -261,8 +262,8 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
     void*local_stack_savepoint = local_stack->cursor;
     struct NestedPolynomial*nested_a_minimal_polynomial =
         rational_polynomial_to_nested_polynomial(local_stack,
-            rational_polynomial_euclidean_remainder(local_stack, output_stack,
-                a->minimal_polynomial, b->minimal_polynomial));
+            rational_polynomial_get_remainder(local_stack, output_stack, a->minimal_polynomial,
+                b->minimal_polynomial));
     switch (nested_a_minimal_polynomial->coefficient_count)
     {
     case 0:
@@ -286,7 +287,7 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
     {
         if (a_minimal_polynomial_factors[i]->coefficient_count == 2)
         {
-            candidate_factors[i] = rational_polynomial_negative(local_stack,
+            candidate_factors[i] = rational_polynomial_negate(local_stack,
                 a_minimal_polynomial_factors[i]->coefficients[0]);
             ++i;
         }
@@ -297,22 +298,22 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
         }
     }
     struct RectangularEstimate a_estimate;
-    number_rectangular_estimate(local_stack, output_stack, &a_estimate, a, &rational_one);
-    while (rational_polynomial_root_count_in_rectangle(local_stack, output_stack,
+    number_get_rectangular_estimate(local_stack, output_stack, &a_estimate, a, &rational_one);
+    while (rational_polynomial_count_roots_in_rectangle(local_stack, output_stack,
         a->minimal_polynomial,
         float_interval_to_rational_interval(local_stack, output_stack,
             a_estimate.real_part_estimate),
         float_interval_to_rational_interval(local_stack, output_stack,
             a_estimate.imaginary_part_estimate)) > 1)
     {
-        number_rectangular_estimate_halve_dimensions(local_stack, output_stack, &a_estimate, a);
+        number_halve_rectangular_estimate_dimensions(local_stack, output_stack, &a_estimate, a);
     }
     struct RectangularEstimate b_estimate;
-    number_rectangular_estimate(local_stack, output_stack, &b_estimate, b, &rational_one);
+    number_get_rectangular_estimate(local_stack, output_stack, &b_estimate, b, &rational_one);
     for (size_t i = 0; i < candidate_factor_count; ++i)
     {
         struct Rational interval_size_for_evaluation =
-        { &one, integer_from_size_t(local_stack, candidate_factors[i]->coefficient_count) };
+        { &one, size_t_to_integer(local_stack, candidate_factors[i]->coefficient_count) };
         struct RectangularEstimate factor_at_b;
         while (true)
         {
@@ -323,7 +324,7 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
             {
                 goto candidate_rejected;
             }
-            if (rational_polynomial_root_count_in_rectangle(local_stack, output_stack,
+            if (rational_polynomial_count_roots_in_rectangle(local_stack, output_stack,
                 a->minimal_polynomial,
                 float_interval_to_rational_interval(local_stack, output_stack,
                     factor_at_b.real_part_estimate),
@@ -340,9 +341,9 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
                 }
                 break;
             }
-            number_rectangular_estimate_halve_dimensions(local_stack, output_stack, &b_estimate, b);
+            number_halve_rectangular_estimate_dimensions(local_stack, output_stack, &b_estimate, b);
             interval_size_for_evaluation.denominator =
-                integer_doubled(local_stack, interval_size_for_evaluation.denominator);
+                integer_double(local_stack, interval_size_for_evaluation.denominator);
         }
         while (true)
         {
@@ -354,7 +355,7 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
                 local_stack->cursor = local_stack_savepoint;
                 return out;
             }
-            number_rectangular_estimate_halve_dimensions(local_stack, output_stack, &a_estimate, a);
+            number_halve_rectangular_estimate_dimensions(local_stack, output_stack, &a_estimate, a);
             if (rectangular_estimates_are_disjoint(output_stack, local_stack, &a_estimate,
                 &factor_at_b))
             {
@@ -367,7 +368,7 @@ struct RationalPolynomial*number_a_in_terms_of_b(struct Stack*output_stack,
     return 0;
 }
 
-struct Number*sum_append_term(struct Stack*output_stack, struct Stack*local_stack,
+struct Number*sum_append_term(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
     struct Number**old_terms, size_t old_term_count,
     struct RationalPolynomial**old_terms_in_terms_of_new_generator, struct Number*new_term,
     struct Number*new_generator, struct RationalPolynomial*new_term_in_terms_of_new_generator)
@@ -401,8 +402,8 @@ struct Number*sum_append_term(struct Stack*output_stack, struct Stack*local_stac
     return out;
 }
 
-struct Number*sum_incorporate_term_in_terms_of_new_generator(struct Stack*output_stack,
-    struct Stack*local_stack, struct Number**a_terms, size_t a_term_count,
+struct Number*sum_incorporate_term_in_terms_of_new_generator(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number**a_terms, size_t a_term_count,
     struct RationalPolynomial*a_minimal_polynomial, struct Number*new_term,
     struct Number*new_generator, struct RationalPolynomial**a_terms_in_terms_of_new_generator,
     struct RationalPolynomial*new_term_in_terms_of_new_generator)
@@ -450,7 +451,7 @@ struct Number*sum_incorporate_term_in_terms_of_new_generator(struct Stack*output
     {
         augmentation[i] = &rational_zero;
     }
-    matrix_row_echelon_form(local_stack, output_stack, &matrix, augmentation);
+    matrix_make_row_echelon_form(local_stack, output_stack, &matrix, augmentation);
     for (size_t i = matrix.height; i-- > matrix.width;)
     {
         if (augmentation[i]->numerator->value_count != 0)
@@ -500,8 +501,8 @@ struct Number*sum_incorporate_term_in_terms_of_new_generator(struct Stack*output
 //Can handle the degenerate case of a_term_count == 1, and returns a sum even in degenerate cases of
 //fewer than two terms. Leaves it to the caller to fill out the minimal_polynomial field since it
 //will need to be calculated only in nondegenerate cases.
-struct Number*sum_incorporate_term(struct Stack*output_stack, struct Stack*local_stack,
-    struct Number**a_terms, size_t a_term_count,
+struct Number*sum_incorporate_term(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number**a_terms, size_t a_term_count,
     struct RationalPolynomial**a_terms_in_terms_of_generator, struct Number*a_generator,
     struct RationalPolynomial*a_minimal_polynomial, struct Number*new_term)
 {
@@ -509,11 +510,11 @@ struct Number*sum_incorporate_term(struct Stack*output_stack, struct Stack*local
     {
         return sum_append_term(output_stack, local_stack, a_terms, a_term_count,
             a_terms_in_terms_of_generator, new_term, a_generator,
-			POLY(Rational, 1, new_term->value));
+            POLY(Rational, 1, new_term->value));
     }
     void*local_stack_savepoint = local_stack->cursor;
     struct RationalPolynomial*new_term_in_terms_of_a_generator =
-        number_a_in_terms_of_b(local_stack, output_stack, new_term, a_generator);
+        number_get_a_in_terms_of_b(local_stack, output_stack, new_term, a_generator);
     if (new_term_in_terms_of_a_generator)
     {
         struct Number*out = sum_incorporate_term_in_terms_of_new_generator(output_stack,
@@ -524,7 +525,7 @@ struct Number*sum_incorporate_term(struct Stack*output_stack, struct Stack*local
     }
     struct RationalPolynomial*x = POLY(Rational, 2, &rational_zero, &rational_one);
     struct RationalPolynomial*old_generator_in_terms_of_new_term =
-        number_a_in_terms_of_b(local_stack, output_stack, a_generator, new_term);
+        number_get_a_in_terms_of_b(local_stack, output_stack, a_generator, new_term);
     if (old_generator_in_terms_of_new_term)
     {
         struct Number*out = sum_incorporate_term_in_terms_of_new_generator(output_stack,
@@ -558,11 +559,11 @@ struct Number*sum_incorporate_term(struct Stack*output_stack, struct Stack*local
         void*local_stack_loop_savepoint = local_stack->cursor;
         new_generator->elements[new_generator->element_count - 1] =
             number_rational_multiply(local_stack, output_stack, new_term, k);
-        new_generator->minimal_polynomial = sum_minimal_polynomial(local_stack, output_stack,
+        new_generator->minimal_polynomial = sum_get_minimal_polynomial(local_stack, output_stack,
             new_generator, a_generator->minimal_polynomial,
             new_generator->elements[new_generator->element_count - 1]->minimal_polynomial);
         struct RationalPolynomial*term_in_terms_of_new_generator =
-            number_a_in_terms_of_b(local_stack, output_stack, new_term, new_generator);
+            number_get_a_in_terms_of_b(local_stack, output_stack, new_term, new_generator);
         if (term_in_terms_of_new_generator)
         {
             struct Number*out = sum_incorporate_term_in_terms_of_new_generator(output_stack,
@@ -581,8 +582,8 @@ struct Number*sum_incorporate_term(struct Stack*output_stack, struct Stack*local
     }
 }
 
-struct Number*number_incorporate_term(struct Stack*output_stack, struct Stack*local_stack,
-    struct Number**a_terms, size_t a_term_count,
+struct Number*number_incorporate_term(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number**a_terms, size_t a_term_count,
     struct RationalPolynomial**a_terms_in_terms_of_generator, struct Number*a_generator,
     struct RationalPolynomial*a_minimal_polynomial, struct Number*new_term)
 {
@@ -603,13 +604,13 @@ struct Number*number_incorporate_term(struct Stack*output_stack, struct Stack*lo
         return output_stack_savepoint;
     }
     }
-    out->minimal_polynomial = sum_minimal_polynomial(output_stack, local_stack, out,
+    out->minimal_polynomial = sum_get_minimal_polynomial(output_stack, local_stack, out,
         a_minimal_polynomial, new_term->minimal_polynomial);
     return out;
 }
 
-struct Number*number_eliminate_linear_dependencies(struct Stack*output_stack,
-    struct Stack*local_stack, struct Number*a)
+struct Number*number_eliminate_linear_dependencies(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number*a)
 {
     if (a->minimal_polynomial)
     {

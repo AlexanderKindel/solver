@@ -13,8 +13,8 @@ bool gaussian_rational_equals(struct GaussianRational*a, struct GaussianRational
     return rational_equals(a->real, b->real) && rational_equals(a->imaginary, b->imaginary);
 }
 
-struct GaussianRational*gaussian_rational_add(struct Stack*output_stack, struct Stack*local_stack,
-    struct GaussianRational*a, struct GaussianRational*b)
+struct GaussianRational*gaussian_rational_add(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct GaussianRational*a, struct GaussianRational*b)
 {
     struct GaussianRational*out = ALLOCATE(output_stack, struct GaussianRational);
     out->real = rational_add(output_stack, local_stack, a->real, b->real);
@@ -22,27 +22,27 @@ struct GaussianRational*gaussian_rational_add(struct Stack*output_stack, struct 
     return out;
 }
 
-struct GaussianRational*gaussian_rational_negative(struct Stack*output_stack,
+struct GaussianRational*gaussian_rational_negate(struct Stack*output_stack,
     struct GaussianRational*a)
 {
     struct GaussianRational*out = ALLOCATE(output_stack, struct GaussianRational);
-    out->real = rational_negative(output_stack, a->real);
-    out->imaginary = rational_negative(output_stack, a->imaginary);
+    out->real = rational_negate(output_stack, a->real);
+    out->imaginary = rational_negate(output_stack, a->imaginary);
     return out;
 }
 
-struct GaussianRational*gaussian_rational_subtract(struct Stack*output_stack,
-    struct Stack*local_stack, struct GaussianRational*a, struct GaussianRational*b)
+struct GaussianRational*gaussian_rational_subtract(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct GaussianRational*a, struct GaussianRational*b)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct GaussianRational*out = gaussian_rational_add(output_stack, local_stack, a,
-        gaussian_rational_negative(local_stack, b));
+        gaussian_rational_negate(local_stack, b));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
 
-struct GaussianRational*gaussian_rational_multiply(struct Stack*output_stack,
-    struct Stack*local_stack, struct GaussianRational*a, struct GaussianRational*b)
+struct GaussianRational*gaussian_rational_multiply(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct GaussianRational*a, struct GaussianRational*b)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct GaussianRational*out = ALLOCATE(output_stack, struct GaussianRational);
@@ -56,16 +56,16 @@ struct GaussianRational*gaussian_rational_multiply(struct Stack*output_stack,
     return out;
 }
 
-struct GaussianRational*gaussian_rational_rational_multiply(struct Stack*output_stack,
-    struct Stack*local_stack, struct GaussianRational*a, struct Rational*b)
+struct GaussianRational*gaussian_rational_rational_multiply(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct GaussianRational*a, struct Rational*b)
 {
     return gaussian_rational_multiply(output_stack, local_stack, a,
         &(struct GaussianRational){b, &rational_zero});
 }
 
 struct GaussianRationalPolynomial*gaussian_rational_polynomial_rational_multiply(
-    struct Stack*output_stack, struct Stack*local_stack, struct GaussianRationalPolynomial*a,
-    struct Rational*b)
+    struct Stack*restrict output_stack, struct Stack*restrict local_stack,
+    struct GaussianRationalPolynomial*a, struct Rational*b)
 {
     return gaussian_rational_polynomial_gaussian_rational_multiply(output_stack, local_stack, a,
         &(struct GaussianRational){b, &rational_zero});

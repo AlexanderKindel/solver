@@ -119,7 +119,7 @@ int main()
         ring_substitution_sets,
         INTEGER_POLYNOMIAL | MODDED_POLYNOMIAL | RATIONAL_POLYNOMIAL |
         GAUSSIAN_RATIONAL_POLYNOMIAL | NESTED_POLYNOMIAL);
-    instantiate_function_template_set(template_instantiations, polynomial_negative_template,
+    instantiate_function_template_set(template_instantiations, polynomial_negate_template,
         ring_substitution_sets,
         INTEGER_POLYNOMIAL | MODDED_POLYNOMIAL | RATIONAL_POLYNOMIAL | NESTED_POLYNOMIAL);
     instantiate_function_template_set(template_instantiations, polynomial_subtract_template,
@@ -146,9 +146,9 @@ int main()
     instantiate_function_template_set(template_instantiations,
         polynomial_divide_by_coefficient_template, ring_substitution_sets,
         INTEGER_POLYNOMIAL | NESTED_POLYNOMIAL);
-    instantiate_function_template_set(template_instantiations, gcd_template, ring_substitution_sets,
-        INTEGER | MODDED_POLYNOMIAL | NUMBER_FIELD_POLYNOMIAL);
-    instantiate_function_template_set(template_instantiations, extended_gcd_template,
+    instantiate_function_template_set(template_instantiations, get_gcd_template,
+        ring_substitution_sets, INTEGER | MODDED_POLYNOMIAL | NUMBER_FIELD_POLYNOMIAL);
+    instantiate_function_template_set(template_instantiations, get_extended_gcd_template,
         ring_substitution_sets, INTEGER | MODDED_POLYNOMIAL);
     instantiate_function_template_set(template_instantiations, polynomial_content_template,
         ring_substitution_sets, INTEGER_POLYNOMIAL | NESTED_POLYNOMIAL);
@@ -165,11 +165,11 @@ int main()
         (struct Substitution[]) { { (char*[]){ "Rational", "rational" }, 0 } },
         (struct Substitution[]) { { (char*[]){ "Float", "float" }, 0 } }
     };
-    instantiate_function_template_set(template_instantiations, interval_max_magnitude_template,
+    instantiate_function_template_set(template_instantiations, interval_get_max_magnitude_template,
         interval_substitution_sets, ALL_INTERVAL_SUBSTITUTION_SETS);
     instantiate_function_template_set(template_instantiations, interval_add_template,
         interval_substitution_sets, ALL_INTERVAL_SUBSTITUTION_SETS);
-    instantiate_function_template_set(template_instantiations, interval_negative_template,
+    instantiate_function_template_set(template_instantiations, interval_negate_template,
         interval_substitution_sets, ALL_INTERVAL_SUBSTITUTION_SETS);
     instantiate_function_template_set(template_instantiations, interval_multiply_template,
         interval_substitution_sets, ALL_INTERVAL_SUBSTITUTION_SETS);

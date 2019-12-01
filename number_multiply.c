@@ -1,7 +1,8 @@
 #include "declarations.h"
 
-struct RationalPolynomial*product_minimal_polynomial(struct Stack*output_stack,
-    struct Stack*local_stack, struct Number*a, struct RationalPolynomial*left_minimal_polynomial,
+struct RationalPolynomial*product_get_minimal_polynomial(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number*a,
+    struct RationalPolynomial*left_minimal_polynomial,
     struct RationalPolynomial*right_minimal_polynomial)
 {
     void*local_stack_savepoint = local_stack->cursor;
@@ -28,16 +29,16 @@ struct RationalPolynomial*product_minimal_polynomial(struct Stack*output_stack,
         }
     }
     struct RationalPolynomial*out =
-        number_minimal_polynomial_from_annulling_polynomial(output_stack, local_stack,
-            nested_polynomial_resultant(local_stack, output_stack, t,
+        number_annulling_polynomial_to_minimal_polynomial(output_stack, local_stack,
+            nested_polynomial_get_resultant(local_stack, output_stack, t,
                 rational_polynomial_to_nested_polynomial(local_stack, right_minimal_polynomial)),
             a);
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
 
-struct Number*number_product_initialize(struct Stack*output_stack, struct Stack*local_stack,
-    struct Number*left_factor, struct Number*right_factor)
+struct Number*number_product_initialize(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number*left_factor, struct Number*right_factor)
 {
     struct Number*out = ALLOCATE(output_stack, struct Number);
     out->operation = '*';
@@ -49,13 +50,13 @@ struct Number*number_product_initialize(struct Stack*output_stack, struct Stack*
     {
         POINTER_SWAP(out->elements[0], out->elements[1]);
     }
-    out->minimal_polynomial = product_minimal_polynomial(output_stack, local_stack, out,
+    out->minimal_polynomial = product_get_minimal_polynomial(output_stack, local_stack, out,
         left_factor->minimal_polynomial, right_factor->minimal_polynomial);
     return out;
 }
 
-struct Number*number_rational_multiply(struct Stack*output_stack,
-    struct Stack*local_stack, struct Number*a, struct Rational*b)
+struct Number*number_rational_multiply(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number*a, struct Rational*b)
 {
     if (b->numerator->value_count == 0)
     {
@@ -173,14 +174,14 @@ struct Number*number_rational_multiply(struct Stack*output_stack,
         power = rational_unreduced_multiply(local_stack, output_stack, power, b);
     }
     out->minimal_polynomial = rational_polynomial_rational_multiply(output_stack, local_stack,
-        out->minimal_polynomial, rational_reciprocal(local_stack,
+        out->minimal_polynomial, rational_get_reciprocal(local_stack,
             out->minimal_polynomial->coefficients[out->minimal_polynomial->coefficient_count - 1]));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
 
-struct Number*factor_consolidate(struct Stack*output_stack, struct Stack*local_stack,
-    struct Number*a, struct Number*b)
+struct Number*factor_consolidate(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Number*a, struct Number*b)
 {
     if (a->operation == 'r')
     {
@@ -199,21 +200,19 @@ struct Number*factor_consolidate(struct Stack*output_stack, struct Stack*local_s
         return 0;
     }
     void*local_stack_savepoint = local_stack->cursor;
-	void*output_stack_savepoint = output_stack->cursor;
     struct ExtendedGCDInfo info;
-    leaking_integer_extended_gcd(local_stack, output_stack, &info, a->index, b->index);
-    struct Integer*product_index = integer_euclidean_quotient(local_stack, output_stack,
+    integer_get_extended_gcd(local_stack, output_stack, &info, a->index, b->index);
+    struct Integer*product_index = integer_get_quotient(local_stack, output_stack,
         integer_multiply(local_stack, output_stack, a->index, b->index), info.gcd);
     struct Number*radicand_factor_a = number_integer_exponentiate(local_stack, output_stack,
-        a->radicand, integer_magnitude(local_stack, info.b_over_gcd));
+        a->radicand, integer_get_magnitude(local_stack, info.b_over_gcd));
     struct Number*radicand_factor_b = number_integer_exponentiate(local_stack, output_stack,
-        b->radicand, integer_magnitude(local_stack, info.a_over_gcd));
-	output_stack->cursor = output_stack_savepoint;
+        b->radicand, integer_get_magnitude(local_stack, info.a_over_gcd));
     struct RationalInterval*radicand_factor_a_argument_estimate =
-        number_rational_argument_estimate(local_stack, output_stack, radicand_factor_a,
+        number_estimate_argument_in_radians(local_stack, output_stack, radicand_factor_a,
             &rational_one);
     struct RationalInterval*radicand_factor_b_argument_estimate =
-        number_rational_argument_estimate(local_stack, output_stack, radicand_factor_b,
+        number_estimate_argument_in_radians(local_stack, output_stack, radicand_factor_b,
             &rational_one);
     if (!integer_equals(a->index, b->index))
     {
@@ -222,12 +221,12 @@ struct Number*factor_consolidate(struct Stack*output_stack, struct Stack*local_s
         if (rational_compare(output_stack, local_stack,
             rational_integer_divide(local_stack, output_stack,
                 radicand_factor_a_argument_estimate->max, product_index),
-            number_rational_argument_estimate(local_stack, output_stack, a,
+            number_estimate_argument_in_radians(local_stack, output_stack, a,
                 radicand_factor_argument_interval_size)->min) < 0 ||
             rational_compare(output_stack, local_stack,
                 rational_integer_divide(local_stack, output_stack,
                     radicand_factor_b_argument_estimate->max, product_index),
-                number_rational_argument_estimate(local_stack, output_stack, b,
+                number_estimate_argument_in_radians(local_stack, output_stack, b,
                     radicand_factor_argument_interval_size)->min) < 0)
         {
             local_stack->cursor = local_stack_savepoint;
@@ -236,9 +235,11 @@ struct Number*factor_consolidate(struct Stack*output_stack, struct Stack*local_s
     }
     struct Number*product_radicand =
         number_multiply(local_stack, output_stack, radicand_factor_a, radicand_factor_b);
-    struct Number*out = number_root(local_stack, output_stack, product_radicand, product_index);
+    struct Number*out =
+        number_take_root(local_stack, output_stack, product_radicand, product_index);
     if (rational_compare(output_stack, local_stack,
-        number_rational_argument_estimate(local_stack, output_stack, product_radicand, pi.min)->max,
+        number_estimate_argument_in_radians(local_stack, output_stack, product_radicand,
+            pi.min)->max,
         rational_add(local_stack, output_stack, radicand_factor_a_argument_estimate->min,
             radicand_factor_b_argument_estimate->min)) < 0)
     {
@@ -253,8 +254,8 @@ struct Number*factor_consolidate(struct Stack*output_stack, struct Stack*local_s
     return out;
 }
 
-struct Number*number_multiply(struct Stack*output_stack, struct Stack*local_stack, struct Number*a,
-    struct Number*b)
+struct Number*number_multiply(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
+    struct Number*a, struct Number*b)
 {
     if (b->operation == 'r')
     {
@@ -361,7 +362,7 @@ struct Number*number_multiply(struct Stack*output_stack, struct Stack*local_stac
                     break;
                 }
             }
-            out->minimal_polynomial = product_minimal_polynomial(output_stack, local_stack, out,
+            out->minimal_polynomial = product_get_minimal_polynomial(output_stack, local_stack, out,
                 a->minimal_polynomial, b->minimal_polynomial);
             local_stack->cursor = local_stack_savepoint;
             return out;

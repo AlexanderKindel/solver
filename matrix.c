@@ -1,8 +1,8 @@
 #include "declarations.h"
 
-//Leaves garbage allocations on local stack along with the new matrix and augmentation values.
-void leaking_matrix_row_echelon_form(struct Stack*output_stack, struct Stack*local_stack,
-    struct Matrix*a, struct Rational**augmentation)
+//Leaves a significant amount of excess allocations on output_stack.
+void matrix_make_row_echelon_form(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Matrix*a, struct Rational**augmentation)
 {
     size_t small_dimension;
     if (a->width < a->height)
@@ -13,6 +13,7 @@ void leaking_matrix_row_echelon_form(struct Stack*output_stack, struct Stack*loc
     {
         small_dimension = a->height;
     }
+    void*local_stack_savepoint = local_stack->cursor;
     for (size_t i = 0; i < small_dimension; ++i)
     {
         for (size_t j = i + 1; j < a->height; ++j)
@@ -30,43 +31,29 @@ void leaking_matrix_row_echelon_form(struct Stack*output_stack, struct Stack*loc
                         rational_divide(local_stack, output_stack, a->rows[k][i], a->rows[i][i]);
                     for (size_t l = i; l < a->width; ++l)
                     {
-                        a->rows[k][l] = rational_subtract(local_stack, output_stack, a->rows[k][l],
+                        a->rows[k][l] = rational_subtract(output_stack, local_stack, a->rows[k][l],
                             rational_multiply(local_stack, output_stack, a->rows[i][l], scalar));
                     }
-                    augmentation[k] = rational_subtract(local_stack, output_stack, augmentation[k],
+                    augmentation[k] = rational_subtract(output_stack, local_stack, augmentation[k],
                         rational_multiply(local_stack, output_stack, augmentation[i], scalar));
                 }
                 break;
             }
         }
     }
-}
-
-void matrix_row_echelon_form(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
-    struct Rational**augmentation)
-{
-    void*local_stack_savepoint = local_stack->cursor;
-    leaking_matrix_row_echelon_form(output_stack, local_stack, a, augmentation);
-    for (size_t i = 0; i < a->height; ++i)
-    {
-        for (size_t j = 0; j < a->width; ++j)
-        {
-            a->rows[i][j] = rational_copy(output_stack, a->rows[i][j]);
-        }
-        augmentation[i] = rational_copy(output_stack, augmentation[i]);
-    }
     local_stack->cursor = local_stack_savepoint;
 }
 
 //Leaves the matrix in an invalid state; to be used for the sake of the augmentation.
-void matrix_diagonalize(struct Stack*output_stack, struct Stack*local_stack, struct Matrix*a,
-    struct Rational**augmentation)
+void matrix_diagonalize(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
+    struct Matrix*a, struct Rational**augmentation)
 {
-    leaking_matrix_row_echelon_form(output_stack, local_stack, a, augmentation);
+    void*local_stack_savepoint = local_stack->cursor;
+    matrix_make_row_echelon_form(local_stack, output_stack, a, augmentation);
     for (size_t i = a->height; i-- > 0;)
     {
         augmentation[i] =
-            rational_divide(local_stack, output_stack, augmentation[i], a->rows[i][i]);
+            rational_divide(output_stack, local_stack, augmentation[i], a->rows[i][i]);
         for (size_t j = 0; j <= i; ++j)
         {
             a->rows[i][j] =
@@ -78,4 +65,5 @@ void matrix_diagonalize(struct Stack*output_stack, struct Stack*local_stack, str
                 rational_multiply(local_stack, output_stack, augmentation[i], a->rows[j][i]));
         }
     }
+    local_stack->cursor = local_stack_savepoint;
 }

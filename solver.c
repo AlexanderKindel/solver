@@ -42,14 +42,14 @@ struct Token*get_input(struct Stack*output_number_stack, struct Stack*output_tok
             token->value = ALLOCATE(output_number_stack, struct UnevaluatedNumber);
             token->value->operation = 'r';
             void*token_stack_savepoint = output_token_stack->cursor;
-            token->value->value = integer_from_char(output_token_stack, next_char);
+            token->value->value = char_to_integer(output_token_stack, next_char);
             next_char = getchar();
             while (isdigit(next_char))
             {
                 token->value->value = integer_add(output_token_stack,
                     integer_multiply(output_token_stack, output_number_stack, token->value->value,
 						INT(10, 1)),
-					integer_from_char(output_token_stack, next_char));
+					char_to_integer(output_token_stack, next_char));
                 next_char = getchar();
             }
             token->value->value = integer_copy(output_number_stack, token->value->value);
@@ -428,14 +428,14 @@ void init(struct Stack*stack_a, struct Stack*stack_b)
 {
     SET_PAGE_SIZE();
     void*base_address = RESERVE_MEMORY(UINT32_MAX);
-    stack_initialize(&pi_stack_a, (size_t)base_address, page_size);
+    stack_initialize(&pi_stack_a, base_address, page_size);
     stack_initialize(&pi_stack_b, pi_stack_a.end, page_size);
     primes = (struct Integer**)pi_stack_b.end;
     COMMIT_PAGE(primes);
-    roots_of_unity = (struct Number**)(pi_stack_b.end + page_size);
+    roots_of_unity = (struct Number**)((uint8_t*)pi_stack_b.end + page_size);
     COMMIT_PAGE(roots_of_unity);
     size_t arena_size = page_size * ((UINT32_MAX - 4 * page_size) / (3 * page_size));
-    size_t permanent_stack_start = pi_stack_b.end + 2 * page_size;
+    void*permanent_stack_start = (uint8_t*)pi_stack_b.end + 2 * page_size;
     stack_initialize(&permanent_stack, permanent_stack_start, arena_size);
     stack_initialize(stack_a, permanent_stack.end, arena_size);
     stack_initialize(stack_b, stack_a->end, arena_size);
@@ -511,7 +511,7 @@ int main()
                         char*string = ARRAY_ALLOCATE(&stack_b, 2, char);
                         string[0] = '=';
                         string[1] = '\n';
-                        number_string(&stack_b, &stack_a, evaluation);
+                        number_to_string(&stack_b, &stack_a, evaluation);
                         *(char*)ALLOCATE(&stack_b, char) = 0;
                         puts(string);
                     }

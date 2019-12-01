@@ -5,6 +5,8 @@ size_t page_size;
 
 #if defined(_WIN64)
 
+#define restrict __restrict
+
 #include <windows.h>
 
 //Ensures that VirtualAlloc never rounds addresses that are multiples of page_size.
@@ -20,7 +22,7 @@ size_t page_size;
 #define COMMIT_PAGE(address) VirtualAlloc(address, page_size, MEM_COMMIT, PAGE_READWRITE)
 
 #define DECOMMIT_STACK(stack)\
-VirtualFree((void*)stack->start, stack->cursor_max - stack->start, MEM_DECOMMIT)
+VirtualFree(stack->start, (uintptr_t)stack->cursor_max - (uintptr_t)stack->start, MEM_DECOMMIT)
 
 #elif __has_include (<unistd.h>)
 
@@ -34,7 +36,7 @@ VirtualFree((void*)stack->start, stack->cursor_max - stack->start, MEM_DECOMMIT)
 #define COMMIT_PAGE(address) mprotect(address, page_size, PROT_READ | PROT_WRITE)
 
 #define DECOMMIT_STACK(stack)\
-mprotect((void*)stack->start, stack->cursor_max - stack->start, PROT_NONE)
+mprotect(stack->start, (uintptr_t)stack->cursor_max - (uintptr_t)stack->start, PROT_NONE)
 
 #else
 

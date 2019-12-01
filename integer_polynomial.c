@@ -1,20 +1,15 @@
 ﻿#include "declarations.h"
 
-size_t polynomial_size(size_t coefficient_count)
-{
-    return sizeof(size_t) * (coefficient_count + 1);
-}
-
 void*polynomial_allocate(struct Stack*output_stack, size_t coefficient_count)
 {
-    size_t*out =
-        stack_slot_allocate(output_stack, polynomial_size(coefficient_count), _Alignof(size_t));
+    size_t*out = stack_slot_allocate(output_stack, sizeof(size_t) * (coefficient_count + 1),
+        _Alignof(size_t));
     *out = coefficient_count;
     return out;
 }
 
-struct RationalPolynomial*integer_polynomial_rational_multiply(struct Stack*output_stack,
-    struct Stack*local_stack, struct IntegerPolynomial*a, struct Rational*b)
+struct RationalPolynomial*integer_polynomial_rational_multiply(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct IntegerPolynomial*a, struct Rational*b)
 {
     if (b->numerator->sign == 0)
     {
@@ -29,24 +24,26 @@ struct RationalPolynomial*integer_polynomial_rational_multiply(struct Stack*outp
     return out;
 }
 
-struct IntegerPolynomial*integer_polynomial_euclidean_quotient(struct Stack*output_stack,
-    struct Stack*local_stack, struct IntegerPolynomial*dividend, struct IntegerPolynomial*divisor)
+struct IntegerPolynomial*integer_polynomial_get_quotient(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct IntegerPolynomial*dividend,
+    struct IntegerPolynomial*divisor)
 {
     struct IntegerPolynomialDivision division;
     integer_polynomial_euclidean_divide(output_stack, local_stack, &division, dividend, divisor);
     return division.quotient;
 }
 
-struct IntegerPolynomial*integer_polynomial_euclidean_remainder(struct Stack*output_stack,
-    struct Stack*local_stack, struct IntegerPolynomial*dividend, struct IntegerPolynomial*divisor)
+struct IntegerPolynomial*integer_polynomial_get_remainder(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct IntegerPolynomial*dividend,
+    struct IntegerPolynomial*divisor)
 {
     struct IntegerPolynomialDivision division;
     integer_polynomial_euclidean_divide(output_stack, local_stack, &division, dividend, divisor);
     return division.remainder;
 }
 
-struct IntegerPolynomial*integer_polynomial_primitive_part(struct Stack*output_stack,
-    struct Stack*local_stack, struct IntegerPolynomial*a)
+struct IntegerPolynomial*integer_polynomial_get_primitive_part(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct IntegerPolynomial*a)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct IntegerPolynomial*out = integer_polynomial_integer_divide(output_stack, local_stack, a,
@@ -55,23 +52,24 @@ struct IntegerPolynomial*integer_polynomial_primitive_part(struct Stack*output_s
     return out;
 }
 
-struct IntegerPolynomial*integer_polynomial_gcd(struct Stack*output_stack, struct Stack*local_stack,
-    struct IntegerPolynomial*a, struct IntegerPolynomial*b)
+struct IntegerPolynomial*integer_polynomial_get_gcd(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct IntegerPolynomial*a, struct IntegerPolynomial*b)
 {
     struct PolynomialExtendedGCDInfo info;
-    integer_polynomial_extended_gcd(output_stack, local_stack, &info, a, b);
+    integer_polynomial_get_extended_gcd(output_stack, local_stack, &info, a, b);
     return (struct IntegerPolynomial*)info.gcd;
 }
 
-void integer_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*local_stack,
-    struct PolynomialExtendedGCDInfo*out, struct IntegerPolynomial*a, struct IntegerPolynomial*b)
+void integer_polynomial_get_extended_gcd(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct PolynomialExtendedGCDInfo*out,
+    struct IntegerPolynomial*a, struct IntegerPolynomial*b)
 {
     if (b->coefficient_count > a->coefficient_count)
     {
         void*local_stack_savepoint = local_stack->cursor;
-        integer_polynomial_extended_gcd(local_stack, output_stack, out, b, a);
+        integer_polynomial_get_extended_gcd(local_stack, output_stack, out, b, a);
         out->a_coefficient = 
-            rational_polynomial_euclidean_quotient(output_stack, local_stack,
+            rational_polynomial_get_quotient(output_stack, local_stack,
                 rational_polynomial_subtract(local_stack, output_stack,
                     integer_polynomial_to_rational_polynomial(local_stack,
                         (struct IntegerPolynomial*)out->gcd),
@@ -93,7 +91,7 @@ void integer_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*loc
     void*local_stack_savepoint = local_stack->cursor;
     struct Integer*a_content = integer_polynomial_content(local_stack, output_stack, a);
     struct Integer*b_content = integer_polynomial_content(local_stack, output_stack, b);
-    struct Integer*d = integer_gcd(local_stack, output_stack, a_content, b_content);
+    struct Integer*d = integer_get_gcd(local_stack, output_stack, a_content, b_content);
     struct Integer*g = &one;
     struct Integer*h = &one;
     struct IntegerPolynomial*previous_a_coefficient = &integer_polynomial_one;
@@ -104,7 +102,7 @@ void integer_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*loc
         integer_polynomial_integer_divide(local_stack, output_stack, b, b_content);
     while (true)
     {
-        struct Integer*degree = integer_from_size_t(local_stack,
+        struct Integer*degree = size_t_to_integer(local_stack,
             previous_gcd_multiple->coefficient_count - gcd_multiple->coefficient_count);
         struct Integer*multiple = integer_exponentiate(local_stack, output_stack,
             gcd_multiple->coefficients[gcd_multiple->coefficient_count - 1],
@@ -122,7 +120,7 @@ void integer_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*loc
                     integer_polynomial_integer_divide(local_stack, output_stack, gcd_multiple,
                         gcd_content), d);
             out->a_coefficient = integer_polynomial_rational_multiply(output_stack, local_stack,
-                a_coefficient, rational_reduced(local_stack, output_stack, d,
+                a_coefficient, rational_reduce(local_stack, output_stack, d,
                     integer_multiply(local_stack, output_stack, gcd_content, a_content)));
             local_stack->cursor = local_stack_savepoint;
             return;
@@ -152,14 +150,14 @@ void integer_polynomial_extended_gcd(struct Stack*output_stack, struct Stack*loc
         else
         {
             h_exponent->sign = -h_exponent->sign;
-            h = integer_euclidean_quotient(local_stack, output_stack,
+            h = integer_get_quotient(local_stack, output_stack,
                 integer_exponentiate(local_stack, output_stack, g, degree),
                 integer_exponentiate(local_stack, output_stack, h, h_exponent));
         }
     }
 }
 
-bool factor_found(struct Stack*output_stack, struct Stack*local_stack,
+bool factor_found(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
     struct IntegerPolynomial*candidate, size_t components_to_add,
     struct IntegerPolynomial**factor_components, size_t component_count,
     struct IntegerPolynomial**a, struct Integer*characteristic_power,
@@ -172,7 +170,7 @@ bool factor_found(struct Stack*output_stack, struct Stack*local_stack,
             (*a)->coefficients[(*a)->coefficient_count - 1]);
         for (size_t i = 0; i < candidate->coefficient_count; ++i)
         {
-            candidate->coefficients[i] = integer_euclidean_remainder(local_stack, output_stack,
+            candidate->coefficients[i] = integer_get_remainder(local_stack, output_stack,
                 candidate->coefficients[i], characteristic_power);
             if (candidate->coefficients[i]->sign < 0)
             {
@@ -180,7 +178,7 @@ bool factor_found(struct Stack*output_stack, struct Stack*local_stack,
                     integer_add(local_stack, candidate->coefficients[i], characteristic_power);
             }
             if (integer_compare(output_stack, local_stack,
-                integer_doubled(local_stack, candidate->coefficients[i]), characteristic_power) > 0)
+                integer_double(local_stack, candidate->coefficients[i]), characteristic_power) > 0)
             {
                 candidate->coefficients[i] = integer_subtract(local_stack, output_stack,
                     candidate->coefficients[i], characteristic_power);
@@ -193,7 +191,7 @@ bool factor_found(struct Stack*output_stack, struct Stack*local_stack,
         if (division.remainder && division.remainder->coefficient_count == 0)
         {
             factors[*factor_count] =
-                integer_polynomial_primitive_part(output_stack, local_stack, candidate);
+                integer_polynomial_get_primitive_part(output_stack, local_stack, candidate);
             while (true)
             {
                 integer_polynomial_euclidean_divide(local_stack, output_stack, &division, *a,
@@ -231,8 +229,8 @@ bool factor_found(struct Stack*output_stack, struct Stack*local_stack,
     return false;
 }
 
-size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct Stack*local_stack,
-    struct IntegerPolynomial*a, struct IntegerPolynomial**out)
+size_t squarefree_integer_polynomial_factor(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct IntegerPolynomial*a, struct IntegerPolynomial**out)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct IntegerPolynomial*modded_a;
@@ -244,7 +242,7 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
         modded_a = modded_polynomial_reduced(local_stack, output_stack, a, characteristic);
         if (modded_a->coefficient_count == a->coefficient_count)
         {
-            gcd = modded_polynomial_gcd(local_stack, output_stack, modded_a,
+            gcd = modded_polynomial_get_gcd(local_stack, output_stack, modded_a,
                 modded_polynomial_reduced(local_stack, output_stack,
                     integer_polynomial_derivative(local_stack, output_stack, modded_a), characteristic),
                 characteristic);
@@ -272,20 +270,21 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
     struct Integer*binomial_coefficient_denominator = &one;
     for (size_t i = (factor_degree - 1) / 2; i > 0; --i)
     {
-        binomial_coefficient_numerator = integer_multiply(local_stack, output_stack,
-            binomial_coefficient_numerator, integer_from_size_t(local_stack, factor_degree - i));
+        binomial_coefficient_numerator =
+            integer_multiply(local_stack, output_stack, binomial_coefficient_numerator,
+                size_t_to_integer(local_stack, factor_degree - i));
         binomial_coefficient_denominator = integer_multiply(local_stack, output_stack,
-            binomial_coefficient_denominator, integer_from_size_t(local_stack, i));
+            binomial_coefficient_denominator, size_t_to_integer(local_stack, i));
     }
     struct Integer*leading_coefficient_magnitude =
-        integer_magnitude(local_stack, a->coefficients[a->coefficient_count - 1]);
-    coefficient_bound = integer_doubled(local_stack,
+        integer_get_magnitude(local_stack, a->coefficients[a->coefficient_count - 1]);
+    coefficient_bound = integer_double(local_stack,
         integer_multiply(local_stack, output_stack, leading_coefficient_magnitude,
             integer_multiply(local_stack, output_stack,
-                integer_euclidean_quotient(local_stack, output_stack,
-                    binomial_coefficient_numerator, binomial_coefficient_denominator),
+                integer_get_quotient(local_stack, output_stack, binomial_coefficient_numerator,
+                    binomial_coefficient_denominator),
                 integer_add(local_stack, leading_coefficient_magnitude,
-                    integer_square_root(local_stack, output_stack, coefficient_bound)))));
+                    integer_take_square_root(local_stack, output_stack, coefficient_bound)))));
     struct Integer*e = &one;
     struct Integer*characteristic_power = characteristic;
     while (integer_compare(output_stack, local_stack, characteristic_power, coefficient_bound) < 0)
@@ -304,23 +303,22 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
     modded_a_factor_count -= 1;
     for (size_t i = 0; i < modded_a_factor_count; ++i)
     {
-        product_of_unlifted_factors = modded_polynomial_euclidean_quotient(local_stack,
-            output_stack, product_of_unlifted_factors, modded_a_factors[i], characteristic);
+        product_of_unlifted_factors = modded_polynomial_get_quotient(local_stack, output_stack,
+            product_of_unlifted_factors, modded_a_factors[i], characteristic);
         struct Integer*lift_characteristic = characteristic;
         struct IntegerPolynomial*b = modded_a_factors[i];
         struct IntegerPolynomial*c = product_of_unlifted_factors;
         while (integer_compare(output_stack, local_stack, lift_characteristic,
             characteristic_power) < 0)
         {
-			void*output_stack_savepoint = output_stack->cursor;
             struct IntegerPolynomial*b_mod_prime =
                 modded_polynomial_reduced(local_stack, output_stack, b, characteristic);
             struct IntegerPolynomial*c_mod_prime =
                 modded_polynomial_reduced(local_stack, output_stack, c, characteristic);
             struct ExtendedGCDInfo gcd_info;
-			leaking_modded_polynomial_extended_gcd(local_stack, output_stack, &gcd_info,
-				b_mod_prime, c_mod_prime, characteristic);
-            struct Integer*reciprocal = modded_integer_reciprocal(local_stack, output_stack,
+            modded_polynomial_get_extended_gcd(local_stack, output_stack, &gcd_info, b_mod_prime,
+                c_mod_prime, characteristic);
+            struct Integer*reciprocal = modded_integer_get_reciprocal(local_stack, output_stack,
                 ((struct IntegerPolynomial*)gcd_info.gcd)->coefficients[0], characteristic);
             gcd_info.a_coefficient = modded_polynomial_modded_integer_multiply(local_stack,
                 output_stack, (struct IntegerPolynomial*)gcd_info.a_coefficient, reciprocal,
@@ -352,7 +350,6 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
                     lift_characteristic));
             lift_characteristic =
                 integer_multiply(local_stack, output_stack, lift_characteristic, characteristic);
-			output_stack->cursor = output_stack_savepoint;
         }
         lifted_factors[lifted_factor_count] = b;
         ++lifted_factor_count;
@@ -389,7 +386,7 @@ size_t squarefree_integer_polynomial_factor(struct Stack*output_stack, struct St
     }
     if (a->coefficient_count > 1)
     {
-        out[factor_count] = integer_polynomial_primitive_part(output_stack, local_stack, a);
+        out[factor_count] = integer_polynomial_get_primitive_part(output_stack, local_stack, a);
         ++factor_count;
     }
     local_stack->cursor = local_stack_savepoint;
@@ -423,8 +420,8 @@ void integer_polynomial_reverse(struct IntegerPolynomial*a)
     }
 }
 
-size_t primitive_integer_polynomial_factor(struct Stack*output_stack, struct Stack*local_stack,
-    struct IntegerPolynomial*a, struct IntegerPolynomial**out)
+size_t primitive_integer_polynomial_factor(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct IntegerPolynomial*a, struct IntegerPolynomial**out)
 {
     void*local_stack_savepoint = local_stack->cursor;
     size_t factor_count = 0;
@@ -436,7 +433,7 @@ size_t primitive_integer_polynomial_factor(struct Stack*output_stack, struct Sta
         factor_count = 1;
         do
         {
-            a = integer_polynomial_euclidean_quotient(local_stack, output_stack, a, *out);
+            a = integer_polynomial_get_quotient(local_stack, output_stack, a, *out);
         } while (!a->coefficients[0]->value_count);
     }
     if (a->coefficient_count < 2)
@@ -451,8 +448,8 @@ size_t primitive_integer_polynomial_factor(struct Stack*output_stack, struct Sta
     for (size_t i = 0; i < squarefree_factor_count; ++i)
     {
         if (integer_compare(output_stack, local_stack,
-            integer_magnitude(local_stack, squarefree_factors[i]->coefficients[0]),
-            integer_magnitude(local_stack, squarefree_factors[i]->coefficients
+            integer_get_magnitude(local_stack, squarefree_factors[i]->coefficients[0]),
+            integer_get_magnitude(local_stack, squarefree_factors[i]->coefficients
                 [squarefree_factors[i]->coefficient_count - 1])) < 0)
         {
             integer_polynomial_reverse(squarefree_factors[i]);
@@ -474,13 +471,13 @@ size_t primitive_integer_polynomial_factor(struct Stack*output_stack, struct Sta
     return factor_count;
 }
 
-struct RationalPolynomial*integer_polynomial_to_monic(struct Stack*output_stack,
-    struct Stack*local_stack, struct IntegerPolynomial*a)
+struct RationalPolynomial*integer_polynomial_get_monic(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct IntegerPolynomial*a)
 {
     struct RationalPolynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
-        out->coefficients[i] = rational_reduced(output_stack, local_stack, a->coefficients[i],
+        out->coefficients[i] = rational_reduce(output_stack, local_stack, a->coefficients[i],
             a->coefficients[a->coefficient_count - 1]);
     }
     return out;

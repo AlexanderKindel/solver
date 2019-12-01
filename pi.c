@@ -1,14 +1,14 @@
 ﻿#include "declarations.h"
 
-struct Rational*pi_refine_interval(struct Stack*output_stack, struct Stack*local_stack,
-    struct Rational*pi_interval_size)
+struct Rational*pi_refine_interval(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Rational*pi_interval_size)
 {
     pi.min = rational_add(output_stack, local_stack, pi.min,
         rational_integer_divide(local_stack, output_stack,
             rational_subtract(local_stack, output_stack, &(struct Rational){ INT(4, 1),
                 integer_add(local_stack, pi_eight_k, &one) },
                 rational_add(local_stack, output_stack,
-                    rational_reduced(local_stack, output_stack, INT(2, 1),
+                    rational_reduce(local_stack, output_stack, INT(2, 1),
                         integer_add(local_stack, pi_eight_k, INT(4, 1))),
                     rational_add(local_stack, output_stack,
                         &(struct Rational){ &one, integer_add(local_stack, pi_eight_k, INT(5, 1)) },
@@ -19,14 +19,14 @@ struct Rational*pi_refine_interval(struct Stack*output_stack, struct Stack*local
         &(struct Rational){ &one, INT(16, 1) });
     pi_eight_k = integer_add(output_stack, pi_eight_k, INT(8, 1));
     pi_sixteen_to_the_k =
-		integer_multiply(output_stack, local_stack, pi_sixteen_to_the_k, INT(16, 1));
+        integer_multiply(output_stack, local_stack, pi_sixteen_to_the_k, INT(16, 1));
     local_stack->cursor = (void*)local_stack->start;
     return pi_interval_size;
 }
 
 void pi_set_stacks(struct Stack**out_old_stack, struct Stack**out_new_stack)
 {
-    if ((size_t)pi.min < pi_stack_b.start)
+    if (pi.min < pi_stack_b.start)
     {
         *out_old_stack = &pi_stack_a;
         *out_new_stack = &pi_stack_b;

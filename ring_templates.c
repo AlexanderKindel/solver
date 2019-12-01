@@ -10,7 +10,7 @@ struct RingStrings
     char*additive_identity;//4
     char*multiplicative_identity;//5
     char*add;//6
-    char*negative;//7
+    char*negate;//7
     char*subtract;//8
     char*multiply;//9
 };
@@ -18,9 +18,9 @@ struct RingStrings
 struct EuclideanDomainStrings
 {
     struct RingStrings ring_strings;
-    char*euclidean_quotient;//:
+    char*get_quotient;//:
     char*euclidean_divide;//;
-    char*gcd;//<
+    char*get_gcd;//<
     char*coefficient_times_integer;//=
 };
 
@@ -28,7 +28,7 @@ struct FieldStrings
 {
     struct RingStrings ring_strings;
     char*divide;//:
-    char*reciprocal;//;
+    char*get_reciprocal;//;
 };
 
 struct Switches
@@ -58,13 +58,13 @@ struct Substitution integer_substitution =
             "&zero",
             "&one",
             "integer_add",
-            "integer_negative",
+            "integer_negate",
             "integer_subtract",
             "integer_multiply"
         },
-        "integer_euclidean_quotient",
+        "integer_get_quotient",
         "integer_euclidean_divide",
-        "integer_gcd"
+        "integer_get_gcd"
     },
     (bool*)&(struct Switches) { false, false, false, false }
 };
@@ -81,12 +81,12 @@ struct Substitution modded_integer_substitution =
             "&zero",
             "&one",
             "modded_integer_add",
-            "modded_integer_negative",
+            "modded_integer_negate",
             "modded_integer_subtract",
             "modded_integer_multiply"
         },
         "!not_implemented!",
-        "modded_integer_reciprocal"
+        "modded_integer_get_reciprocal"
     },
     (bool*)&(struct Switches) { true, true, true, true, true }
 };
@@ -103,12 +103,12 @@ struct Substitution rational_substitution =
             "&rational_zero",
             "&rational_one",
             "rational_add",
-            "rational_negative",
+            "rational_negate",
             "rational_subtract",
             "rational_multiply"
         },
         "rational_divide",
-        "rational_reciprocal"
+        "rational_get_reciprocal"
     },
     (bool*)&(struct Switches) { false, false, true, false, false }
 };
@@ -124,7 +124,7 @@ struct Substitution gaussian_rational_substitution =
         "&gaussian_rational_zero",
         "&gaussian_rational_one",
         "gaussian_rational_add",
-        "gaussian_rational_negative",
+        "gaussian_rational_negate",
         "gaussian_rational_subtract",
         "gaussian_rational_multiply"
     },
@@ -142,7 +142,7 @@ struct Substitution float_substitution =
         "&float_zero",
         "&float_one",
         "float_add",
-        "float_negative",
+        "float_negate",
         "float_subtract",
         "float_multiply"
     },
@@ -161,13 +161,13 @@ struct Substitution integer_polynomial_substitution =
             "polynomial_zero",
             "&integer_polynomial_one",
             "integer_polynomial_add",
-            "integer_polynomial_negative",
+            "integer_polynomial_negate",
             "integer_polynomial_subtract",
             "integer_polynomial_multiply"
         },
-        "integer_polynomial_euclidean_quotient",
+        "integer_polynomial_get_quotient",
         "integer_polynomial_euclidean_divide",
-        "integer_polynomial_gcd",
+        "integer_polynomial_get_gcd",
         "integer_multiply"
     },
     (bool*)&(struct Switches) { false, false, false, false }
@@ -185,11 +185,11 @@ struct Substitution modded_polynomial_substitution =
             "polynomial_zero",
             "&integer_polynomial_one",
             "modded_polynomial_add",
-            "modded_polynomial_negative",
+            "modded_polynomial_negate",
             "modded_polynomial_subtract",
             "modded_polynomial_multiply"
         },
-        "modded_polynomial_euclidean_quotient",
+        "modded_polynomial_get_quotient",
         "modded_polynomial_euclidean_divide",
         "$not_implemented$"
     },
@@ -208,13 +208,13 @@ struct Substitution rational_polynomial_substitution =
             "polynomial_zero",
             "&rational_polynomial_one",
             "rational_polynomial_add",
-            "rational_polynomial_negative",
+            "rational_polynomial_negate",
             "rational_polynomial_subtract",
             "rational_polynomial_multiply"
         },
-        "rational_polynomial_euclidean_quotient",
+        "rational_polynomial_get_quotient",
         "rational_polynomial_euclidean_divide",
-        "rational_polynomial_gcd",
+        "rational_polynomial_get_gcd",
         "rational_integer_multiply"
     },
     (bool*)&(struct Switches) { false, false, true, false }
@@ -250,7 +250,7 @@ struct Substitution nested_polynomial_substitution =
             "polynomial_zero",
             "&nested_polynomial_one",
             "nested_polynomial_add",
-            "nested_polynomial_negative",
+            "nested_polynomial_negate",
             "nested_polynomial_subtract",
             "nested_polynomial_multiply"
         },
@@ -274,12 +274,12 @@ struct Substitution number_field_element_substitution =
             "polynomial_zero",
             "&rational_polynomial_one",
             "rational_polynomial_add",
-            "rational_polynomial_negative",
+            "rational_polynomial_negate",
             "rational_polynomial_subtract",
             "number_field_element_multiply"
         },
         "number_field_element_divide",
-        "number_field_element_reciprocal"
+        "number_field_element_get_reciprocal"
     },
     (bool*)&(struct Switches) { true, false, true, false, true }
 };
@@ -296,13 +296,13 @@ struct Substitution number_field_polynomial_substitution =
             "polynomial_zero",
             "&nested_polynomial_one",
             "nested_polynomial_add",
-            "nested_polynomial_negative",
+            "nested_polynomial_negate",
             "nested_polynomial_subtract",
             "number_field_polynomial_multiply"
         },
         "!not_implemented!",
         "number_field_polynomial_euclidean_divide",
-        "number_field_polynomial_gcd"
+        "number_field_polynomial_get_gcd"
     },
     (bool*)&(struct Switches) { true, false, true, false, true }
 };
@@ -391,7 +391,7 @@ char*polynomial_trim_leading_zeroes_template =
 "}\n";
 
 char*polynomial_add_template =
-"struct %02*%01_add(struct Stack*output_stack,#02 struct Stack*local_stack,# struct %02*a, struct %02*b#01, struct %22*%00#)\n"
+"struct %02*%01_add(struct Stack*restrict output_stack,#02 struct Stack*restrict local_stack,# struct %02*a, struct %02*b#01, struct %22*%00#)\n"
 "{\n"
 "    if (a->coefficient_count < b->coefficient_count)\n"
 "    {\n"
@@ -410,8 +410,8 @@ char*polynomial_add_template =
 "    return out;\n"
 "}\n";
 
-char*polynomial_negative_template =
-"struct %02*%01_negative(struct Stack*output_stack#03, struct Stack*local_stack#, struct %02*a#01, struct %22*%00#)\n"
+char*polynomial_negate_template =
+"struct %02*%01_negate(struct Stack*restrict output_stack#03, struct Stack*restrict local_stack#, struct %02*a#01, struct %22*%00#)\n"
 "{\n"
 "    struct %02*out = polynomial_allocate(output_stack, a->coefficient_count);\n"
 "    for (size_t i = 0; i < a->coefficient_count; ++i)\n"
@@ -422,7 +422,7 @@ char*polynomial_negative_template =
 "}\n";
 
 char*polynomial_subtract_template =
-"struct %02*%01_subtract(struct Stack*output_stack, struct Stack*local_stack, struct %02*minuend, struct %02*subtrahend)\n"
+"struct %02*%01_subtract(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02*minuend, struct %02*subtrahend)\n"
 "{\n"
 "    void*local_stack_savepoint = local_stack->cursor;\n"
 "    struct %02*out = %06(output_stack#02, local_stack#, minuend, %07(local_stack, subtrahend));\n"
@@ -431,7 +431,7 @@ char*polynomial_subtract_template =
 "}\n";
 
 char*polynomial_multiply_template =
-"struct %02*%01_multiply(struct Stack*output_stack, struct Stack*local_stack, struct %02*a, struct %02*b#00, struct %22*%00#)\n"
+"struct %02*%01_multiply(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02*a, struct %02*b#00, struct %22*%00#)\n"
 "{\n"
 "    if (!a->coefficient_count && !b->coefficient_count)\n"
 "    {\n"
@@ -457,7 +457,7 @@ char*polynomial_multiply_template =
 "}\n";
 
 char*polynomial_multiply_by_coefficient_template =
-"struct %02*%01_%11_multiply(struct Stack*output_stack, struct Stack*local_stack, struct %02*a, struct %12*b#00, struct %22*%00#)\n"
+"struct %02*%01_%11_multiply(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02*a, struct %12*b#00, struct %22*%00#)\n"
 "{\n"
 "    if (%13_equals(b, %14))\n"
 "    {\n"
@@ -472,7 +472,7 @@ char*polynomial_multiply_by_coefficient_template =
 "}\n";
 
 char*exponentiate_template =
-"struct %02*%01_exponentiate(struct Stack*output_stack, struct Stack*local_stack, struct %02*base, struct Integer*exponent#00, struct %22*%00#)\n"
+"struct %02*%01_exponentiate(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02*base, struct Integer*exponent#00, struct %22*%00#)\n"
 "{\n"
 "    if (!exponent->value_count)\n"
 "    {\n"
@@ -486,7 +486,7 @@ char*exponentiate_template =
 "        {\n"
 "            out = %09(local_stack, output_stack, out, base#00, %00#);\n"
 "        }\n"
-"        exponent = integer_half(local_stack, exponent);\n"
+"        exponent = integer_halve(local_stack, exponent);\n"
 "        if (!exponent->value_count)\n"
 "        {\n"
 "            out = %03_copy(output_stack, out);\n"
@@ -498,7 +498,7 @@ char*exponentiate_template =
 "}\n";
 
 char*field_polynomial_divide_template =
-"void %01_euclidean_divide(struct Stack*output_stack, struct Stack*local_stack, struct %02Division*out, struct %02*dividend, struct %02*divisor#00, struct %22*%00#)\n"
+"void %01_euclidean_divide(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02Division*out, struct %02*dividend, struct %02*divisor#00, struct %22*%00#)\n"
 "{\n"
 "    if (divisor->coefficient_count > dividend->coefficient_count)\n"
 "    {\n"
@@ -531,7 +531,7 @@ char*field_polynomial_divide_template =
 
 char*euclidean_domain_polynomial_divide_template =
 "//Sets out->quotient to 0 when the coefficients of the quotient wouldn't be in the ring.\n"
-"void %01_euclidean_divide(struct Stack*output_stack, struct Stack*local_stack, struct %02Division*out, struct %02*dividend, struct %02*divisor)\n"
+"void %01_euclidean_divide(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02Division*out, struct %02*dividend, struct %02*divisor)\n"
 "{\n"
 "    if (divisor->coefficient_count > dividend->coefficient_count)\n"
 "    {\n"
@@ -572,7 +572,7 @@ char*euclidean_domain_polynomial_divide_template =
 "}\n";
 
 char*polynomial_divide_by_coefficient_template =
-"struct %02*%01_%11_divide(struct Stack*output_stack, struct Stack*local_stack, struct %02*dividend, struct %12*divisor)\n"
+"struct %02*%01_%11_divide(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02*dividend, struct %12*divisor)\n"
 "{\n"
 "    void*local_stack_savepoint = local_stack->cursor;\n"
 "    struct %02*out = polynomial_allocate(output_stack, dividend->coefficient_count);\n"
@@ -584,8 +584,8 @@ char*polynomial_divide_by_coefficient_template =
 "    return out;\n"
 "}\n";
 
-char*gcd_template =
-"struct %02*%01_gcd(struct Stack*output_stack, struct Stack*local_stack, struct %02*a, struct %02*b#00, struct %22*%00#)\n"
+char*get_gcd_template =
+"struct %02*%01_get_gcd(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02*a, struct %02*b#00, struct %22*%00#)\n"
 "{\n"
 "    void*local_stack_savepoint = local_stack->cursor;\n"
 "    while (!%03_equals(b, %04))\n"
@@ -601,9 +601,11 @@ char*gcd_template =
 "    return a;\n"
 "}\n";
 
-char*extended_gcd_template =
-"void leaking_%01_extended_gcd(struct Stack*output_stack, struct Stack*local_stack, struct ExtendedGCDInfo*out, struct %02*a, struct %02*b#00, struct %22*%00#)\n"
+char*get_extended_gcd_template =
+"//Leaves a significant amount of excess allocations on output_stack.\n"
+"void %01_get_extended_gcd(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct ExtendedGCDInfo*out, struct %02*a, struct %02*b#00, struct %22*%00#)\n"
 "{\n"
+"    void*local_stack_savepoint = local_stack->cursor;\n"
 "    out->gcd = b;\n"
 "    out->a_coefficient = %04;\n"
 "    out->b_coefficient = %05;\n"
@@ -612,10 +614,10 @@ char*extended_gcd_template =
 "    while (!%03_equals(a, %04))\n"
 "    {\n"
 "        struct %02Division division;\n"
-"        %0;(local_stack, output_stack, &division, out->gcd, a#00, %00#);\n"
-"        struct %02*m = %08(local_stack, output_stack, out->a_coefficient,\n"
+"        %0;(output_stack, local_stack, &division, out->gcd, a#00, %00#);\n"
+"        struct %02*m = %08(output_stack, local_stack, out->a_coefficient,\n"
 "            %09(local_stack, output_stack, out->b_over_gcd, division.quotient#00, %00#)#01, %00#);\n"
-"        struct %02*n = %08(local_stack, output_stack, out->b_coefficient,\n"
+"        struct %02*n = %08(output_stack, local_stack, out->b_coefficient,\n"
 "            %09(local_stack, output_stack, out->a_over_gcd, division.quotient#00, %00#)#01, %00#);\n"
 "        out->gcd = a;\n"
 "        a = division.remainder;\n"
@@ -624,11 +626,12 @@ char*extended_gcd_template =
 "        out->b_over_gcd = m;\n"
 "        out->a_over_gcd = n;\n"
 "    }\n"
-"    out->b_over_gcd = %07(local_stack#01, output_stack#, out->b_over_gcd#01, %00#);\n"
+"    out->b_over_gcd = %07(output_stack#01, local_stack#, out->b_over_gcd#01, %00#);\n"
+"    local_stack->cursor = local_stack_savepoint;\n"
 "}\n";
 
 char*polynomial_content_template =
-"struct %12*%01_content(struct Stack*output_stack, struct Stack*local_stack, struct %02*a)\n"
+"struct %12*%01_content(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02*a)\n"
 "{\n"
 "    if (!a->coefficient_count)\n"
 "    {\n"
@@ -646,7 +649,7 @@ char*polynomial_content_template =
 "}\n";
 
 char*polynomial_derivative_template =
-"struct %02*%01_derivative(struct Stack*output_stack, struct Stack*local_stack, struct %02*a)\n"
+"struct %02*%01_derivative(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02*a)\n"
 "{\n"
 "    if (!a->coefficient_count)\n"
 "    {\n"
@@ -665,7 +668,7 @@ char*polynomial_derivative_template =
 "}\n";
 
 char*polynomial_squarefree_factor_template =
-"size_t %01_squarefree_factor(struct Stack*output_stack, struct Stack*local_stack, struct %02*a, struct %02**out#00, struct %12*%00#)\n"
+"size_t %01_squarefree_factor(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %02*a, struct %02**out#00, struct %12*%00#)\n"
 "{\n"
 "    void*local_stack_savepoint = local_stack->cursor;\n"
 "    size_t factor_count = 0;\n"
@@ -693,7 +696,7 @@ char*polynomial_squarefree_factor_template =
 "}\n";
 
 char*rational_polynomial_evaluate_template =
-"struct %02*rational_polynomial_evaluate_at_%01(struct Stack*output_stack, struct Stack*local_stack, struct RationalPolynomial*a, struct %02*argument)\n"
+"struct %02*rational_polynomial_evaluate_at_%01(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct RationalPolynomial*a, struct %02*argument)\n"
 "{\n"
 "    void*local_stack_savepoint = local_stack->cursor;\n"
 "    struct %02*out = %04;\n"
