@@ -185,7 +185,7 @@ size_t rational_polynomial_count_roots_over_segment(struct Stack*restrict local_
     struct RationalPolynomial*sturm_chain_first_element = rational_polynomial_get_gcd(local_stack_a,
         local_stack_b, parameterization_real_part, parameterization_imaginary_part);
     size_t out = get_twice_cauchy_index(local_stack_a, local_stack_b,
-        rational_polynomial_derivative(local_stack_a, local_stack_b, sturm_chain_first_element),
+        rational_polynomial_get_derivative(local_stack_a, local_stack_b, sturm_chain_first_element),
         sturm_chain_first_element);
     if (gaussian_rational_equals(&gaussian_rational_zero,
         rational_polynomial_evaluate_at_gaussian_rational(local_stack_a, local_stack_b, a,
@@ -258,7 +258,8 @@ size_t rational_polynomial_count_roots_in_rectangle(struct Stack*restrict local_
             rational_polynomial_get_gcd(local_stack_a, local_stack_b, parameterization_real_part,
                 parameterization_imaginary_part);
         out += get_twice_cauchy_index(local_stack_a, local_stack_b,
-            rational_polynomial_derivative(local_stack_a, local_stack_b, sturm_chain_first_element),
+            rational_polynomial_get_derivative(local_stack_a, local_stack_b,
+                sturm_chain_first_element),
             sturm_chain_first_element);
         local_stack_a->cursor = local_stack_a_savepoint;
     }
@@ -272,18 +273,18 @@ size_t rational_polynomial_count_roots_in_rectangle(struct Stack*restrict local_
 //the case that the sizes of the intervals in out converge to 0 as interval_size and the sizes of
 //the intervals in argument converge to 0. This is all that turns out to be necessary in this
 //program, so no more direct means of controlling the accuracy of out are provided.
-void rational_polynomial_evaluate_at_rectangular_estimate(struct Stack*restrict output_stack,
-    struct Stack*restrict local_stack, struct RectangularEstimate*out, struct RationalPolynomial*a,
-    struct RectangularEstimate*argument, struct Rational*interval_size)
+void rational_polynomial_evaluate_at_region_estimate(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Region*out, struct RationalPolynomial*a,
+    struct Region*argument, struct Rational*interval_size)
 {
-    out->imaginary_part_estimate = ALLOCATE(output_stack, struct FloatInterval);
+    out->imaginary_interval = ALLOCATE(output_stack, struct FloatInterval);
     if (a->coefficient_count == 0)
     {
-        out->real_part_estimate = ALLOCATE(output_stack, struct FloatInterval);
-        out->real_part_estimate->min = &float_zero;
-        out->real_part_estimate->max = &float_zero;
-        out->imaginary_part_estimate->min = &float_zero;
-        out->imaginary_part_estimate->max = &float_zero;
+        out->real_interval = ALLOCATE(output_stack, struct FloatInterval);
+        out->real_interval->min = &float_zero;
+        out->real_interval->max = &float_zero;
+        out->imaginary_interval->min = &float_zero;
+        out->imaginary_interval->max = &float_zero;
         return;
     }
     void*local_stack_savepoint = local_stack->cursor;
@@ -294,39 +295,39 @@ void rational_polynomial_evaluate_at_rectangular_estimate(struct Stack*restrict 
         coefficients[i] = rational_get_float_estimate(local_stack, output_stack, a->coefficients[i],
             interval_size);
     }
-    out->real_part_estimate = ALLOCATE(output_stack, struct FloatInterval);
-    out->real_part_estimate->min = coefficients[0]->min;
-    out->real_part_estimate->max = coefficients[0]->max;
-    out->imaginary_part_estimate->min = &float_zero;
-    out->imaginary_part_estimate->max = &float_zero;
-    struct RectangularEstimate argument_power = { &(struct FloatInterval){&float_one, &float_one},
+    out->real_interval = ALLOCATE(output_stack, struct FloatInterval);
+    out->real_interval->min = coefficients[0]->min;
+    out->real_interval->max = coefficients[0]->max;
+    out->imaginary_interval->min = &float_zero;
+    out->imaginary_interval->max = &float_zero;
+    struct Region argument_power = { &(struct FloatInterval){&float_one, &float_one},
         &(struct FloatInterval){&float_zero, &float_zero} };
     for (size_t i = 1; i < a->coefficient_count; ++i)
     {
         struct FloatInterval*new_argument_power_real_part =
             float_interval_subtract(local_stack, output_stack,
+                float_interval_multiply(local_stack, output_stack, argument_power.real_interval,
+                    argument->real_interval),
                 float_interval_multiply(local_stack, output_stack,
-                    argument_power.real_part_estimate, argument->real_part_estimate),
-                float_interval_multiply(local_stack, output_stack,
-                    argument_power.imaginary_part_estimate, argument->imaginary_part_estimate));
+                    argument_power.imaginary_interval, argument->imaginary_interval));
         struct FloatInterval*new_argument_power_imaginary_part =
             float_interval_add(local_stack, output_stack,
                 float_interval_multiply(local_stack, output_stack,
-                    argument_power.real_part_estimate, argument->imaginary_part_estimate),
+                    argument_power.real_interval, argument->imaginary_interval),
                 float_interval_multiply(local_stack, output_stack,
-                    argument_power.imaginary_part_estimate, argument->real_part_estimate));
-        argument_power.real_part_estimate = new_argument_power_real_part;
-        argument_power.imaginary_part_estimate = new_argument_power_imaginary_part;
-        out->real_part_estimate = float_interval_add(local_stack, output_stack,
-            float_interval_multiply(local_stack, output_stack, argument_power.real_part_estimate,
-                coefficients[i]), out->real_part_estimate);
-        out->imaginary_part_estimate = float_interval_add(local_stack, output_stack,
+                    argument_power.imaginary_interval, argument->real_interval));
+        argument_power.real_interval = new_argument_power_real_part;
+        argument_power.imaginary_interval = new_argument_power_imaginary_part;
+        out->real_interval = float_interval_add(local_stack, output_stack,
+            float_interval_multiply(local_stack, output_stack, argument_power.real_interval,
+                coefficients[i]), out->real_interval);
+        out->imaginary_interval = float_interval_add(local_stack, output_stack,
             float_interval_multiply(local_stack, output_stack,
-                argument_power.imaginary_part_estimate, coefficients[i]),
-            out->imaginary_part_estimate);
+                argument_power.imaginary_interval, coefficients[i]),
+            out->imaginary_interval);
     }
-    out->real_part_estimate = float_interval_copy(output_stack, out->real_part_estimate);
-    out->imaginary_part_estimate = float_interval_copy(output_stack, out->imaginary_part_estimate);
+    out->real_interval = float_interval_copy(output_stack, out->real_interval);
+    out->imaginary_interval = float_interval_copy(output_stack, out->imaginary_interval);
     local_stack->cursor = local_stack_savepoint;
 }
 

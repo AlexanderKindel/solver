@@ -1,0 +1,11 @@
+struct %main.base_type%*%main.type_name%_%coefficient.type_name%_divide(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %main.base_type%*dividend, struct %coefficient.base_type%*divisor)
+{
+    void*local_stack_savepoint = local_stack->cursor;
+    struct %main.base_type%*out = polynomial_allocate(output_stack, dividend->coefficient_count);
+    for (size_t i = 0; i < dividend->coefficient_count; ++i)
+    {
+        out->coefficients[i] = %coefficient.get_quotient%(output_stack, local_stack, dividend->coefficients[i], divisor);
+    }
+    local_stack->cursor = local_stack_savepoint;
+    return out;
+}

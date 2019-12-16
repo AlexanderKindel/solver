@@ -1,6 +1,6 @@
 #include "declarations.h"
 
-struct Integer*integer_residue(struct Stack*restrict output_stack,
+struct Integer*integer_get_residue(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct Integer*a, struct Integer*characteristic)
 {
     void*local_stack_savepoint = local_stack->cursor;
@@ -33,7 +33,7 @@ struct Integer*modded_integer_negate(struct Stack*restrict output_stack,
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct Integer*out =
-        integer_residue(output_stack, local_stack, integer_negate(local_stack, a), characteristic);
+        integer_get_residue(output_stack, local_stack, integer_negate(local_stack, a), characteristic);
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
@@ -43,7 +43,7 @@ struct Integer*modded_integer_subtract(struct Stack*restrict output_stack,
     struct Integer*characteristic)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct Integer*out = integer_residue(output_stack, local_stack,
+    struct Integer*out = integer_get_residue(output_stack, local_stack,
         integer_subtract(local_stack, output_stack, minuend, subtrahend), characteristic);
     local_stack->cursor = local_stack_savepoint;
     return out;
@@ -79,14 +79,14 @@ struct Integer*modded_integer_get_reciprocal(struct Stack*restrict output_stack,
     return out;
 }
 
-struct IntegerPolynomial*modded_polynomial_reduced(struct Stack*restrict output_stack,
+struct IntegerPolynomial*modded_polynomial_reduce(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct IntegerPolynomial*a, struct Integer*characteristic)
 {
     struct IntegerPolynomial*out = polynomial_allocate(output_stack, a->coefficient_count);
     for (size_t i = 0; i < a->coefficient_count; ++i)
     {
         out->coefficients[i] =
-            integer_residue(local_stack, output_stack, a->coefficients[i], characteristic);
+            integer_get_residue(local_stack, output_stack, a->coefficients[i], characteristic);
     }
     integer_polynomial_trim_leading_zeroes(out);
     integer_polynomial_copy_coefficients(output_stack, out);
@@ -98,7 +98,7 @@ struct IntegerPolynomial*modded_polynomial_subtract(struct Stack*restrict output
     struct IntegerPolynomial*subtrahend, struct Integer*characteristic)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct IntegerPolynomial*out = modded_polynomial_reduced(output_stack, local_stack,
+    struct IntegerPolynomial*out = modded_polynomial_reduce(output_stack, local_stack,
         integer_polynomial_subtract(local_stack, output_stack, minuend, subtrahend), characteristic);
     local_stack->cursor = local_stack_savepoint;
     return out;
@@ -124,7 +124,7 @@ struct IntegerPolynomial*modded_polynomial_get_remainder(struct Stack*restrict o
     return division.remainder;
 }
 
-struct IntegerPolynomial*modded_polynomial_monic(struct Stack*restrict output_stack,
+struct IntegerPolynomial*modded_polynomial_get_monic(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct IntegerPolynomial*a, struct Integer*characteristic)
 {
     void*local_stack_savepoint = local_stack->cursor;

@@ -412,8 +412,10 @@ void init_permanent_memory()
     roots_of_unity[1] = &number_one;
     roots_of_unity[2] = number_rational_initialize(&permanent_stack,
         &(struct Rational){ integer_initialize(&permanent_stack, 1, -1), &one });
-    primes[0] = integer_initialize(&permanent_stack, 2, 1);
-    primes[1] = integer_initialize(&permanent_stack, 3, 1);
+    *(struct Integer**)ALLOCATE(&prime_stack, struct Integer*) =
+        integer_initialize(&permanent_stack, 2, 1);
+    *(struct Integer**)ALLOCATE(&prime_stack, struct Integer*) =
+        integer_initialize(&permanent_stack, 3, 1);
     pi.min = ALLOCATE(&pi_stack_a, struct Rational);
     pi.min->numerator = integer_initialize(&pi_stack_a, 47, 1);
     pi.min->denominator = integer_initialize(&pi_stack_a, 15, 1);
@@ -430,8 +432,7 @@ void init(struct Stack*stack_a, struct Stack*stack_b)
     void*base_address = RESERVE_MEMORY(UINT32_MAX);
     stack_initialize(&pi_stack_a, base_address, page_size);
     stack_initialize(&pi_stack_b, pi_stack_a.end, page_size);
-    primes = (struct Integer**)pi_stack_b.end;
-    COMMIT_PAGE(primes);
+    stack_initialize(&prime_stack, pi_stack_b.end, page_size);
     roots_of_unity = (struct Number**)((uint8_t*)pi_stack_b.end + page_size);
     COMMIT_PAGE(roots_of_unity);
     size_t arena_size = page_size * ((UINT32_MAX - 4 * page_size) / (3 * page_size));
@@ -446,8 +447,8 @@ void reset_permanent_memory()
 {
     stack_reset(&pi_stack_a);
     stack_reset(&pi_stack_b);
+    stack_reset(&prime_stack);
     stack_reset(&permanent_stack);
-    memset(primes, 0, page_size);
     memset(roots_of_unity, 0, page_size);
     init_permanent_memory();
 }

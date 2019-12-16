@@ -1,0 +1,18 @@
+struct %main.base_type%*%main.type_name%_add(struct Stack*restrict output_stack,#main.add_takes_two_stacks struct Stack*restrict local_stack,# struct %main.base_type%*a, struct %main.base_type%*b#main.add_and_subtract_take_misc, struct %misc.base_type%*%main.misc_name%#)
+{
+    if (a->coefficient_count < b->coefficient_count)
+    {
+        POINTER_SWAP(a, b);
+    }
+    struct %main.base_type%*out = polynomial_allocate(output_stack, a->coefficient_count);
+    for (size_t i = 0; i < b->coefficient_count; ++i)
+    {
+        out->coefficients[i] = %coefficient.add%(output_stack#coefficient.add_takes_two_stacks, local_stack#, a->coefficients[i], b->coefficients[i]#coefficient.add_and_subtract_take_misc, %main.misc_name%#);
+    }
+    for (size_t i = b->coefficient_count; i < a->coefficient_count; ++i)
+    {
+        out->coefficients[i] = %coefficient.base_type_name%_copy(output_stack, a->coefficients[i]);
+    }
+    %main.base_type_name%_trim_leading_zeroes(out);
+    return out;
+}

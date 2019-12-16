@@ -72,10 +72,10 @@ struct Number**get_roots_of_unity(struct Stack*restrict local_stack_a,
     }
     size_t degree_square_root =
         integer_to_size_t(integer_take_square_root(local_stack_a, local_stack_b, degree));
-    size_t prime_index = 0;
+    next_prime = prime_stack.start;
     while (true)
     {
-        struct Integer*prime = get_prime(local_stack_a, local_stack_b, prime_index);
+        struct Integer*prime = get_next_prime(local_stack_a, local_stack_b);
         size_t prime_size_t = integer_to_size_t(prime);
         if (prime_size_t > degree_square_root)
         {
@@ -101,7 +101,6 @@ struct Number**get_roots_of_unity(struct Stack*restrict local_stack_a,
             local_stack_a->cursor = local_stack_a_savepoint;
             return out;
         }
-        ++prime_index;
     }
     size_t*degree_minus_one_factors;
     size_t factor_count = size_t_factor(local_stack_a, local_stack_b, &degree_minus_one_factors,

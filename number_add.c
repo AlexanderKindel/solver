@@ -280,7 +280,7 @@ struct RationalPolynomial*number_get_a_in_terms_of_b(struct Stack*restrict outpu
     struct NestedPolynomial**a_minimal_polynomial_factors = ARRAY_ALLOCATE(local_stack,
         nested_a_minimal_polynomial->coefficient_count - 1, struct NestedPolynomial*);
     size_t candidate_factor_count = number_field_polynomial_factor(local_stack, output_stack,
-        nested_a_minimal_polynomial, b->minimal_polynomial, a_minimal_polynomial_factors);
+		a_minimal_polynomial_factors, nested_a_minimal_polynomial, b->minimal_polynomial);
     struct RationalPolynomial**candidate_factors =
         (struct RationalPolynomial**)a_minimal_polynomial_factors;
     for (size_t i = 0; i < candidate_factor_count;)
@@ -297,42 +297,39 @@ struct RationalPolynomial*number_get_a_in_terms_of_b(struct Stack*restrict outpu
             a_minimal_polynomial_factors[i] = a_minimal_polynomial_factors[candidate_factor_count];
         }
     }
-    struct RectangularEstimate a_estimate;
-    number_get_rectangular_estimate(local_stack, output_stack, &a_estimate, a, &rational_one);
+    struct Region a_estimate;
+    number_get_region_estimate(local_stack, output_stack, &a_estimate, a, &rational_one);
     while (rational_polynomial_count_roots_in_rectangle(local_stack, output_stack,
         a->minimal_polynomial,
+        float_interval_to_rational_interval(local_stack, output_stack, a_estimate.real_interval),
         float_interval_to_rational_interval(local_stack, output_stack,
-            a_estimate.real_part_estimate),
-        float_interval_to_rational_interval(local_stack, output_stack,
-            a_estimate.imaginary_part_estimate)) > 1)
+            a_estimate.imaginary_interval)) > 1)
     {
-        number_halve_rectangular_estimate_dimensions(local_stack, output_stack, &a_estimate, a);
+        number_halve_region_estimate_dimensions(local_stack, output_stack, &a_estimate, a);
     }
-    struct RectangularEstimate b_estimate;
-    number_get_rectangular_estimate(local_stack, output_stack, &b_estimate, b, &rational_one);
+    struct Region b_estimate;
+    number_get_region_estimate(local_stack, output_stack, &b_estimate, b, &rational_one);
     for (size_t i = 0; i < candidate_factor_count; ++i)
     {
         struct Rational interval_size_for_evaluation =
         { &one, size_t_to_integer(local_stack, candidate_factors[i]->coefficient_count) };
-        struct RectangularEstimate factor_at_b;
+        struct Region factor_at_b;
         while (true)
         {
-            rational_polynomial_evaluate_at_rectangular_estimate(local_stack, output_stack,
-                &factor_at_b, candidate_factors[i], &b_estimate, &interval_size_for_evaluation);
-            if (rectangular_estimates_are_disjoint(output_stack, local_stack, &a_estimate,
-                &factor_at_b))
+            rational_polynomial_evaluate_at_region_estimate(local_stack, output_stack, &factor_at_b,
+				candidate_factors[i], &b_estimate, &interval_size_for_evaluation);
+            if (regions_are_disjoint(output_stack, local_stack, &a_estimate, &factor_at_b))
             {
                 goto candidate_rejected;
             }
             if (rational_polynomial_count_roots_in_rectangle(local_stack, output_stack,
                 a->minimal_polynomial,
                 float_interval_to_rational_interval(local_stack, output_stack,
-                    factor_at_b.real_part_estimate),
+                    factor_at_b.real_interval),
                 float_interval_to_rational_interval(local_stack, output_stack,
-                    factor_at_b.imaginary_part_estimate)) == 1)
+                    factor_at_b.imaginary_interval)) == 1)
             {
-                if (rectangular_estimate_a_contains_b(output_stack, local_stack, &a_estimate,
-                    &factor_at_b))
+                if (region_a_contains_b(output_stack, local_stack, &a_estimate, &factor_at_b))
                 {
                     struct RationalPolynomial*out =
                         rational_polynomial_copy(output_stack, candidate_factors[i]);
@@ -341,23 +338,21 @@ struct RationalPolynomial*number_get_a_in_terms_of_b(struct Stack*restrict outpu
                 }
                 break;
             }
-            number_halve_rectangular_estimate_dimensions(local_stack, output_stack, &b_estimate, b);
+            number_halve_region_estimate_dimensions(local_stack, output_stack, &b_estimate, b);
             interval_size_for_evaluation.denominator =
                 integer_double(local_stack, interval_size_for_evaluation.denominator);
         }
         while (true)
         {
-            if (rectangular_estimate_a_contains_b(output_stack, local_stack, &factor_at_b,
-                &a_estimate))
+            if (region_a_contains_b(output_stack, local_stack, &factor_at_b, &a_estimate))
             {
                 struct RationalPolynomial*out =
                     rational_polynomial_copy(output_stack, candidate_factors[i]);
                 local_stack->cursor = local_stack_savepoint;
                 return out;
             }
-            number_halve_rectangular_estimate_dimensions(local_stack, output_stack, &a_estimate, a);
-            if (rectangular_estimates_are_disjoint(output_stack, local_stack, &a_estimate,
-                &factor_at_b))
+            number_halve_region_estimate_dimensions(local_stack, output_stack, &a_estimate, a);
+            if (regions_are_disjoint(output_stack, local_stack, &a_estimate, &factor_at_b))
             {
                 goto candidate_rejected;
             }

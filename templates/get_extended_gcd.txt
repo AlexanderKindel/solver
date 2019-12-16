@@ -1,0 +1,27 @@
+//Leaves a significant amount of excess allocations on output_stack.
+void %main.type_name%_get_extended_gcd(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct ExtendedGCDInfo*out, struct %main.base_type%*a, struct %main.base_type%*b#main.has_misc_parameter, struct %misc.base_type%*%main.misc_name%#)
+{
+    void*local_stack_savepoint = local_stack->cursor;
+    out->gcd = b;
+    out->a_coefficient = %main.additive_identity%;
+    out->b_coefficient = %main.multiplicative_identity%;
+    out->a_over_gcd = %main.additive_identity%;
+    out->b_over_gcd = %main.multiplicative_identity%;
+    while (!%main.base_type_name%_equals(a, %main.additive_identity%))
+    {
+        struct %main.base_type%Division division;
+        %main.type_name%_euclidean_divide(output_stack, local_stack, &division, out->gcd, a#main.has_misc_parameter, %main.misc_name%#);
+        struct %main.base_type%*m = %main.subtract%(output_stack, local_stack, out->a_coefficient,
+            %main.multiply%(local_stack, output_stack, out->b_over_gcd, division.quotient#main.has_misc_parameter, %main.misc_name%#)#main.add_and_subtract_take_misc, %main.misc_name%#);
+        struct %main.base_type%*n = %main.subtract%(output_stack, local_stack, out->b_coefficient,
+            %main.multiply%(local_stack, output_stack, out->a_over_gcd, division.quotient#main.has_misc_parameter, %main.misc_name%#)#main.add_and_subtract_take_misc, %main.misc_name%#);
+        out->gcd = a;
+        a = division.remainder;
+        out->a_coefficient = out->b_over_gcd;
+        out->b_coefficient = out->a_over_gcd;
+        out->b_over_gcd = m;
+        out->a_over_gcd = n;
+    }
+    out->b_over_gcd = %main.negate%(output_stack#main.add_and_subtract_take_misc, local_stack#, out->b_over_gcd#main.add_and_subtract_take_misc, %main.misc_name%#);
+    local_stack->cursor = local_stack_savepoint;
+}

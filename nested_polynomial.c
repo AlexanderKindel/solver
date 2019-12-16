@@ -18,8 +18,10 @@ struct RationalPolynomial*nested_polynomial_get_resultant(struct Stack*restrict 
         return polynomial_zero;
     }
     void*local_stack_savepoint = local_stack->cursor;
-    struct RationalPolynomial*a_content = nested_polynomial_content(local_stack, output_stack, a);
-    struct RationalPolynomial*b_content = nested_polynomial_content(local_stack, output_stack, b);
+    struct RationalPolynomial*a_content =
+        nested_polynomial_get_content(local_stack, output_stack, a);
+    struct RationalPolynomial*b_content =
+        nested_polynomial_get_content(local_stack, output_stack, b);
     struct RationalPolynomial*t = rational_polynomial_multiply(local_stack, output_stack,
         rational_polynomial_exponentiate(local_stack, output_stack, a_content,
             size_t_to_integer(local_stack, b->coefficient_count - 1)),
@@ -125,8 +127,8 @@ struct RationalPolynomial*number_field_element_divide(struct Stack*restrict outp
 }
 
 size_t number_field_polynomial_factor(struct Stack*restrict output_stack,
-    struct Stack*restrict local_stack, struct NestedPolynomial*a,
-    struct RationalPolynomial*generator_minimal_polynomial, struct NestedPolynomial**out)
+    struct Stack*restrict local_stack, struct NestedPolynomial**out, struct NestedPolynomial*a,
+    struct RationalPolynomial*generator_minimal_polynomial)
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct NestedPolynomial**squarefree_factors =
@@ -160,7 +162,7 @@ size_t number_field_polynomial_factor(struct Stack*restrict output_stack,
             struct RationalPolynomial*resultant = nested_polynomial_get_resultant(local_stack,
                 output_stack, nested_minimal_polynomial, e);
             if (rational_polynomial_get_gcd(local_stack, output_stack,
-                rational_polynomial_derivative(local_stack, output_stack, resultant),
+                rational_polynomial_get_derivative(local_stack, output_stack, resultant),
                 resultant)->coefficient_count < 2)
             {
                 struct IntegerPolynomial**resultant_factors = ARRAY_ALLOCATE(local_stack,

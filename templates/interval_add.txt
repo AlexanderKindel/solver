@@ -1,0 +1,7 @@
+struct %main.base_type%Interval*%main.type_name%_interval_add(struct Stack*output_stack, struct Stack*local_stack, struct %main.base_type%Interval*a, struct %main.base_type%Interval*b)
+{
+    struct %main.base_type%Interval*out = ALLOCATE(output_stack, struct %main.base_type%Interval);
+    out->min = %main.type_name%_add(output_stack, local_stack, a->min, b->min);
+    out->max = %main.type_name%_add(output_stack, local_stack, a->max, b->max);
+    return out;
+}

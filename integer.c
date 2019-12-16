@@ -28,15 +28,15 @@ struct Integer*integer_initialize(struct Stack*output_stack, uint32_t value, int
     return out;
 }
 
-struct Integer*char_to_integer(struct Stack*output_stack, char value)
+struct Integer*char_to_integer(struct Stack*output_stack, char a)
 {
-    uint32_t uint_value = value - '0';
-    if (uint_value)
+    uint32_t uint_a = a - '0';
+    if (uint_a)
     {
         struct Integer*out = integer_allocate(output_stack, 1);
         out->value_count = 1;
         out->sign = 1;
-        out->value[0] = uint_value;
+        out->value[0] = uint_a;
         return out;
     }
     else
@@ -59,13 +59,13 @@ void integer_trim_leading_zeroes(struct Integer*a)
     a->sign = 0;
 }
 
-struct Integer*size_t_to_integer(struct Stack*output_stack, size_t value)
+struct Integer*size_t_to_integer(struct Stack*output_stack, size_t a)
 {
     size_t value_count = sizeof(size_t) / sizeof(uint32_t);
     struct Integer*out = integer_allocate(output_stack, value_count);
     out->value_count = value_count;
     out->sign = 1;
-    *(size_t*)out->value = value;
+    *(size_t*)out->value = a;
     integer_trim_leading_zeroes(out);
     output_stack->cursor = out->value + out->value_count;
     return out;
@@ -481,34 +481,39 @@ struct Integer*integer_take_square_root(struct Stack*restrict output_stack,
     return out;
 }
 
-struct Integer*get_prime(struct Stack*restrict local_stack_a, struct Stack*restrict local_stack_b,
-    size_t index)
+struct Integer*get_next_prime(struct Stack*restrict local_stack_a,
+    struct Stack*restrict local_stack_b)
 {
-    if (primes[index])
+    if (next_prime < prime_stack.cursor)
     {
-        return primes[index];
+        struct Integer*out = *next_prime;
+        ++next_prime;
+        return out;
     }
     void*local_stack_a_savepoint = local_stack_a->cursor;
-    primes[index] = integer_add(local_stack_a, primes[index - 1], primes[0]);
+    *next_prime =
+        integer_add(local_stack_a, *(next_prime - 1), *(struct Integer**)prime_stack.start);
     while (true)
     {
-        size_t potential_factor_index = 1;
+        struct Integer**potential_factor = prime_stack.start;
         while (true)
         {
-            if ((integer_get_remainder(local_stack_a, local_stack_b, primes[index],
-                primes[potential_factor_index]))->value_count == 0)
+            if ((integer_get_remainder(local_stack_a, local_stack_b, *next_prime,
+                *potential_factor))-> value_count == 0)
             {
                 break;
             }
-            ++potential_factor_index;
-            if (potential_factor_index == index)
+            ++potential_factor;
+            if (potential_factor == next_prime)
             {
+                *next_prime = integer_copy(&permanent_stack, *next_prime);
+                struct Integer*out = *next_prime;
+                ++next_prime;
                 local_stack_a->cursor = local_stack_a_savepoint;
-                primes[index] = integer_copy(&permanent_stack, primes[index]);
-                return primes[index];
+                return out;
             }
         }
-        primes[index] = integer_add(local_stack_a, primes[index], primes[0]);
+        *next_prime = integer_add(local_stack_a, *next_prime, *(struct Integer**)prime_stack.start);
     }
 }
 
@@ -518,12 +523,16 @@ size_t size_t_factor(struct Stack*restrict output_stack, struct Stack*restrict l
     void*local_stack_savepoint = local_stack->cursor;
     *out = ALLOCATE(output_stack, size_t);
     size_t factor_count = 0;
-    size_t prime_index = 0;
-    size_t prime = 2;
+    next_prime = prime_stack.start;
     size_t square_root = integer_to_size_t(integer_take_square_root(local_stack, output_stack,
         size_t_to_integer(local_stack, a)));
-    while (prime <= square_root)
+    while (true)
     {
+        size_t prime = integer_to_size_t(get_next_prime(output_stack, local_stack));
+        if (prime > square_root)
+        {
+            break;
+        }
         if (a % prime == 0)
         {
             (*out)[factor_count] = prime;
@@ -534,8 +543,6 @@ size_t size_t_factor(struct Stack*restrict output_stack, struct Stack*restrict l
                 a = a / prime;
             } while (a % prime == 0);
         }
-        ++prime_index;
-        prime = integer_to_size_t(get_prime(output_stack, local_stack, prime_index));
     }
     if (a != 1)
     {
@@ -555,11 +562,15 @@ size_t integer_factor(struct Stack*restrict output_stack, struct Stack*restrict 
     void*local_stack_savepoint = local_stack->cursor;
     *out = array_start(output_stack, _Alignof(struct Factor));
     size_t factor_count = 0;
-    size_t prime_index = 0;
-    struct Integer*prime = primes[0];
+    next_prime = prime_stack.start;
     struct Integer*square_root = integer_take_square_root(local_stack, output_stack, a);
-    while (integer_compare(output_stack, local_stack, prime, square_root) <= 0)
+    while (true)
     {
+        struct Integer*prime = get_next_prime(output_stack, local_stack);
+        if (integer_compare(output_stack, local_stack, prime, square_root) > 0)
+        {
+            break;
+        }
         struct IntegerDivision division;
         integer_euclidean_divide(local_stack, output_stack, &division, a, prime);
         if (division.remainder->value_count == 0)
@@ -576,8 +587,6 @@ size_t integer_factor(struct Stack*restrict output_stack, struct Stack*restrict 
                 integer_euclidean_divide(local_stack, output_stack, &division, a, factor->value);
             } while (division.remainder->value_count == 0);
         }
-        ++prime_index;
-        prime = get_prime(output_stack, local_stack, prime_index);
     }
     if (!integer_equals(a, &one))
     {

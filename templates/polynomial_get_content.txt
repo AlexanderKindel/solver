@@ -1,0 +1,16 @@
+struct %coefficient.base_type%*%main.type_name%_get_content(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %main.base_type%*a)
+{
+    if (!a->coefficient_count)
+    {
+        return %coefficient.multiplicative_identity%;
+    }
+    void*local_stack_savepoint = local_stack->cursor;
+    struct %coefficient.base_type%*out = a->coefficients[0];
+    for (size_t i = 1; i < a->coefficient_count; ++i)
+    {
+        out = %coefficient.type_name%_get_gcd(local_stack, output_stack, out, a->coefficients[i]);
+    }
+    out = %coefficient.base_type_name%_copy(output_stack, out);
+    local_stack->cursor = local_stack_savepoint;
+    return out;
+}

@@ -155,10 +155,10 @@ struct Matrix
     size_t height;
 };
 
-struct RectangularEstimate
+struct Region
 {
-    struct FloatInterval*real_part_estimate;
-    struct FloatInterval*imaginary_part_estimate;
+    struct FloatInterval*real_interval;
+    struct FloatInterval*imaginary_interval;
 };
 
 struct UnevaluatedNumber
@@ -227,15 +227,15 @@ struct EstimateGetters
 
 __declspec(noreturn) void crash(char*message);
 void stack_initialize(struct Stack*out, void*start, size_t size);
-void stack_reset(struct Stack*out);
+void stack_reset(struct Stack*stack);
 void*array_start(struct Stack*output_stack, size_t alignment);
 void array_extend(struct Stack*output_stack, size_t element_size);
 void*stack_slot_allocate(struct Stack*output_stack, size_t slot_size, size_t alignment);
 
-#define ALLOCATE(stack, type) stack_slot_allocate(stack, sizeof(type), _Alignof(type))
+#define ALLOCATE(output_stack, type) stack_slot_allocate(output_stack, sizeof(type), _Alignof(type))
 
-#define ARRAY_ALLOCATE(stack, element_count, type)\
-    stack_slot_allocate(stack, (element_count) * sizeof(type), _Alignof(type))
+#define ARRAY_ALLOCATE(output_stack, element_count, type)\
+    stack_slot_allocate(output_stack, (element_count) * sizeof(type), _Alignof(type))
 
 #define POINTER_SWAP(a, b) { void*temp = a; a = b; b = temp; }
 
@@ -267,8 +267,8 @@ struct Poly2
 struct Integer*integer_allocate(struct Stack*output_stack, size_t value_count);
 struct Integer*integer_copy(struct Stack*output_stack, struct Integer*a);
 struct Integer*integer_initialize(struct Stack*output_stack, uint32_t value, int8_t sign);
-struct Integer*char_to_integer(struct Stack*output_stack, char value);
-struct Integer*size_t_to_integer(struct Stack*output_stack, size_t value);
+struct Integer*char_to_integer(struct Stack*output_stack, char a);
+struct Integer*size_t_to_integer(struct Stack*output_stack, size_t a);
 size_t integer_to_size_t(struct Integer*a);
 bool integer_equals(struct Integer*a, struct Integer*b);
 struct Integer*integer_get_magnitude(struct Stack*output_stack, struct Integer*a);
@@ -294,8 +294,8 @@ struct Integer*integer_get_lcm(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct Integer*a, struct Integer*b);
 struct Integer*integer_take_square_root(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct Integer*a);
-struct Integer*get_prime(struct Stack*restrict local_stack_a, struct Stack*restrict local_stack_b,
-    size_t index);
+struct Integer*get_next_prime(struct Stack*restrict local_stack_a,
+    struct Stack*restrict local_stack_b);
 size_t size_t_factor(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
     size_t**out, size_t a);
 size_t integer_factor(struct Stack*restrict output_stack, struct Stack*restrict local_stack,
@@ -393,15 +393,14 @@ struct FloatInterval*float_interval_copy(struct Stack*output_stack, struct Float
 bool float_intervals_are_disjoint(struct Stack*restrict local_stack_a,
     struct Stack*restrict local_stack_b, struct FloatInterval*a, struct FloatInterval*b);
 struct FloatInterval*float_interval_subtract(struct Stack*restrict output_stack,
-    struct Stack*restrict local_stack, struct FloatInterval*a, struct FloatInterval*b);
-bool rectangular_estimate_a_contains_b(struct Stack*restrict local_stack_a,
-    struct Stack*restrict local_stack_b, struct RectangularEstimate*a,
-    struct RectangularEstimate*b);
+    struct Stack*restrict local_stack, struct FloatInterval*minuend,
+    struct FloatInterval*subtrahend);
+bool region_a_contains_b(struct Stack*restrict local_stack_a, struct Stack*restrict local_stack_b,
+    struct Region*a, struct Region*b);
 struct RationalInterval*float_interval_to_rational_interval(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct FloatInterval*a);
-bool rectangular_estimates_are_disjoint(struct Stack*restrict local_stack_a,
-    struct Stack*restrict local_stack_b, struct RectangularEstimate*a,
-    struct RectangularEstimate*b);
+bool regions_are_disjoint(struct Stack*restrict local_stack_a, struct Stack*restrict local_stack_b,
+    struct Region*a, struct Region*b);
 
 void pi_estimate(struct Rational*interval_size);
 void pi_shrink_interval_to_one_side_of_value(struct Rational*value);
@@ -427,7 +426,7 @@ struct RationalPolynomial*integer_polynomial_get_monic(struct Stack*restrict out
 struct RationalPolynomial*integer_polynomial_to_rational_polynomial(struct Stack*output_stack,
     struct IntegerPolynomial*a);
 
-struct Integer*integer_residue(struct Stack*restrict output_stack,
+struct Integer*integer_get_residue(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct Integer*a, struct Integer*characteristic);
 struct Integer*modded_integer_add(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct Integer*a, struct Integer*b,
@@ -442,7 +441,7 @@ struct Integer*modded_integer_multiply(struct Stack*restrict output_stack,
     struct Integer*characteristic);
 struct Integer*modded_integer_get_reciprocal(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct Integer*a, struct Integer*characteristic);
-struct IntegerPolynomial*modded_polynomial_reduced(struct Stack*restrict output_stack,
+struct IntegerPolynomial*modded_polynomial_reduce(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct IntegerPolynomial*a, struct Integer*characteristic);
 struct IntegerPolynomial*modded_polynomial_subtract(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct IntegerPolynomial*minuend,
@@ -453,7 +452,7 @@ struct IntegerPolynomial*modded_polynomial_get_quotient(struct Stack*restrict ou
 struct IntegerPolynomial*modded_polynomial_get_remainder(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct IntegerPolynomial*dividend,
     struct IntegerPolynomial*divisor, struct Integer*characteristic);
-struct IntegerPolynomial*modded_polynomial_monic(struct Stack*restrict output_stack,
+struct IntegerPolynomial*modded_polynomial_get_monic(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct IntegerPolynomial*a, struct Integer*characteristic);
 size_t squarefree_modded_polynomial_factor(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct IntegerPolynomial*a, struct Integer*characteristic,
@@ -477,9 +476,9 @@ size_t rational_polynomial_factor(struct Stack*restrict output_stack,
 size_t rational_polynomial_count_roots_in_rectangle(struct Stack*restrict local_stack_a,
     struct Stack*restrict local_stack_b, struct RationalPolynomial*a, struct RationalInterval*real,
     struct RationalInterval*imaginary);
-void rational_polynomial_evaluate_at_rectangular_estimate(struct Stack*restrict output_stack,
-    struct Stack*restrict local_stack, struct RectangularEstimate*out, struct RationalPolynomial*a,
-    struct RectangularEstimate*argument, struct Rational*interval_size);
+void rational_polynomial_evaluate_at_region(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Region*out, struct RationalPolynomial*a,
+    struct Region*argument, struct Rational*interval_size);
 struct IntegerPolynomial*rational_polynomial_get_primitive_part(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct RationalPolynomial*a);
 struct NestedPolynomial*rational_polynomial_to_nested_polynomial(struct Stack*output_stack,
@@ -493,7 +492,8 @@ struct GaussianRational*gaussian_rational_add(struct Stack*restrict output_stack
 struct GaussianRational*gaussian_rational_negate(struct Stack*output_stack,
     struct GaussianRational*a);
 struct GaussianRational*gaussian_rational_subtract(struct Stack*restrict output_stack,
-    struct Stack*restrict local_stack, struct GaussianRational*a, struct GaussianRational*b);
+    struct Stack*restrict local_stack, struct GaussianRational*minuend,
+    struct GaussianRational*subtrahend);
 struct GaussianRational*gaussian_rational_multiply(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct GaussianRational*a, struct GaussianRational*b);
 struct GaussianRational*gaussian_rational_rational_multiply(struct Stack*restrict output_stack,
@@ -517,8 +517,8 @@ struct RationalPolynomial*number_field_element_divide(struct Stack*restrict outp
     struct Stack*restrict local_stack, struct RationalPolynomial*dividend,
     struct RationalPolynomial*divisor, struct RationalPolynomial*generator_minimal_polynomial);
 size_t number_field_polynomial_factor(struct Stack*restrict output_stack,
-    struct Stack*restrict local_stack, struct NestedPolynomial*a,
-    struct RationalPolynomial*generator_minimal_polynomial, struct NestedPolynomial**out);
+    struct Stack*restrict local_stack, struct NestedPolynomial**out, struct NestedPolynomial*a,
+    struct RationalPolynomial*generator_minimal_polynomial);
 
 void matrix_make_row_echelon_form(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct Matrix*a, struct Rational**augmentation);
@@ -578,11 +578,11 @@ struct FloatInterval*number_get_float_imaginary_part_estimate(struct Stack*restr
 struct RationalInterval*number_get_rational_imaginary_part_estimate(
     struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct Number*a,
     struct Rational*interval_size);
-void number_get_rectangular_estimate(struct Stack*restrict output_stack,
-    struct Stack*restrict local_stack, struct RectangularEstimate*out, struct Number*a,
+void number_get_region_estimate(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Region*out, struct Number*a,
     struct Rational*interval_size);
-void number_halve_rectangular_estimate_dimensions(struct Stack*restrict output_stack,
-    struct Stack*restrict local_stack, struct RectangularEstimate*out, struct Number*a);
+void number_halve_region_estimate_dimensions(struct Stack*restrict output_stack,
+    struct Stack*restrict local_stack, struct Region*out, struct Number*a);
 struct FloatInterval*number_get_float_magnitude_estimate(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct Number*a, struct Rational*interval_size);
 struct RationalInterval*number_get_rational_magnitude_estimate(struct Stack*restrict output_stack,
@@ -598,9 +598,9 @@ struct Number**get_roots_of_unity(struct Stack*restrict local_stack_a,
 struct Stack permanent_stack;
 struct Stack pi_stack_a;
 struct Stack pi_stack_b;
+struct Stack prime_stack;
+struct Integer**next_prime;
 jmp_buf memory_error_buffer;
-
-struct Integer**primes;
 
 struct RationalInterval pi;
 struct Integer*pi_sixteen_to_the_k;

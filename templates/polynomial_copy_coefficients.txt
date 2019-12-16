@@ -1,0 +1,7 @@
+void %main.type_name%_copy_coefficients(struct Stack*output_stack, struct %main.base_type%*a)
+{
+    for (size_t i = 0; i < a->coefficient_count; ++i)
+    {
+        a->coefficients[i] = %coefficient.base_type_name%_copy(output_stack, a->coefficients[i]);
+    }
+}

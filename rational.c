@@ -291,7 +291,7 @@ struct RationalInterval*rational_estimate_arctangent(struct Stack*restrict outpu
     struct Stack*restrict local_stack, struct Rational*a, struct Rational*interval_size)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    ASSERT(rational_compare(output_stack, local_stack, rational_magnitude(local_stack, a),
+    ASSERT(rational_compare(output_stack, local_stack, rational_get_magnitude(local_stack, a),
         &rational_one) <= 0, "rational_estimate_arctangent was called with an a argument whose "
         "magnitude was greater than one. Use an identity to evaluate an equivalent expression "
         "involving its reciprocal instead.");

@@ -1,0 +1,30 @@
+void %main.type_name%_euclidean_divide(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %main.base_type%Division*out, struct %main.base_type%*dividend, struct %main.base_type%*divisor#main.has_misc_parameter, struct %misc.base_type%*%main.misc_name%#)
+{
+    if (divisor->coefficient_count > dividend->coefficient_count)
+    {
+        out->quotient = %main.additive_identity%;
+        out->remainder = %main.base_type_name%_copy(output_stack, dividend);
+        return;
+    }
+    void*local_stack_savepoint = local_stack->cursor;
+    out->quotient = polynomial_allocate(output_stack, 1 + dividend->coefficient_count - divisor->coefficient_count);
+    out->remainder = polynomial_allocate(output_stack, dividend->coefficient_count);
+    memcpy(out->remainder->coefficients, dividend->coefficients, dividend->coefficient_count * sizeof(void*));
+    struct %coefficient.base_type%*leading_coefficient_reciprocal = %coefficient.type_name%_get_reciprocal(local_stack#coefficient.reciprocal_takes_two_stacks, output_stack#, divisor->coefficients[divisor->coefficient_count - 1]#main.has_misc_parameter, %main.misc_name%#);
+    while (out->remainder->coefficient_count >= divisor->coefficient_count)
+    {
+        --out->remainder->coefficient_count;
+        struct %coefficient.base_type%*quotient = %coefficient.multiply%(local_stack, output_stack, out->remainder->coefficients[out->remainder->coefficient_count], leading_coefficient_reciprocal#main.has_misc_parameter, %main.misc_name%#);
+        out->quotient->coefficients[out->remainder->coefficient_count + 1 - divisor->coefficient_count] = quotient;
+        for (size_t i = 1; i < divisor->coefficient_count; ++i)
+        {
+            out->remainder->coefficients[out->remainder->coefficient_count - i] =
+                %coefficient.subtract%(local_stack, output_stack, out->remainder->coefficients[out->remainder->coefficient_count - i],
+                    %coefficient.multiply%(local_stack, output_stack, quotient, divisor->coefficients[divisor->coefficient_count - i - 1]#main.has_misc_parameter, %main.misc_name%#)#main.add_and_subtract_take_misc, %main.misc_name%#);
+        }
+    }
+    %main.base_type_name%_copy_coefficients(output_stack, out->quotient);
+    %main.base_type_name%_trim_leading_zeroes(out->remainder);
+    %main.base_type_name%_copy_coefficients(output_stack, out->remainder);
+    local_stack->cursor = local_stack_savepoint;
+}

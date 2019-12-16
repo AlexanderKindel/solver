@@ -47,7 +47,7 @@ struct IntegerPolynomial*integer_polynomial_get_primitive_part(struct Stack*rest
 {
     void*local_stack_savepoint = local_stack->cursor;
     struct IntegerPolynomial*out = integer_polynomial_integer_divide(output_stack, local_stack, a,
-        integer_polynomial_content(local_stack, output_stack, a));
+        integer_polynomial_get_content(local_stack, output_stack, a));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
@@ -89,8 +89,8 @@ void integer_polynomial_get_extended_gcd(struct Stack*restrict output_stack,
         return;
     }
     void*local_stack_savepoint = local_stack->cursor;
-    struct Integer*a_content = integer_polynomial_content(local_stack, output_stack, a);
-    struct Integer*b_content = integer_polynomial_content(local_stack, output_stack, b);
+    struct Integer*a_content = integer_polynomial_get_content(local_stack, output_stack, a);
+    struct Integer*b_content = integer_polynomial_get_content(local_stack, output_stack, b);
     struct Integer*d = integer_get_gcd(local_stack, output_stack, a_content, b_content);
     struct Integer*g = &one;
     struct Integer*h = &one;
@@ -114,7 +114,7 @@ void integer_polynomial_get_extended_gcd(struct Stack*restrict output_stack,
         if (division.remainder->coefficient_count == 0)
         {
             struct Integer*gcd_content =
-                integer_polynomial_content(local_stack, output_stack, gcd_multiple);
+                integer_polynomial_get_content(local_stack, output_stack, gcd_multiple);
             out->gcd =
                 (struct Polynomial*)integer_polynomial_integer_multiply(output_stack, local_stack,
                     integer_polynomial_integer_divide(local_stack, output_stack, gcd_multiple,
@@ -235,26 +235,26 @@ size_t squarefree_integer_polynomial_factor(struct Stack*restrict output_stack,
     void*local_stack_savepoint = local_stack->cursor;
     struct IntegerPolynomial*modded_a;
     struct IntegerPolynomial*gcd;
-    size_t prime_index = 0;
-    struct Integer*characteristic = primes[0];
+    next_prime = prime_stack.start;
+    struct Integer*characteristic;
     while (true)
     {
-        modded_a = modded_polynomial_reduced(local_stack, output_stack, a, characteristic);
+        characteristic = get_next_prime(output_stack, local_stack);
+        modded_a = modded_polynomial_reduce(local_stack, output_stack, a, characteristic);
         if (modded_a->coefficient_count == a->coefficient_count)
         {
             gcd = modded_polynomial_get_gcd(local_stack, output_stack, modded_a,
-                modded_polynomial_reduced(local_stack, output_stack,
-                    integer_polynomial_derivative(local_stack, output_stack, modded_a), characteristic),
+                modded_polynomial_reduce(local_stack, output_stack,
+                    integer_polynomial_get_derivative(local_stack, output_stack, modded_a),
+                    characteristic),
                 characteristic);
             if (gcd->coefficient_count == 1)
             {
                 break;
             }
         }
-        ++prime_index;
-        characteristic = get_prime(output_stack, local_stack, prime_index);
     }
-    modded_a = modded_polynomial_monic(local_stack, output_stack, modded_a, characteristic);
+    modded_a = modded_polynomial_get_monic(local_stack, output_stack, modded_a, characteristic);
     struct IntegerPolynomial**modded_a_factors = ARRAY_ALLOCATE(local_stack,
         modded_a->coefficient_count - 1, struct IntegerPolynomial*);
     size_t modded_a_factor_count = squarefree_modded_polynomial_factor(local_stack, output_stack,
@@ -294,8 +294,8 @@ size_t squarefree_integer_polynomial_factor(struct Stack*restrict output_stack,
             integer_multiply(local_stack, output_stack, characteristic_power, characteristic);
     }
     struct IntegerPolynomial*product_of_unlifted_factors = modded_a;
-    struct IntegerPolynomial*unmodded_b_times_c = modded_polynomial_monic(local_stack, output_stack,
-        modded_polynomial_reduced(local_stack, output_stack, a, characteristic_power),
+    struct IntegerPolynomial*unmodded_b_times_c = modded_polynomial_get_monic(local_stack,
+        output_stack, modded_polynomial_reduce(local_stack, output_stack, a, characteristic_power),
         characteristic_power);
     struct IntegerPolynomial**lifted_factors =
         ARRAY_ALLOCATE(local_stack, modded_a_factor_count, struct IntegerPolynomial*);
@@ -312,9 +312,9 @@ size_t squarefree_integer_polynomial_factor(struct Stack*restrict output_stack,
             characteristic_power) < 0)
         {
             struct IntegerPolynomial*b_mod_prime =
-                modded_polynomial_reduced(local_stack, output_stack, b, characteristic);
+                modded_polynomial_reduce(local_stack, output_stack, b, characteristic);
             struct IntegerPolynomial*c_mod_prime =
-                modded_polynomial_reduced(local_stack, output_stack, c, characteristic);
+                modded_polynomial_reduce(local_stack, output_stack, c, characteristic);
             struct ExtendedGCDInfo gcd_info;
             modded_polynomial_get_extended_gcd(local_stack, output_stack, &gcd_info, b_mod_prime,
                 c_mod_prime, characteristic);
@@ -326,7 +326,7 @@ size_t squarefree_integer_polynomial_factor(struct Stack*restrict output_stack,
             gcd_info.b_coefficient = modded_polynomial_modded_integer_multiply(local_stack,
                 output_stack, (struct IntegerPolynomial*)gcd_info.b_coefficient, reciprocal,
                 characteristic);
-            struct IntegerPolynomial*f = modded_polynomial_reduced(local_stack, output_stack,
+            struct IntegerPolynomial*f = modded_polynomial_reduce(local_stack, output_stack,
                 integer_polynomial_integer_divide(local_stack, output_stack,
                     integer_polynomial_subtract(local_stack, output_stack, unmodded_b_times_c,
                         integer_polynomial_multiply(local_stack, output_stack, b, c)),

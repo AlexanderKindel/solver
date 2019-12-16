@@ -32,11 +32,12 @@ struct GaussianRational*gaussian_rational_negate(struct Stack*output_stack,
 }
 
 struct GaussianRational*gaussian_rational_subtract(struct Stack*restrict output_stack,
-    struct Stack*restrict local_stack, struct GaussianRational*a, struct GaussianRational*b)
+    struct Stack*restrict local_stack, struct GaussianRational*minuend,
+    struct GaussianRational*subtrahend)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct GaussianRational*out = gaussian_rational_add(output_stack, local_stack, a,
-        gaussian_rational_negate(local_stack, b));
+    struct GaussianRational*out = gaussian_rational_add(output_stack, local_stack, minuend,
+        gaussian_rational_negate(local_stack, subtrahend));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }

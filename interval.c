@@ -153,11 +153,12 @@ bool float_intervals_are_disjoint(struct Stack*restrict local_stack_a,
 }
 
 struct FloatInterval*float_interval_subtract(struct Stack*restrict output_stack,
-    struct Stack*restrict local_stack, struct FloatInterval*a, struct FloatInterval*b)
+    struct Stack*restrict local_stack, struct FloatInterval*minuend,
+    struct FloatInterval*subtrahend)
 {
     void*local_stack_savepoint = local_stack->cursor;
-    struct FloatInterval*out = float_interval_add(output_stack, local_stack, a,
-        float_interval_negate(local_stack, output_stack, b));
+    struct FloatInterval*out = float_interval_add(output_stack, local_stack, minuend,
+        float_interval_negate(local_stack, output_stack, subtrahend));
     local_stack->cursor = local_stack_savepoint;
     return out;
 }
@@ -178,20 +179,20 @@ struct RationalInterval*float_interval_to_rational_interval(struct Stack*restric
     return out;
 }
 
-bool rectangular_estimates_are_disjoint(struct Stack*restrict local_stack_a,
-    struct Stack*restrict local_stack_b, struct RectangularEstimate*a, struct RectangularEstimate*b)
+bool regions_are_disjoint(struct Stack*restrict local_stack_a, struct Stack*restrict local_stack_b,
+    struct Region*a, struct Region*b)
 {
-    return float_intervals_are_disjoint(local_stack_a, local_stack_b, a->real_part_estimate,
-        b->real_part_estimate) ||
-        float_intervals_are_disjoint(local_stack_a, local_stack_b, a->imaginary_part_estimate,
-            b->imaginary_part_estimate);
+    return float_intervals_are_disjoint(local_stack_a, local_stack_b, a->real_interval,
+        b->real_interval) ||
+        float_intervals_are_disjoint(local_stack_a, local_stack_b, a->imaginary_interval,
+            b->imaginary_interval);
 }
 
-bool rectangular_estimate_a_contains_b(struct Stack*restrict local_stack_a,
-    struct Stack*restrict local_stack_b, struct RectangularEstimate*a, struct RectangularEstimate*b)
+bool region_a_contains_b(struct Stack*restrict local_stack_a, struct Stack*restrict local_stack_b,
+    struct Region*a, struct Region*b)
 {
-    return float_interval_a_contains_b(local_stack_a, local_stack_b, a->real_part_estimate,
-        b->real_part_estimate) &&
-        float_interval_a_contains_b(local_stack_a, local_stack_b, a->imaginary_part_estimate,
-            b->imaginary_part_estimate);
+    return float_interval_a_contains_b(local_stack_a, local_stack_b, a->real_interval,
+        b->real_interval) &&
+        float_interval_a_contains_b(local_stack_a, local_stack_b, a->imaginary_interval,
+            b->imaginary_interval);
 }

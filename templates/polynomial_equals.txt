@@ -1,0 +1,15 @@
+bool %main.type_name%_equals(struct %main.base_type%*a, struct %main.base_type%*b)
+{
+    if (a->coefficient_count != b->coefficient_count)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < a->coefficient_count; ++i)
+    {
+        if (!%coefficient.base_type_name%_equals(a->coefficients[i], b->coefficients[i]))
+        {
+            return false;
+        }
+    }
+    return true;
+}

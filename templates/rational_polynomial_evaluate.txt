@@ -1,0 +1,13 @@
+struct %main.base_type%*rational_polynomial_evaluate_at_%main.type_name%(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct RationalPolynomial*a, struct %main.base_type%*argument)
+{
+    void*local_stack_savepoint = local_stack->cursor;
+    struct %main.base_type%*out = %main.additive_identity%;
+    struct %main.base_type%*argument_power = %main.multiplicative_identity%;
+    for (size_t i = 0; i < a->coefficient_count; ++i)
+    {
+        out = %main.add%(local_stack, output_stack, out, %main.rational_multiply%(local_stack, output_stack, argument_power, a->coefficients[i]));
+        argument_power = %main.multiply%(local_stack, output_stack, argument_power, argument);
+    }
+    local_stack->cursor = local_stack_savepoint;
+    return out;
+}

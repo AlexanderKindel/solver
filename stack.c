@@ -14,11 +14,11 @@ void stack_initialize(struct Stack*out, void*start, size_t size)
     out->cursor_max = out->start;
 }
 
-void stack_reset(struct Stack*out)
+void stack_reset(struct Stack*stack)
 {
-    DECOMMIT_STACK(out);
-    out->cursor = out->start;
-    out->cursor_max = out->start;
+    DECOMMIT_STACK(stack);
+    stack->cursor = stack->start;
+    stack->cursor_max = stack->start;
 }
 
 void*array_start(struct Stack*output_stack, size_t alignment)
