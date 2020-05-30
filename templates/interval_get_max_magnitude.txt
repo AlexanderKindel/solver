@@ -1,7 +1,0 @@
-struct %main.base_type%*%main.type_name%_interval_get_max_magnitude(struct Stack*output_stack, struct Stack*local_stack, struct %main.base_type%Interval*a)
-{
-    void*local_stack_savepoint = local_stack->cursor;
-    void*out = %main.type_name%_get_max(output_stack, local_stack, %main.type_name%_get_magnitude(local_stack, a->min), %main.type_name%_get_magnitude(local_stack, a->max));
-    local_stack->cursor = local_stack_savepoint;
-    return out;
-}

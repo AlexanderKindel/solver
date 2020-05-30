@@ -1,7 +1,0 @@
-struct %main.base_type%*%main.type_name%_copy(struct Stack*output_stack, struct %main.base_type%*a)
-{
-    struct %main.base_type%*out = polynomial_allocate(output_stack, a->coefficient_count);
-    memcpy(out->coefficients, a->coefficients, a->coefficient_count * sizeof(void*));
-    %main.type_name%_copy_coefficients(output_stack, out);
-    return out;
-}

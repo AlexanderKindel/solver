@@ -1,9 +1,0 @@
-struct %main.base_type%*%main.type_name%_negate(struct Stack*restrict output_stack#main.negate_takes_two_stacks, struct Stack*restrict local_stack#, struct %main.base_type%*a#main.add_and_subtract_take_misc, struct %misc.base_type%*%main.misc_name%#)
-{
-    struct %main.base_type%*out = polynomial_allocate(output_stack, a->coefficient_count);
-    for (size_t i = 0; i < a->coefficient_count; ++i)
-    {
-        out->coefficients[i] = %coefficient.negate%(output_stack#coefficient.negate_takes_two_stacks, local_stack#, a->coefficients[i]#main.add_and_subtract_take_misc, %main.misc_name%#);
-    }
-    return out;
-}

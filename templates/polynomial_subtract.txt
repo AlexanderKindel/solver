@@ -1,7 +1,0 @@
-struct %main.base_type%*%main.type_name%_subtract(struct Stack*restrict output_stack, struct Stack*restrict local_stack, struct %main.base_type%*minuend, struct %main.base_type%*subtrahend)
-{
-    void*local_stack_savepoint = local_stack->cursor;
-    struct %main.base_type%*out = %main.add%(output_stack#main.add_takes_two_stacks, local_stack#, minuend, %main.negate%(local_stack, subtrahend));
-    local_stack->cursor = local_stack_savepoint;
-    return out;
-}

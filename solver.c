@@ -1,22 +1,29 @@
 #include "declarations.h"
-#include "template_instantiations.c"
-#include "stack.c"
-#include "integer.c"
-#include "rational.c"
-#include "float.c"
-#include "interval.c"
-#include "pi.c"
-#include "integer_polynomial.c"
-#include "modded_polynomial.c"
-#include "rational_polynomial.c"
-#include "gaussian_rational.c"
-#include "nested_polynomial.c"
-#include "matrix.c"
-#include "number.c"
-#include "number_add.c"
-#include "number_multiply.c"
-#include "number_estimate.c"
-#include "roots_of_unity.c"
+#include "integer/integer.c"
+#include "number/number.c"
+#include "stack/stack.c"
+
+struct Token
+{
+    struct Token*previous;
+    struct Token*next;
+    struct UnevaluatedNumber*value;
+    bool is_parsed;
+};
+
+struct UnevaluatedNumber
+{
+    union
+    {
+        struct Integer*value;
+        struct
+        {
+            struct UnevaluatedNumber*left;
+            struct UnevaluatedNumber*right;
+        };
+    };
+    char operation;
+};
 
 struct Token*quit_program = (struct Token*)1;
 
@@ -48,8 +55,8 @@ struct Token*get_input(struct Stack*output_number_stack, struct Stack*output_tok
             {
                 token->value->value = integer_add(output_token_stack,
                     integer_multiply(output_token_stack, output_number_stack, token->value->value,
-						INT(10, 1)),
-					char_to_integer(output_token_stack, next_char));
+                        INT(10, 1)),
+                    char_to_integer(output_token_stack, next_char));
                 next_char = getchar();
             }
             token->value->value = integer_copy(output_number_stack, token->value->value);
@@ -389,7 +396,7 @@ struct Number*unevaluated_number_evaluate(struct Stack*output_stack, struct Stac
                 "and rational; this program doesn't handle transcendental numbers.");
             return 0;
         }
-        out = number_rational_exponentiate(output_stack, local_stack, left, right->value);
+        out = number_rational_exponentiate(output_stack, local_stack, left, &right->value);
         break;
     default:
         crash("Number operation not recognized.");
@@ -401,13 +408,12 @@ struct Number*unevaluated_number_evaluate(struct Stack*output_stack, struct Stac
 void init_permanent_memory()
 {
     number_one.operation = 'r';
-    number_one.value = &rational_one;
-    number_one.minimal_polynomial = polynomial_allocate(&permanent_stack, 2);
-    number_one.minimal_polynomial->coefficients[0] = ALLOCATE(&permanent_stack, struct Rational);
-    number_one.minimal_polynomial->coefficients[0]->numerator =
+    number_one.value = rational_one;
+    number_one.minimal_polynomial = POLYNOMIAL_ALLOCATE(&permanent_stack, 2, struct Rational);
+    number_one.minimal_polynomial->coefficients[0].numerator =
         integer_initialize(&permanent_stack, 1, -1);
-    number_one.minimal_polynomial->coefficients[0]->denominator = &one;
-    number_one.minimal_polynomial->coefficients[1] = &rational_one;
+    number_one.minimal_polynomial->coefficients[0].denominator = &one;
+    number_one.minimal_polynomial->coefficients[1] = rational_one;
     roots_of_unity[0] = &number_one;
     roots_of_unity[1] = &number_one;
     roots_of_unity[2] = number_rational_initialize(&permanent_stack,
@@ -416,12 +422,10 @@ void init_permanent_memory()
         integer_initialize(&permanent_stack, 2, 1);
     *(struct Integer**)ALLOCATE(&prime_stack, struct Integer*) =
         integer_initialize(&permanent_stack, 3, 1);
-    pi.min = ALLOCATE(&pi_stack_a, struct Rational);
-    pi.min->numerator = integer_initialize(&pi_stack_a, 47, 1);
-    pi.min->denominator = integer_initialize(&pi_stack_a, 15, 1);
-    pi.max = ALLOCATE(&pi_stack_a, struct Rational);
-    pi.max->numerator = integer_initialize(&pi_stack_a, 40189, 1);
-    pi.max->denominator = integer_initialize(&pi_stack_a, 12285, 1);
+    pi.min.numerator = integer_initialize(&pi_stack_a, 47, 1);
+    pi.min.denominator = integer_initialize(&pi_stack_a, 15, 1);
+    pi.max.numerator = integer_initialize(&pi_stack_a, 40189, 1);
+    pi.max.denominator = integer_initialize(&pi_stack_a, 12285, 1);
     pi_sixteen_to_the_k = integer_initialize(&pi_stack_a, 16, 1);
     pi_eight_k = integer_initialize(&pi_stack_a, 8, 1);
 }
@@ -462,8 +466,7 @@ int main()
     {
         if (setjmp(memory_error_buffer))
         {
-            while (getchar() != '\n')
-            {}
+            while (getchar() != '\n');
             reset_permanent_memory();
         }
         else

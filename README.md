@@ -4,7 +4,7 @@ For each input expression, the program returns an expression equal to that input
 
 ### Addition and Subtraction
 
-The terms of any sums are linearly indepedent over the rationals:
+The terms of any sums are linearly independent over the rationals:
 
 2^(1/2)+3^(1/2)+(5+2\*6^(1/2))^(1/2)=2(2\*6^(1/2)+5)^(1/2)
 
