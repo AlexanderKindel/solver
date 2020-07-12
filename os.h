@@ -8,6 +8,7 @@ size_t page_size;
 #define restrict __restrict
 
 #include <windows.h>
+#include <intrin.h>
 
 //Ensures that VirtualAlloc never rounds addresses that are multiples of page_size.
 #define SET_PAGE_SIZE()\
@@ -24,6 +25,13 @@ size_t page_size;
 #define DECOMMIT_STACK(stack)\
 VirtualFree(stack->start, (uintptr_t)stack->cursor_max - (uintptr_t)stack->start, MEM_DECOMMIT)
 
+uint32_t get_leading_digit_place(uint32_t a)
+{
+    uint32_t out;
+    _BitScanReverse64(&out, a);
+    return out;
+}
+
 #elif __has_include (<unistd.h>)
 
 #include <sys/mman.h>
@@ -37,6 +45,21 @@ VirtualFree(stack->start, (uintptr_t)stack->cursor_max - (uintptr_t)stack->start
 
 #define DECOMMIT_STACK(stack)\
 mprotect(stack->start, (uintptr_t)stack->cursor_max - (uintptr_t)stack->start, PROT_NONE)
+
+uint32_t get_leading_digit_place(uint32_t a)
+{
+    uint32_t divisor_leading_digit = 0x80000000;
+    uint32_t i = 31;
+    while (true)
+    {
+        if ((a & divisor_leading_digit) != 0)
+        {
+            return i;
+        }
+        divisor_leading_digit = divisor_leading_digit >> 1;
+        --i;
+    }
+}
 
 #else
 

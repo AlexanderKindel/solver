@@ -282,31 +282,20 @@ void integer_downshift(struct Integer*a, uint8_t shift)
     a->value[a->value_count - 1] = a->value[a->value_count - 1] >> shift;
 }
 
-size_t get_leading_digit_place(struct Integer*a)
+uint32_t integer_get_leading_digit_place(struct Integer*a)
 {
-    if (!a->value_count)
+    if (a->value_count)
     {
-        return 0;
+        return get_leading_digit_place(a->value[a->value_count - 1]);
     }
-    uint32_t divisor_leading_digit = 0x80000000;
-    uint32_t last_value = a->value[a->value_count - 1];
-    size_t i = 31;
-    while (true)
-    {
-        if ((last_value & divisor_leading_digit) != 0)
-        {
-            return i;
-        }
-        divisor_leading_digit = divisor_leading_digit >> 1;
-        --i;
-    }
+    return 0;
 }
 
 struct IntegerDivision integer_euclidean_divide(struct Stack*restrict output_stack,
     struct Stack*restrict local_stack, struct Integer*dividend, struct Integer*divisor)
 {
-    size_t dividend_leading_digit_place = get_leading_digit_place(dividend);
-    size_t divisor_leading_digit_place = get_leading_digit_place(divisor);
+    uint32_t dividend_leading_digit_place = integer_get_leading_digit_place(dividend);
+    uint32_t divisor_leading_digit_place = integer_get_leading_digit_place(divisor);
     if (dividend->value_count < divisor->value_count ||
         (dividend->value_count == divisor->value_count &&
             dividend_leading_digit_place < divisor_leading_digit_place))
